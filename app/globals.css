@@ -1,26 +1,24 @@
 @import "tailwindcss";
-
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  --color-brand: #2B1E4A;
+  --color-gold: #C9A227;
+  --color-lavender: #F4F1FA;
+  --color-background: #ffffff;
+  --color-foreground: #211b2b;
+  --color-muted: #6e6876;
+  --color-border: #e8e4ed;
+  --spacing-shell: 480px;
 }
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--color-lavender); color: var(--color-foreground); }
+a { color: inherit; text-decoration: none; }
+.shell { max-width: var(--spacing-shell); min-height: 100vh; margin: auto; background: var(--color-background); }
+.logo { display: inline-flex; align-items: center; min-height: 64px; padding: 0 20px; color: var(--color-brand); font-size: 22px; font-weight: 800; }
+.top-tabs { display: flex; overflow-x: auto; border-bottom: 1px solid var(--color-border); scrollbar-width: none; }
+.top-tabs a { flex: 1 0 auto; display: flex; justify-content: center; align-items: center; min-height: 48px; padding: 0 16px; color: var(--color-muted); font-weight: 600; white-space: nowrap; border-bottom: 2px solid transparent; }
+.top-tabs a[aria-current="page"] { color: var(--color-brand); border-color: var(--color-brand); }
+main { padding: 28px 20px calc(96px + env(safe-area-inset-bottom)); }
+h1 { margin: 0; font-size: 24px; font-weight: 700; }
+.bottom-tabs { position: fixed; z-index: 10; bottom: 0; left: 50%; transform: translateX(-50%); display: flex; width: 100%; max-width: var(--spacing-shell); padding-bottom: env(safe-area-inset-bottom); background: var(--color-background); border-top: 1px solid var(--color-border); }
+.bottom-tabs a { flex: 1; min-width: 0; min-height: 64px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--color-muted); font-size: 11px; }
+.bottom-tabs a[aria-current="page"] { color: var(--color-brand); font-weight: 700; }
