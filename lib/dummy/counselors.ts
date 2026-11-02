@@ -13,11 +13,12 @@ export type Counselor = {
 export const counselors: Counselor[] = [
   {
     id: "a",
-    storeName: "?? A",
-    description: "?? ?? ?????. ?? ??? ?? ?? ?????. ?? ??? ?? ??? ?? ? ?????.",
+    storeName: "매장 A",
+    description:
+      "더미 소개 문구입니다. 타로 카드로 지금의 흐름을 함께 살펴봅니다. 실제 소개는 상담사 자료를 받은 뒤 바꿉니다.",
     products: [
-      { id: "a-20", name: "?? ?? 20?", minutes: 20, price: 20000 },
-      { id: "a-30", name: "?? ?? 30?", minutes: 30, price: 30000 },
+      { id: "a-20", name: "타로 상담 20분", minutes: 20, price: 20000 },
+      { id: "a-30", name: "타로 상담 30분", minutes: 30, price: 30000 },
     ],
     name: "상담사 A",
     field: "tarot",
@@ -28,11 +29,12 @@ export const counselors: Counselor[] = [
   },
   {
     id: "b",
-    storeName: "?? A",
-    description: "?? ?? ?????. ?? ??? ?? ?? ?????. ?? ??? ?? ??? ?? ? ?????.",
+    storeName: "매장 A",
+    description:
+      "더미 소개 문구입니다. 사주로 타고난 흐름과 앞으로의 방향을 함께 살펴봅니다. 실제 소개는 상담사 자료를 받은 뒤 바꿉니다.",
     products: [
-      { id: "b-20", name: "?? ?? 20?", minutes: 20, price: 20000 },
-      { id: "b-30", name: "?? ?? 30?", minutes: 30, price: 30000 },
+      { id: "b-20", name: "사주 상담 20분", minutes: 20, price: 20000 },
+      { id: "b-30", name: "사주 상담 30분", minutes: 30, price: 30000 },
     ],
     name: "상담사 B",
     field: "saju",
@@ -43,11 +45,12 @@ export const counselors: Counselor[] = [
   },
   {
     id: "c",
-    storeName: "?? A",
-    description: "?? ?? ?????. ?? ??? ?? ?? ?????. ?? ??? ?? ??? ?? ? ?????.",
+    storeName: "매장 A",
+    description:
+      "더미 소개 문구입니다. 타로 카드로 지금의 흐름을 함께 살펴봅니다. 실제 소개는 상담사 자료를 받은 뒤 바꿉니다.",
     products: [
-      { id: "c-20", name: "?? ?? 20?", minutes: 20, price: 20000 },
-      { id: "c-30", name: "?? ?? 30?", minutes: 30, price: 30000 },
+      { id: "c-20", name: "타로 상담 20분", minutes: 20, price: 20000 },
+      { id: "c-30", name: "타로 상담 30분", minutes: 30, price: 30000 },
     ],
     name: "상담사 C",
     field: "tarot",
@@ -58,11 +61,12 @@ export const counselors: Counselor[] = [
   },
   {
     id: "d",
-    storeName: "?? B",
-    description: "?? ?? ?????. ?? ??? ?? ?? ?????. ?? ??? ?? ??? ?? ? ?????.",
+    storeName: "매장 B",
+    description:
+      "더미 소개 문구입니다. 사주로 타고난 흐름과 앞으로의 방향을 함께 살펴봅니다. 실제 소개는 상담사 자료를 받은 뒤 바꿉니다.",
     products: [
-      { id: "d-20", name: "?? ?? 20?", minutes: 20, price: 20000 },
-      { id: "d-30", name: "?? ?? 30?", minutes: 30, price: 30000 },
+      { id: "d-20", name: "사주 상담 20분", minutes: 20, price: 20000 },
+      { id: "d-30", name: "사주 상담 30분", minutes: 30, price: 30000 },
     ],
     name: "상담사 D",
     field: "saju",
@@ -73,11 +77,12 @@ export const counselors: Counselor[] = [
   },
   {
     id: "e",
-    storeName: "?? B",
-    description: "?? ?? ?????. ?? ??? ?? ?? ?????. ?? ??? ?? ??? ?? ? ?????.",
+    storeName: "매장 B",
+    description:
+      "더미 소개 문구입니다. 타로 카드로 지금의 흐름을 함께 살펴봅니다. 실제 소개는 상담사 자료를 받은 뒤 바꿉니다.",
     products: [
-      { id: "e-20", name: "?? ?? 20?", minutes: 20, price: 20000 },
-      { id: "e-30", name: "?? ?? 30?", minutes: 30, price: 30000 },
+      { id: "e-20", name: "타로 상담 20분", minutes: 20, price: 20000 },
+      { id: "e-30", name: "타로 상담 30분", minutes: 30, price: 30000 },
     ],
     name: "상담사 E",
     field: "tarot",
@@ -88,11 +93,12 @@ export const counselors: Counselor[] = [
   },
   {
     id: "f",
-    storeName: "?? B",
-    description: "?? ?? ?????. ?? ??? ?? ?? ?????. ?? ??? ?? ??? ?? ? ?????.",
+    storeName: "매장 B",
+    description:
+      "더미 소개 문구입니다. 사주로 타고난 흐름과 앞으로의 방향을 함께 살펴봅니다. 실제 소개는 상담사 자료를 받은 뒤 바꿉니다.",
     products: [
-      { id: "f-20", name: "?? ?? 20?", minutes: 20, price: 20000 },
-      { id: "f-30", name: "?? ?? 30?", minutes: 30, price: 30000 },
+      { id: "f-20", name: "사주 상담 20분", minutes: 20, price: 20000 },
+      { id: "f-30", name: "사주 상담 30분", minutes: 30, price: 30000 },
     ],
     name: "상담사 F",
     field: "saju",
