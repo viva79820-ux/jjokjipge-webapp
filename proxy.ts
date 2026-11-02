@@ -7,16 +7,28 @@ export async function proxy(request: NextRequest) {
   if (!url || !key) return response;
   const supabase = createServerClient(url, key, {
     cookies: {
-      getAll() { return request.cookies.getAll(); },
+      getAll() {
+        return request.cookies.getAll();
+      },
       setAll(cookiesToSet, headers) {
-        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+        cookiesToSet.forEach(({ name, value }) =>
+          request.cookies.set(name, value),
+        );
         response = NextResponse.next({ request });
-        cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
-        Object.entries(headers).forEach(([name, value]) => response.headers.set(name, value));
+        cookiesToSet.forEach(({ name, value, options }) =>
+          response.cookies.set(name, value, options),
+        );
+        Object.entries(headers).forEach(([name, value]) =>
+          response.headers.set(name, value),
+        );
       },
     },
   });
   await supabase.auth.getClaims();
   return response;
 }
-export const config = { matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|woff2)$).*)"] };
+export const config = {
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|woff2)$).*)",
+  ],
+};
