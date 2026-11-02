@@ -15,7 +15,7 @@ export function BottomTabs() {
   return (
     <nav
       aria-label="하단 메뉴"
-      className="fixed bottom-0 left-1/2 z-20 flex w-full max-w-[480px] -translate-x-1/2 bg-brand-deep pb-[env(safe-area-inset-bottom)]"
+      className="fixed bottom-0 left-1/2 z-20 flex w-full max-w-app -translate-x-1/2 bg-brand-deep pb-[env(safe-area-inset-bottom)]"
     >
       {tabs.map(({ label, href, icon: Icon }) => {
         const active =

@@ -1,7 +1,9 @@
 @import "tailwindcss";
 @theme inline {
   --font-sans: var(--font-pretendard);
-  --font-serif: var(--font-noto-serif);
+  --container-app: 1024px;
+  --text-body: 15px;
+  --text-caption: 13px;
   --color-background: #f6f1eb;
   --color-surface: #fffcf7;
   --color-surface-muted: #efe6e0;
@@ -21,8 +23,16 @@
   --radius-button: 10px;
 }
 body {
-  background: var(--color-background);
+  background: var(--color-surface-muted);
   color: var(--color-foreground);
   font-family: var(--font-sans), sans-serif;
   font-size: 15px;
+}
+button:not(:disabled),
+[role="button"]:not(:disabled),
+[role="tab"]:not(:disabled) {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
 }

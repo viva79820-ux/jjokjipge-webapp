@@ -9,7 +9,7 @@ export function SectionTitle({
 }) {
   return (
     <div className="mb-3 flex items-center justify-between">
-      <h2 className="flex items-center gap-2 font-serif text-lg font-bold">
+      <h2 className="flex items-center gap-2 text-lg font-bold md:text-xl">
         <Sparkles size={18} className="text-gold" aria-hidden="true" />
         {title}
       </h2>

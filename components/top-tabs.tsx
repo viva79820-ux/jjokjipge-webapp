@@ -19,7 +19,7 @@ export function TopTabs() {
             key={href}
             href={href}
             aria-current={active ? "page" : undefined}
-            className={`relative flex min-h-12 min-w-0 flex-1 items-center justify-center border-b-2 text-[15px] font-semibold whitespace-nowrap ${active ? "border-brand text-brand" : "border-transparent text-muted"}`}
+            className={`relative flex min-h-12 min-w-0 flex-1 items-center justify-center border-b-2 text-body font-semibold whitespace-nowrap md:text-base ${active ? "border-brand text-brand" : "border-transparent text-muted"}`}
           >
             {index > 0 && (
               <span
