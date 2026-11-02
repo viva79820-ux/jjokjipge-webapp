@@ -33,7 +33,7 @@ export default async function CounselorPage({ params }: Props) {
         상담사 목록
       </Link>
       <div className="space-y-7 md:space-y-9">
-        <section className="grid gap-4 md:grid-cols-2 md:items-center md:gap-6">
+        <section className="grid gap-4 md:grid-cols-[280px_minmax(0,1fr)] md:items-start md:gap-6">
           <PhotoPlaceholder className="aspect-square w-full" />
           <div>
             <h1 className="text-xl font-bold md:text-2xl">
