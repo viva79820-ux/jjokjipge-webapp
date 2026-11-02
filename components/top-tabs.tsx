@@ -11,20 +11,26 @@ const tabs = [
 export function TopTabs() {
   const pathname = usePathname();
   return (
-    <nav className="top-tabs" aria-label="주요 메뉴">
-      {tabs.map(([label, href]) => (
-        <Link
-          key={href}
-          href={href}
-          aria-current={
-            pathname === href || pathname.startsWith(`${href}/`)
-              ? "page"
-              : undefined
-          }
-        >
-          {label}
-        </Link>
-      ))}
+    <nav aria-label="주요 메뉴" className="flex border-b border-border">
+      {tabs.map(([label, href], index) => {
+        const active = pathname === href || pathname.startsWith(`${href}/`);
+        return (
+          <Link
+            key={href}
+            href={href}
+            aria-current={active ? "page" : undefined}
+            className={`relative flex min-h-12 min-w-0 flex-1 items-center justify-center border-b-2 text-[15px] font-semibold whitespace-nowrap ${active ? "border-brand text-brand" : "border-transparent text-muted"}`}
+          >
+            {index > 0 && (
+              <span
+                aria-hidden="true"
+                className="absolute top-3 bottom-3 left-0 w-px bg-border"
+              />
+            )}
+            {label}
+          </Link>
+        );
+      })}
     </nav>
   );
 }

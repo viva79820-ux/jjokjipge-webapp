@@ -13,7 +13,10 @@ const tabs = [
 export function BottomTabs() {
   const pathname = usePathname();
   return (
-    <nav className="bottom-tabs" aria-label="하단 메뉴">
+    <nav
+      aria-label="하단 메뉴"
+      className="fixed bottom-0 left-1/2 z-20 flex w-full max-w-[480px] -translate-x-1/2 bg-brand-deep pb-[env(safe-area-inset-bottom)]"
+    >
       {tabs.map(({ label, href, icon: Icon }) => {
         const active =
           href === "/"
@@ -21,20 +24,31 @@ export function BottomTabs() {
             : pathname === href ||
               pathname.startsWith(`${href}/`) ||
               (href === "/login" && pathname.startsWith("/mypage"));
+        const phone = href.startsWith("tel:");
         const content = (
           <>
-            <Icon size={22} aria-hidden="true" />
+            <span
+              className={
+                phone
+                  ? "-mt-5 flex size-12 items-center justify-center rounded-full border-2 border-gold bg-brand-deep text-gold-light"
+                  : "flex h-6 items-center"
+              }
+            >
+              <Icon size={22} aria-hidden="true" />
+            </span>
             <span>{label}</span>
           </>
         );
-        return href.startsWith("tel:") ? (
-          <a key={href} href={href}>
+        const className = `flex min-h-16 min-w-0 flex-1 flex-col items-center justify-center gap-1 text-xs font-medium ${active ? "text-gold-light" : "text-on-brand-muted"}`;
+        return phone ? (
+          <a key={href} href={href} className={className}>
             {content}
           </a>
         ) : (
           <Link
             key={href}
             href={href}
+            className={className}
             aria-current={active ? "page" : undefined}
           >
             {content}
