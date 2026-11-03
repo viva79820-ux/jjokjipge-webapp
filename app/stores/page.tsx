@@ -2,13 +2,25 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Clock, MapPin, Phone, Store } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { counselors } from "@/lib/dummy/counselors";
-import { stores } from "@/lib/dummy/stores";
+import { Suspense } from "react";
+import { getCounselors } from "@/lib/data/counselors";
+import { getStores } from "@/lib/data/stores";
 import { siteConfig } from "@/lib/site-config";
 
 export const metadata: Metadata = { title: "매장상담 | 쪽집게천사" };
 
 export default function StoresPage() {
+  return (
+    <Suspense fallback={null}>
+      <StoresContent />
+    </Suspense>
+  );
+}
+async function StoresContent() {
+  const [stores, counselors] = await Promise.all([
+    getStores(),
+    getCounselors(),
+  ]);
   return (
     <div className="space-y-7 px-4 pt-6 md:space-y-9 md:px-6">
       <header>

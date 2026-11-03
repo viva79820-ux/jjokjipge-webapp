@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Grid2X2, Layers, Sparkles, Store } from "lucide-react";
-import { counselors } from "@/lib/dummy/counselors";
+import { Suspense } from "react";
+import { getCounselors } from "@/lib/data/counselors";
 import { CounselorBanner } from "@/components/counselor/counselor-banner";
 import { CounselorCarousel } from "@/components/counselor/counselor-carousel";
 import { CounselorList } from "@/components/counselor/counselor-list";
@@ -13,6 +14,14 @@ const categories = [
   { label: "오프라인 매장", href: "/stores", icon: Store },
 ];
 export default function Home() {
+  return (
+    <Suspense fallback={null}>
+      <HomeContent />
+    </Suspense>
+  );
+}
+async function HomeContent() {
+  const counselors = await getCounselors();
   const recommended = counselors.filter((c) => c.isRecommended);
   return (
     <div className="space-y-7 px-4 pt-4 md:space-y-9 md:px-6">

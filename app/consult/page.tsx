@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { CounselorListItem } from "@/components/counselor/counselor-list-item";
-import { counselors } from "@/lib/dummy/counselors";
+import { getCounselors } from "@/lib/data/counselors";
 
 export const metadata: Metadata = { title: "전화상담 | 쪽집게천사" };
 type SearchParams = Promise<{ type?: string | string[] }>;
@@ -18,6 +18,7 @@ async function FilteredCounselors({
   searchParams: SearchParams;
 }) {
   const { type } = await searchParams;
+  const counselors = await getCounselors();
   const selected = type === "tarot" || type === "saju" ? type : "all";
   const filtered = counselors.filter(
     (counselor) => selected === "all" || counselor.field === selected,

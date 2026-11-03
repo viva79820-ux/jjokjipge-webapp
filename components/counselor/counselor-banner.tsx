@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import useEmblaCarousel from "embla-carousel-react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import type { Counselor } from "@/lib/dummy/counselors";
+import type { Counselor } from "@/lib/data/counselors";
 import { Chip } from "@/components/ui/chip";
 import { PhotoPlaceholder } from "./photo-placeholder";
 

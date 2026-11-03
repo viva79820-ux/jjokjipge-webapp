@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { Counselor } from "@/lib/dummy/counselors";
+import type { Counselor } from "@/lib/data/counselors";
 import { Chip } from "@/components/ui/chip";
 import { PhotoPlaceholder } from "./photo-placeholder";
 export function CounselorCard({ counselor }: { counselor: Counselor }) {

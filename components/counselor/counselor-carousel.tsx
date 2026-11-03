@@ -1,6 +1,6 @@
 "use client";
 import useEmblaCarousel from "embla-carousel-react";
-import type { Counselor } from "@/lib/dummy/counselors";
+import type { Counselor } from "@/lib/data/counselors";
 import { CounselorCard } from "./counselor-card";
 export function CounselorCarousel({ counselors }: { counselors: Counselor[] }) {
   const [viewport] = useEmblaCarousel({

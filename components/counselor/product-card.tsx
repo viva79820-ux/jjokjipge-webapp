@@ -1,4 +1,4 @@
-import type { Counselor } from "@/lib/dummy/counselors";
+import type { Counselor } from "@/lib/data/counselors";
 export function ProductCard({
   product,
 }: {

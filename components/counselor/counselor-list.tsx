@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Star, Sparkles } from "lucide-react";
-import type { Counselor } from "@/lib/dummy/counselors";
+import type { Counselor } from "@/lib/data/counselors";
 import { CounselorListItem } from "./counselor-list-item";
 export function CounselorList({ counselors }: { counselors: Counselor[] }) {
   const [selected, setSelected] = useState<"recommended" | "new">(

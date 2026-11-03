@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Phone } from "lucide-react";
-import type { Counselor } from "@/lib/dummy/counselors";
+import type { Counselor } from "@/lib/data/counselors";
 import { Chip } from "@/components/ui/chip";
 import { Button } from "@/components/ui/button";
 import { PhotoPlaceholder } from "./photo-placeholder";

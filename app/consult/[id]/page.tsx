@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft, Phone, Store } from "lucide-react";
-import { counselors, getCounselor } from "@/lib/dummy/counselors";
+import { Suspense } from "react";
+import { getCounselor } from "@/lib/data/counselors";
 import { PhotoPlaceholder } from "@/components/counselor/photo-placeholder";
 import { ProductCard } from "@/components/counselor/product-card";
 import { ConsultSteps } from "@/components/counselor/consult-steps";
@@ -11,16 +12,20 @@ import { Chip } from "@/components/ui/chip";
 import { SectionTitle } from "@/components/ui/section-title";
 
 type Props = { params: Promise<{ id: string }> };
-export function generateStaticParams() {
-  return counselors.map(({ id }) => ({ id }));
-}
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const counselor = getCounselor((await params).id);
+  const counselor = await getCounselor((await params).id);
   if (!counselor) notFound();
   return { title: `${counselor.name} 선생님 | 쪽집게천사` };
 }
-export default async function CounselorPage({ params }: Props) {
-  const counselor = getCounselor((await params).id);
+export default function CounselorPage({ params }: Props) {
+  return (
+    <Suspense fallback={null}>
+      <CounselorContent params={params} />
+    </Suspense>
+  );
+}
+async function CounselorContent({ params }: Props) {
+  const counselor = await getCounselor((await params).id);
   if (!counselor) notFound();
   const bookingHref = `/consult/${counselor.id}/book`;
   return (
