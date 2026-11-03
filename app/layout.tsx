@@ -1,8 +1,5 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
 import localFont from "next/font/local";
-import { SiteHeader } from "@/components/site-header";
-import { BottomTabs } from "@/components/bottom-tabs";
 import "./globals.css";
 
 const pretendard = localFont({
@@ -22,17 +19,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ko" className={pretendard.variable}>
-      <body className="font-sans text-body md:text-base">
-        <div className="mx-auto min-h-screen max-w-app bg-background">
-          <Suspense fallback={null}>
-            <SiteHeader />
-          </Suspense>
-          <main className="pb-28">{children}</main>
-          <Suspense fallback={null}>
-            <BottomTabs />
-          </Suspense>
-        </div>
-      </body>
+      <body className="font-sans text-body md:text-base">{children}</body>
     </html>
   );
 }
