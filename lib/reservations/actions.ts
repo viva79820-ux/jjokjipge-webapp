@@ -6,9 +6,8 @@ import { calculateSlots, koreanDate } from "@/lib/booking-time";
 import { getAvailableSlots, getBookingProduct } from "./availability";
 import { validateReservation } from "./validation";
 import type { BookingState } from "./types";
+import { duplicateMessage } from "./rules";
 
-const duplicateMessage =
-  "방금 다른 예약이 들어온 시간이에요. 다른 시간을 골라 주세요.";
 const failureMessage =
   "예약 중 문제가 생겼어요. 잠시 후 다시 시도하거나 매장으로 연락해 주세요.";
 

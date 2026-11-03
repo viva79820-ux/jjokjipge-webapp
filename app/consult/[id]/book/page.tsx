@@ -5,9 +5,8 @@ import { notFound } from "next/navigation";
 import { ChevronLeft, Store } from "lucide-react";
 import { getCounselor } from "@/lib/data/counselors";
 import { getAvailabilityCalendar } from "@/lib/reservations/availability";
-import { dateLabel } from "@/lib/booking-time";
 import { BookingForm } from "@/components/booking/booking-form";
-import { SectionTitle } from "@/components/ui/section-title";
+import { Badge } from "@/components/ui/badge";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -53,7 +52,18 @@ async function BookingContent({ params, searchParams }: Props) {
         </Link>
       </div>
     );
-  const calendar = await getAvailabilityCalendar(counselor.id, product.id);
+  const calendars = Object.fromEntries(
+    await Promise.all(
+      counselor.products.map(
+        async (item) =>
+          [
+            item.id,
+            await getAvailabilityCalendar(counselor.id, item.id),
+          ] as const,
+      ),
+    ),
+  );
+  const calendar = calendars[product.id];
   const selected =
     calendar.find(
       (day) =>
@@ -67,8 +77,6 @@ async function BookingContent({ params, searchParams }: Props) {
         지금은 예약 가능한 상담 상품이 없어요.
       </p>
     );
-  const href = (productId: string, date: string) =>
-    `/consult/${counselor.id}/book?product=${encodeURIComponent(productId)}&date=${date}`;
   return (
     <div className="space-y-7 px-4 pt-3 md:space-y-9 md:px-6">
       <header>
@@ -83,67 +91,17 @@ async function BookingContent({ params, searchParams }: Props) {
         <p className="mt-3 text-base font-bold md:text-lg">
           {counselor.name} 선생님
         </p>
-        <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-gold bg-gold-soft px-3 py-1 text-xs text-gold-deep">
-          <Store size={14} aria-hidden="true" />
+        <Badge icon={Store} className="mt-2 px-3">
           {counselor.storeName} 상담사
-        </span>
+        </Badge>
       </header>
       <BookingForm
-        key={`${product.id}-${selected.date}`}
         counselorSlug={counselor.id}
-        product={product}
-        date={selected.date}
-        slots={selected.slots}
-      >
-        <section>
-          <SectionTitle title="상품 선택" />
-          <div className="grid gap-2 md:grid-cols-2">
-            {counselor.products.map((item) => (
-              <Link
-                key={item.id}
-                href={href(item.id, selected.date)}
-                aria-current={item.id === product.id ? "true" : undefined}
-                className={`block min-h-11 rounded-card border bg-surface p-3 md:p-4 ${item.id === product.id ? "border-brand" : "border-border"}`}
-              >
-                <p className="font-bold">{item.name}</p>
-                <p className="mt-2">
-                  {item.price.toLocaleString("ko-KR")}원{" "}
-                  <span className="rounded-full border border-gold bg-gold-soft px-2 py-1 text-xs text-gold-deep">
-                    예시 가격
-                  </span>
-                </p>
-              </Link>
-            ))}
-          </div>
-        </section>
-        <section>
-          <SectionTitle title="날짜 선택" />
-          <div className="flex gap-2 overflow-x-auto pb-2">
-            {calendar.map((day) => {
-              const available = day.slots.some((slot) => slot.available);
-              const styles = `inline-flex min-h-11 shrink-0 items-center rounded-full px-3 text-sm ${day.date === selected.date ? "bg-brand text-on-brand" : "bg-surface-muted text-muted"}`;
-              return available ? (
-                <Link
-                  key={day.date}
-                  href={href(product.id, day.date)}
-                  aria-current={day.date === selected.date ? "date" : undefined}
-                  className={styles}
-                >
-                  {dateLabel(day.date)}
-                </Link>
-              ) : (
-                <span
-                  key={day.date}
-                  aria-disabled="true"
-                  className={`${styles} opacity-40`}
-                >
-                  {dateLabel(day.date)}
-                </span>
-              );
-            })}
-          </div>
-        </section>
-      </BookingForm>
+        products={counselor.products}
+        calendars={calendars}
+        initialProductId={product.id}
+        initialDate={selected.date}
+      />
     </div>
   );
 }

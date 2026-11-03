@@ -1,5 +1,6 @@
 import type { BookingState } from "./types";
 import { slugPattern, uuidPattern } from "./availability";
+import { validateContact } from "./rules";
 
 export function validateReservation(form: FormData) {
   const text = (key: string) =>
@@ -11,15 +12,12 @@ export function validateReservation(form: FormData) {
   const counselorSlug = text("counselorSlug");
   const productId = text("productId");
   const startsAt = text("startsAt");
-  const errors: NonNullable<BookingState["errors"]> = {};
-  if (name.length < 1 || name.length > 30)
-    errors.name = "이름을 1~30자로 입력해 주세요.";
-  if (!/^01\d{8,9}$/.test(digits))
-    errors.phone = "01로 시작하는 휴대폰 번호 10~11자리를 입력해 주세요.";
-  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-    errors.email = "올바른 이메일 주소를 입력해 주세요.";
-  if (depositor.length < 1 || depositor.length > 30)
-    errors.depositor = "입금자명을 1~30자로 입력해 주세요.";
+  const errors: NonNullable<BookingState["errors"]> = validateContact({
+    name,
+    phone: digits,
+    email,
+    depositor,
+  });
   if (text("paymentMethod") !== "bank_transfer")
     errors.paymentMethod = "지금은 무통장입금만 이용할 수 있어요.";
   if (text("refundConsent") !== "on")

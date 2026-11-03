@@ -121,6 +121,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 | `foreground`     | `#2A2130` | 본문 글자                                                       |
 | `muted`          | `#6F6570` | 보조 글자(소개 문구, 안내 문구)                                 |
 | `border`         | `#E7DCD6` | 구분선, 카드 테두리                                             |
+| `error`          | `#B42318` | 입력 오류 글자·테두리(밝은 배경 위 대비 4.5:1 이상)             |
 | `brand`          | `#5E3363` | 주 버튼, 선택된 탭, 강조 글자                                   |
 | `brand-deep`     | `#47294A` | 하단 탭 바, 배너 배경, 선택된 카테고리 타일                     |
 | `brand-soft`     | `#EEE1EA` | 대표 분야 칩 배경, 옅은 강조 배경                               |

@@ -10,6 +10,7 @@ import { ConsultSteps } from "@/components/counselor/consult-steps";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { SectionTitle } from "@/components/ui/section-title";
+import { Badge } from "@/components/ui/badge";
 
 type Props = { params: Promise<{ id: string }> };
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -52,10 +53,9 @@ async function CounselorContent({ params }: Props) {
                 </Chip>
               ))}
             </div>
-            <span className="mt-4 inline-flex items-center gap-1 rounded-full border border-gold bg-gold-soft px-3 py-1 text-xs font-medium text-gold-deep">
-              <Store size={14} aria-hidden="true" />
+            <Badge icon={Store} className="mt-4 px-3">
               {counselor.storeName} 상담사
-            </span>
+            </Badge>
             <Button href={bookingHref} className="mt-5 w-full gap-2">
               <Phone size={18} aria-hidden="true" />
               전화 상담 예약하기

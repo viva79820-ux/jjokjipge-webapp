@@ -1,5 +1,6 @@
 import type { Counselor } from "@/lib/data/counselors";
 import Link from "next/link";
+import { Badge } from "@/components/ui/badge";
 export function ProductCard({
   product,
   bookingHref,
@@ -20,9 +21,7 @@ export function ProductCard({
           <span className="font-bold">
             {product.price.toLocaleString("ko-KR")}원
           </span>
-          <span className="rounded-full border border-gold bg-gold-soft px-2 py-1 text-xs font-medium text-gold-deep">
-            예시 가격
-          </span>
+          <Badge>예시 가격</Badge>
         </div>
       </Link>
     </li>
