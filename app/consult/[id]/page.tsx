@@ -70,7 +70,11 @@ async function CounselorContent({ params }: Props) {
           <SectionTitle title="상담 상품" />
           <ul className="grid gap-2 md:grid-cols-2 md:gap-3">
             {counselor.products.map((product) => (
-              <ProductCard key={product.id} product={product} />
+              <ProductCard
+                key={product.id}
+                product={product}
+                bookingHref={`${bookingHref}?product=${product.id}`}
+              />
             ))}
           </ul>
         </section>
