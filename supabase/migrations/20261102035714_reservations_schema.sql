@@ -84,7 +84,6 @@ create table public.reservations (
   completed_at timestamptz,
   cancelled_at timestamptz,
   cancel_reason text,
-  admin_memo text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   check (ends_at > starts_at),
@@ -142,7 +141,7 @@ begin
     on conflict (day) do update
       set last_no = private.reservation_counters.last_no + 1
     returning last_no into next_no;
-    new.reservation_no := 'R-' || pg_catalog.to_char(reservation_day, 'YYYYMMDD') || '-' || pg_catalog.lpad(next_no::text, 4, '0');
+    new.reservation_no := 'R-' || pg_catalog.to_char(reservation_day, 'YYYYMMDD') || '-' || pg_catalog.lpad(next_no::text, greatest(4, pg_catalog.length(next_no::text)), '0');
   end if;
   return new;
 end;

@@ -26,7 +26,7 @@
 
 **NOT NULL 규칙(11/2 추가, Codex 검토 반영)**: 아래 표에서 "null 허용", "null"이라고 적은 컬럼만 null을 허용하고, **나머지는 모두 NOT NULL**이다. 기본값이 있는 컬럼(boolean, sort_order, tags, status 등)도 NOT NULL + 기본값이다.
 
-- null 허용 컬럼 전체 목록: profiles.name, profiles.phone / stores.description, stores.address, stores.hours, stores.phone, stores.image_path / counselors.store_id, counselors.intro, counselors.description, counselors.image_path, counselors.expert_url / reservations.user_id, reservations.depositor_name, reservations.confirmed_at, reservations.completed_at, reservations.cancelled_at, reservations.cancel_reason, reservations.admin_memo
+- null 허용 컬럼 전체 목록: profiles.name, profiles.phone / stores.description, stores.address, stores.hours, stores.phone, stores.image_path / counselors.store_id, counselors.intro, counselors.description, counselors.image_path, counselors.expert_url / reservations.user_id, reservations.depositor_name, reservations.confirmed_at, reservations.completed_at, reservations.cancelled_at, reservations.cancel_reason
 - 특히 reservations의 counselor_id, product_id, product_name, minutes, price, starts_at, ends_at, customer_name, customer_phone, customer_email, payment_method, status는 NOT NULL이다(null이면 시간 검사와 중복 예약 방지 배제 제약이 의도대로 동작하지 않기 때문).
 
 ### 2.1 profiles (회원 추가 정보, auth.users와 1:1)
@@ -102,7 +102,7 @@
 | depositor_name                                | text null                                                                                       | 무통장 입금자명                                            |
 | status                                        | text default 'pending_payment' check in ('pending_payment','confirmed','completed','cancelled') |                                                            |
 | confirmed_at, completed_at, cancelled_at      | timestamptz null                                                                                |                                                            |
-| cancel_reason, admin_memo                     | text null                                                                                       | admin_memo는 고객에게 보여 주지 않음                       |
+| cancel_reason                                 | text null                                                                                       | 취소 사유(고객에게 보여도 되는 내용만)                     |
 
 - **중복 예약 방지(배제 제약)**: 같은 counselor_id에서 `tstzrange(starts_at, ends_at)`가 겹치면 거부. 단 status가 `pending_payment`, `confirmed`인 예약만 대상(취소·완료는 제외). `btree_gist` 확장 필요(Supabase에서 켤 수 있음).
 - 카드결제 관련 컬럼(PG 거래번호 등)은 결제 작업 때 별도 마이그레이션으로 추가한다.
@@ -115,7 +115,7 @@
 | day     | date PK      |
 | last_no | int not null |
 
-- `private` 스키마라 Data API로 보이지 않는다. 예약 생성 트리거가 `insert ... on conflict do update set last_no = last_no + 1 returning last_no`로 번호를 받는다(동시에 들어와도 번호가 겹치지 않음).
+- `private` 스키마라 Data API로 보이지 않는다. 예약번호 숫자 부분은 4자리로 맞추되, 하루 10,000건을 넘으면 자릿수를 늘린다(`lpad(n, greatest(4, length(n)), '0')`, lpad가 긴 숫자를 잘라 번호가 겹치는 것을 막기 위함). 예약 생성 트리거가 `insert ... on conflict do update set last_no = last_no + 1 returning last_no`로 번호를 받는다(동시에 들어와도 번호가 겹치지 않음).
 
 ---
 
@@ -163,7 +163,7 @@ revoke update on public.profiles from anon, authenticated;
 grant update (name, phone) on public.profiles to authenticated;
 ```
 
-- 회원이 자기 예약 행에서 볼 수 있는 컬럼에 admin_memo가 포함된다. 화면에서는 admin_memo를 조회하지 않도록 select 컬럼을 지정한다. 완전히 숨기려면 관리자 메모를 별도 테이블로 뺀다 → 1차 시안은 화면에서 조회하지 않는 방식으로 충분하다고 판단.
+- 관리자 메모(admin_memo)는 **넣지 않는다**(11/2 결정). 회원은 자기 예약 행의 모든 컬럼을 읽을 수 있어서, 같은 행에 관리자 메모를 두면 화면에서 조회하지 않아도 Data API로 보인다. 1차 시안의 최소 관리자 기능에는 메모가 필요 없다. 필요해지면 관리자만 읽는 별도 테이블로 추가한다.
 
 ---
 
@@ -179,7 +179,7 @@ grant update (name, phone) on public.profiles to authenticated;
 
 ### 비회원 예약 조회 (`/booking/lookup`)
 
-- 예약번호 + 이메일이 둘 다 맞을 때만 결과를 돌려준다. 돌려주는 항목: 예약번호, 상담사 이름, 상품, 시간, 상태, 결제 방법, 입금 안내. admin_memo·user_id는 돌려주지 않는다.
+- 예약번호 + 이메일이 둘 다 맞을 때만 결과를 돌려준다. 돌려주는 항목: 예약번호, 상담사 이름, 상품, 시간, 상태, 결제 방법, 입금 안내. user_id는 돌려주지 않는다.
 - 틀렸을 때 "어느 쪽이 틀렸는지" 알려 주지 않는다.
 
 ### 예약 가능 시간 계산
