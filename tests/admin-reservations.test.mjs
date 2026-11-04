@@ -484,6 +484,11 @@ test("date range keeps valid or empty end dates and corrects reversed ones", () 
 
 test("sort defaults, validation, pagination and return links", async () => {
   assert.equal(rules.parseFilters({}).sort, "created_desc");
+  assert.deepEqual(Object.entries(rules.sortLabels), [
+    ["created_desc", "예약 최신순"],
+    ["starts_desc", "상담일 늦은순"],
+    ["starts_asc", "날짜순"],
+  ]);
   for (const sort of [
     "",
     "updated_at",
@@ -491,10 +496,11 @@ test("sort defaults, validation, pagination and return links", async () => {
     "invalid",
     ["created_desc", "starts_desc"],
     ["created_desc", "created_desc"],
+    ["starts_asc", "starts_asc"],
   ]) {
     assert.equal(rules.parseFilters({ sort }), null);
   }
-  for (const sort of ["created_desc", "starts_desc"]) {
+  for (const sort of ["created_desc", "starts_desc", "starts_asc"]) {
     const filters = rules.parseFilters({
       sort,
       status: "confirmed",
@@ -515,10 +521,10 @@ test("sort defaults, validation, pagination and return links", async () => {
       [
         [
           "order",
-          sort === "starts_desc" ? "starts_at" : "created_at",
-          { ascending: false },
+          sort === "created_desc" ? "created_at" : "starts_at",
+          { ascending: sort === "starts_asc" },
         ],
-        ["order", "id", { ascending: false }],
+        ["order", "id", { ascending: sort === "starts_asc" }],
       ],
     );
     assert.ok(
@@ -538,6 +544,24 @@ test("sort defaults, validation, pagination and return links", async () => {
     assert.equal(parsed.page, 3);
     assert.equal(parsed.status, "confirmed");
     assert.equal(parsed.excludeCancelled, true);
+    const previous = rules.listUrl(filters, 1);
+    assert.equal(rules.safeReturn(previous), previous);
+    assert.equal(
+      rules.parseFilters(
+        Object.fromEntries(
+          new URL(previous, "https://test.invalid").searchParams,
+        ),
+      ).sort,
+      sort,
+    );
+    assert.equal(
+      rules.parseFilters(
+        Object.fromEntries(
+          new URL(previous, "https://test.invalid").searchParams,
+        ),
+      ).page,
+      1,
+    );
   }
   assert.equal(
     rules.safeReturn("/admin/reservations?sort=starts_desc&sort=created_desc"),
@@ -547,6 +571,27 @@ test("sort defaults, validation, pagination and return links", async () => {
     rules.safeReturn("/admin/reservations?sort=invalid"),
     "/admin/reservations",
   );
+});
+
+test("ascending date sort adds no implicit current-time or future-only filter", async () => {
+  for (const from of ["", "2026-11-04"]) {
+    const h = queryHarness([
+      { data: [], error: null },
+      { data: [], count: 0, error: null },
+    ]);
+    await h.reservations.getReservationList(
+      rules.parseFilters({ sort: "starts_asc", from }),
+    );
+    const steps = h.calls[1];
+    assert.equal(
+      steps.some((s) => s[0] === "gt"),
+      false,
+    );
+    assert.deepEqual(
+      steps.filter((s) => s[0] === "gte"),
+      from ? [["gte", "starts_at", "2026-11-03T15:00:00.000Z"]] : [],
+    );
+  }
 });
 
 const phoneEdit = loadModule("../lib/reservations/phone-edit.ts", {

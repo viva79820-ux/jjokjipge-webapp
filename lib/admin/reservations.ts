@@ -22,6 +22,11 @@ export type ReservationSummary = {
 };
 export const summaryColumns =
   "id,reservation_no,starts_at,customer_name,status,product_name,price,counselors(name)";
+const reservationSorts = {
+  created_desc: { column: "created_at", ascending: false },
+  starts_desc: { column: "starts_at", ascending: false },
+  starts_asc: { column: "starts_at", ascending: true },
+} as const;
 export type ReservationDetail = ReservationSummary & {
   minutes: number;
   ends_at: string;
@@ -57,11 +62,10 @@ export async function getReservationList(filters: Filters) {
   if (filters.from) query = query.gte("starts_at", dayStart(filters.from));
   if (filters.to) query = query.lt("starts_at", dayEndExclusive(filters.to));
   if (filters.counselor) query = query.eq("counselor_id", filters.counselor);
+  const sort = reservationSorts[filters.sort];
   const { data, error, count } = await query
-    .order(filters.sort === "starts_desc" ? "starts_at" : "created_at", {
-      ascending: false,
-    })
-    .order("id", { ascending: false })
+    .order(sort.column, { ascending: sort.ascending })
+    .order("id", { ascending: sort.ascending })
     .range((filters.page - 1) * PAGE_SIZE, filters.page * PAGE_SIZE - 1)
     .returns<ReservationSummary[]>();
   if (error || !data || count === null)

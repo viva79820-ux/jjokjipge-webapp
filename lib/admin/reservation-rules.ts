@@ -8,7 +8,8 @@ export type ReservationStatus = keyof typeof statusLabels;
 export type Search = Record<string, string | string[] | undefined>;
 export const sortLabels = {
   created_desc: "예약 최신순",
-  starts_desc: "상담일 최신순",
+  starts_desc: "상담일 늦은순",
+  starts_asc: "날짜순",
 } as const;
 export type Filters = {
   status: ReservationStatus | "";
@@ -69,7 +70,12 @@ export function parseFilters(search: Search): Filters | null {
     page = value("page") || "1";
   if (status && !Object.hasOwn(statusLabels, status)) return null;
   const sort = search.sort === undefined ? "created_desc" : value("sort");
-  if (sort !== "created_desc" && sort !== "starts_desc") return null;
+  if (
+    sort !== "created_desc" &&
+    sort !== "starts_desc" &&
+    sort !== "starts_asc"
+  )
+    return null;
   if (
     (from && !isDate(from)) ||
     (to && !isDate(to)) ||
