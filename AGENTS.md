@@ -18,6 +18,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - 제작: 엠지미디어. 1차 시안은 2026-11-26에 시연하고, 오픈은 2026-12-31이다.
 - 목적: 오프라인 매장 손님 외에 온라인으로도 상담과 판매를 한다.
 - 화면 구조는 상담 플랫폼 "홍카페"의 탭 구조를 참고한다. 구조만 참고하고 로고·그림·문구는 가져오지 않는다.
+- 계획·결정·진행 상황은 `docs/planning/`에 있다(`development-plan.md` 기준 문서, `handoff.md` 최신 상태, `README.md` 기획 세션 지침). 코딩 작업은 이 파일(AGENTS.md)의 규칙을 따른다.
 
 ## 2. 기술 스택
 
