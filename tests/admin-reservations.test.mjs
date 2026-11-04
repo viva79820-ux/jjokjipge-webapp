@@ -481,3 +481,179 @@ test("date range keeps valid or empty end dates and corrects reversed ones", () 
     null,
   );
 });
+
+test("sort defaults, validation, pagination and return links", async () => {
+  assert.equal(rules.parseFilters({}).sort, "created_desc");
+  for (const sort of [
+    "",
+    "updated_at",
+    "created_at",
+    "invalid",
+    ["created_desc", "starts_desc"],
+    ["created_desc", "created_desc"],
+  ]) {
+    assert.equal(rules.parseFilters({ sort }), null);
+  }
+  for (const sort of ["created_desc", "starts_desc"]) {
+    const filters = rules.parseFilters({
+      sort,
+      status: "confirmed",
+      counselor: id,
+      from: "2026-11-04",
+      to: "2026-11-05",
+      page: "2",
+      exclude_cancelled: "1",
+    });
+    const h = queryHarness([
+      { data: [{ id, name: "상담사" }], error: null },
+      { data: [], count: 40, error: null },
+    ]);
+    await h.reservations.getReservationList(filters);
+    const steps = h.calls[1];
+    assert.deepEqual(
+      steps.filter((s) => s[0] === "order"),
+      [
+        [
+          "order",
+          sort === "starts_desc" ? "starts_at" : "created_at",
+          { ascending: false },
+        ],
+        ["order", "id", { ascending: false }],
+      ],
+    );
+    assert.ok(
+      steps.findIndex((s) => s[0] === "order") <
+        steps.findIndex((s) => s[0] === "range"),
+    );
+    assert.ok(
+      steps.some((s) => s[0] === "range" && s[1] === 20 && s[2] === 39),
+    );
+    assert.ok(steps.some((s) => s[0] === "gte" && s[1] === "starts_at"));
+    const next = rules.listUrl(filters, 3);
+    assert.equal(rules.safeReturn(next), next);
+    const parsed = rules.parseFilters(
+      Object.fromEntries(new URL(next, "https://test.invalid").searchParams),
+    );
+    assert.equal(parsed.sort, sort);
+    assert.equal(parsed.page, 3);
+    assert.equal(parsed.status, "confirmed");
+    assert.equal(parsed.excludeCancelled, true);
+  }
+  assert.equal(
+    rules.safeReturn("/admin/reservations?sort=starts_desc&sort=created_desc"),
+    "/admin/reservations",
+  );
+  assert.equal(
+    rules.safeReturn("/admin/reservations?sort=invalid"),
+    "/admin/reservations",
+  );
+});
+
+const phoneEdit = loadModule("../lib/reservations/phone-edit.ts", {
+  "./rules": contactRules,
+});
+test("reported front-digit deletion preserves the eight trailing digits and caret", () => {
+  const removed = phoneEdit.editPhone("020-5555-5555", 2, 2, "", "backward");
+  assert.equal(removed.value.replace(/\D/g, ""), "0055555555");
+  assert.equal(removed.start, 1);
+  const inserted = phoneEdit.editPhone(
+    removed.value,
+    removed.start,
+    removed.end,
+    "1",
+  );
+  assert.equal(inserted.value, "010-5555-5555");
+  assert.equal(inserted.start, 2);
+  assert.equal(
+    phoneEdit.editPhone("020-5555-5555", 0, 3, "010").value,
+    "010-5555-5555",
+  );
+});
+test("middle editing, hyphen boundaries and selection replacement", () => {
+  const value = "010-1234-5678";
+  for (const boundary of [3, 4, 8, 9]) {
+    const digitCount = value.slice(0, boundary).replace(/\D/g, "").length;
+    const digits = value.replace(/\D/g, "");
+    for (const direction of ["backward", "forward"]) {
+      const index = direction === "backward" ? digitCount - 1 : digitCount;
+      const expected = digits.slice(0, index) + digits.slice(index + 1);
+      const result = phoneEdit.editPhone(
+        value,
+        boundary,
+        boundary,
+        "",
+        direction,
+      );
+      assert.equal(result.value.replace(/\D/g, ""), expected);
+      const replacement = phoneEdit.editPhone(
+        result.value,
+        result.start,
+        result.end,
+        digits[index],
+      );
+      assert.equal(replacement.value, value);
+    }
+  }
+  assert.equal(phoneEdit.editPhone(value, 5, 7, "99").value, "010-1994-5678");
+  assert.equal(phoneEdit.editPhone(value, 0, value.length, "").value, value);
+  assert.equal(
+    phoneEdit.editPhone(value, 0, value.length, "", "backward").value,
+    "",
+  );
+  assert.equal(
+    phoneEdit.editPhone(value, 0, value.length, "02099998888").value,
+    "020-9999-8888",
+  );
+});
+test("UI insertion limits only new digits and never discards an unselected suffix", () => {
+  const full = "010-1234-5678";
+  assert.equal(
+    phoneEdit.editPhone(full, full.length, full.length, "9").value,
+    full,
+  );
+  assert.equal(phoneEdit.editPhone(full, 2, 2, "9").value, full);
+  for (const text of ["01012345678999", "010-1234-5678-999"])
+    assert.equal(phoneEdit.editPhone("", 0, 0, text).value, full);
+  const selected = phoneEdit.editPhone(full, 5, 7, "99999999999");
+  assert.equal(selected.value, "010-1994-5678");
+  assert.equal(selected.start, 7);
+  const partial = phoneEdit.editPhone("010-1234-56", 5, 7, "9999999");
+  assert.equal(partial.value, "010-1999-9456");
+});
+test("native input fallback also restores numeric caret positions", () => {
+  const removed = phoneEdit.reconcilePhoneInput(
+    "020-5555-5555",
+    "00-5555-5555",
+    1,
+    "deleteContentBackward",
+  );
+  assert.equal(removed.value, "005-5555-555");
+  assert.equal(removed.start, 1);
+  assert.equal(
+    phoneEdit.reconcilePhoneInput(
+      "010-1234-5678",
+      "0101234-5678",
+      3,
+      "deleteContentBackward",
+    ).value,
+    "011-2345-678",
+  );
+  assert.equal(
+    phoneEdit.reconcilePhoneInput(
+      "010-1234-5678",
+      "0101234-5678",
+      3,
+      "deleteContentForward",
+    ).value,
+    "010-2345-678",
+  );
+  assert.equal(
+    phoneEdit.reconcilePhoneInput(
+      "",
+      "0101234567899",
+      13,
+      "insertReplacementText",
+    ).value,
+    "010-1234-5678",
+  );
+});

@@ -15,6 +15,7 @@ import {
   listUrl,
   parseFilters,
   statusLabels,
+  sortLabels,
   PAGE_SIZE,
   type Search,
 } from "@/lib/admin/reservation-rules";
@@ -52,7 +53,7 @@ async function Reservations({
     <div className="space-y-4">
       <h1 className="text-xl font-bold">예약 관리</h1>
       <p className="text-sm text-muted">
-        상담 시작일 기준 · 한국 시간(Asia/Seoul) · 최근 접수순
+        상담 시작일 기준 · 한국 시간(Asia/Seoul) · {sortLabels[filters.sort]}
       </p>
       <form
         key={listUrl(filters)}
@@ -90,6 +91,20 @@ async function Reservations({
           </select>
         </label>
         <ReservationDateRange from={filters.from} to={filters.to} />
+        <label className="min-w-0 space-y-1 text-sm">
+          정렬
+          <select
+            name="sort"
+            defaultValue={filters.sort}
+            className={`${fieldClass} cursor-pointer`}
+          >
+            {Object.entries(sortLabels).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
         <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm">
           <input
             type="checkbox"

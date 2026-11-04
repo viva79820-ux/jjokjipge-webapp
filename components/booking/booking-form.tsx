@@ -18,9 +18,9 @@ import type { Counselor } from "@/lib/data/counselors";
 import { bookingConfig } from "@/lib/booking-config";
 import { dateLabel, timeLabel, type Slot } from "@/lib/booking-time";
 import { BookingComplete } from "./booking-complete";
+import { PhoneInput } from "./phone-input";
 import {
   duplicateMessage,
-  formatPhone,
   validateContact,
   type ContactField,
   type ContactValues,
@@ -113,7 +113,7 @@ export function BookingForm({
   function changeContact(field: ContactField, value: string) {
     const next = {
       ...contact,
-      [field]: field === "phone" ? formatPhone(value) : value,
+      [field]: value,
     };
     setContact(next);
     if (invalidFields.current.has(field)) checkField(field, next);
@@ -263,7 +263,7 @@ export function BookingForm({
                 type: "tel",
                 autoComplete: "tel",
                 inputMode: "numeric",
-                maxLength: undefined,
+                maxLength: 13,
               },
               {
                 name: "email",
@@ -279,55 +279,50 @@ export function BookingForm({
               <label htmlFor={field.name} className="font-medium">
                 {field.label}
               </label>
-              <input
-                name={field.name}
-                type={field.type}
-                autoComplete={field.autoComplete}
-                inputMode={field.inputMode}
-                maxLength={field.maxLength}
-                id={field.name}
-                required
-                placeholder={
-                  field.name === "phone" ? "010-1234-5678" : undefined
-                }
-                value={contact[field.name]}
-                onChange={(event) =>
-                  changeContact(field.name, event.target.value)
-                }
-                onPaste={(event) => {
-                  if (field.name !== "phone") return;
-                  event.preventDefault();
-                  const input = event.currentTarget;
-                  changeContact(
-                    "phone",
-                    input.value.slice(0, input.selectionStart ?? 0) +
-                      event.clipboardData.getData("text") +
-                      input.value.slice(
-                        input.selectionEnd ?? input.value.length,
-                      ),
-                  );
-                }}
-                onBlur={() => checkField(field.name)}
-                aria-invalid={!!errors[field.name]}
-                aria-describedby={
-                  [
-                    field.name === "email" ? "email-help" : "",
-                    field.name === "phone" ? "phone-help" : "",
-                    errors[field.name] ? `${field.name}-error` : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ") || undefined
-                }
-                className={`${inputClass} ${errors[field.name] ? "border-error" : "border-border"}`}
-              />
+              {field.name === "phone" ? (
+                <PhoneInput
+                  id="phone"
+                  name="phone"
+                  required
+                  autoComplete="tel"
+                  inputMode="numeric"
+                  placeholder="010-1234-5678"
+                  value={contact.phone}
+                  onValueChange={(value) => changeContact("phone", value)}
+                  onBlur={() => checkField("phone")}
+                  aria-invalid={!!errors.phone}
+                  aria-describedby={errors.phone ? "phone-error" : undefined}
+                  className={`${inputClass} ${errors.phone ? "border-error" : "border-border"}`}
+                />
+              ) : (
+                <input
+                  name={field.name}
+                  type={field.type}
+                  autoComplete={field.autoComplete}
+                  inputMode={field.inputMode}
+                  maxLength={field.maxLength}
+                  id={field.name}
+                  required
+                  value={contact[field.name]}
+                  onChange={(event) =>
+                    changeContact(field.name, event.target.value)
+                  }
+                  onBlur={() => checkField(field.name)}
+                  aria-invalid={!!errors[field.name]}
+                  aria-describedby={
+                    [
+                      field.name === "email" ? "email-help" : "",
+                      errors[field.name] ? `${field.name}-error` : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ") || undefined
+                  }
+                  className={`${inputClass} ${errors[field.name] ? "border-error" : "border-border"}`}
+                />
+              )}
               {field.name === "email" && (
                 <p id="email-help" className="mt-1 text-caption text-muted">
                   예약 조회에 쓰여요.
-                </p>
-              )}
-              {field.name === "phone" && (
-                <p id="phone-help" className="mt-1 text-caption text-muted">
-                  010으로 시작하는 휴대폰 번호 11자리를 입력해 주세요.
                 </p>
               )}
               {errorFor(field.name)}

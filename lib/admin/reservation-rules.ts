@@ -6,12 +6,17 @@ export const statusLabels = {
 } as const;
 export type ReservationStatus = keyof typeof statusLabels;
 export type Search = Record<string, string | string[] | undefined>;
+export const sortLabels = {
+  created_desc: "예약 최신순",
+  starts_desc: "상담일 최신순",
+} as const;
 export type Filters = {
   status: ReservationStatus | "";
   from: string;
   to: string;
   counselor: string;
   page: number;
+  sort: keyof typeof sortLabels;
   excludeCancelled?: boolean;
 };
 export const PAGE_SIZE = 20;
@@ -52,6 +57,7 @@ export function parseFilters(search: Search): Filters | null {
     "counselor",
     "page",
     "exclude_cancelled",
+    "sort",
   ];
   if (fields.some((key) => Array.isArray(search[key]))) return null;
   const value = (key: string) =>
@@ -62,6 +68,8 @@ export function parseFilters(search: Search): Filters | null {
     counselor = value("counselor"),
     page = value("page") || "1";
   if (status && !Object.hasOwn(statusLabels, status)) return null;
+  const sort = search.sort === undefined ? "created_desc" : value("sort");
+  if (sort !== "created_desc" && sort !== "starts_desc") return null;
   if (
     (from && !isDate(from)) ||
     (to && !isDate(to)) ||
@@ -78,6 +86,7 @@ export function parseFilters(search: Search): Filters | null {
     to,
     counselor,
     page: Number(page),
+    sort,
     excludeCancelled: value("exclude_cancelled") === "1",
   };
 }
@@ -87,6 +96,7 @@ export function listUrl(filters: Filters, page = filters.page) {
     if (filters[key]) params.set(key, filters[key]);
   if (page > 1) params.set("page", String(page));
   if (filters.excludeCancelled) params.set("exclude_cancelled", "1");
+  if (filters.sort !== "created_desc") params.set("sort", filters.sort);
   return `/admin/reservations${params.size ? `?${params}` : ""}`;
 }
 export function safeReturn(value: string | string[] | undefined) {
