@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import test from "node:test";
 import * as rules from "../lib/admin/reservation-rules.ts";
+import * as contactRules from "../lib/reservations/rules.ts";
 
 const require = createRequire(import.meta.url);
 const ts = require("typescript");
@@ -330,7 +331,16 @@ test("list queries use snapshots, date bounds, stable order and server paginatio
   );
   assert.deepEqual(
     steps.filter((s) => s[0] === "order").map((s) => s[1]),
-    ["starts_at", "id"],
+    ["created_at", "id"],
+  );
+  assert.ok(
+    steps
+      .filter((s) => s[0] === "order")
+      .every((s) => s[2].ascending === false),
+  );
+  assert.ok(
+    steps.findIndex((s) => s[0] === "order") <
+      steps.findIndex((s) => s[0] === "range"),
   );
   assert.match(steps.find((s) => s[0] === "select")[1], /product_name,price/);
 });
@@ -380,10 +390,94 @@ test("dashboard never queries inquiries, limits summaries and surfaces count err
   assert.ok(h.calls.every((c) => c[0][1] === "reservations"));
   assert.ok(h.calls[0].some((s) => s[0] === "neq" && s[2] === "cancelled"));
   assert.ok(h.calls[2].some((s) => s[0] === "limit" && s[1] === 5));
+  assert.deepEqual(
+    h.calls[2].filter((s) => s[0] === "order").map((s) => s[1]),
+    ["starts_at", "id"],
+  );
+  assert.ok(
+    h.calls[2].filter((s) => s[0] === "order").every((s) => s[2] === undefined),
+  );
   assert.ok(h.calls[3].some((s) => s[0] === "limit" && s[1] === 5));
   const failed = queryHarness([
     { count: null, error: {} },
     ...responses.slice(1),
   ]);
   await assert.rejects(() => failed.dashboard.getDashboard(), /대시보드/);
+});
+
+test("phone validation is identical on client and server without truncation", () => {
+  const validation = loadModule("../lib/reservations/validation.ts", {
+    "./availability": {
+      uuidPattern: /^[0-9a-f-]{36}$/i,
+      slugPattern: /^[a-z]+$/,
+    },
+    "./rules": contactRules,
+  });
+  const valid = ["01012345678", "010-1234-5678"];
+  const invalid = [
+    "01112345678",
+    "0101234567",
+    "010123456789",
+    "010-1234-56789",
+    "0101234567890123456789",
+  ];
+  for (const phone of [...valid, ...invalid]) {
+    const contact = {
+      name: "테스트",
+      phone,
+      email: "test@example.invalid",
+      depositor: "테스트",
+    };
+    const form = new FormData();
+    for (const [key, value] of Object.entries(contact)) form.set(key, value);
+    const client = contactRules.validateContact(contact);
+    const server = validation.validateReservation(form);
+    assert.equal(Boolean(client.phone), invalid.includes(phone), phone);
+    assert.equal(server.errors.phone, client.phone);
+    assert.equal(
+      Boolean(
+        contactRules.validateContact({
+          ...contact,
+          phone: contactRules.formatPhone(phone),
+        }).phone,
+      ),
+      invalid.includes(phone),
+    );
+    assert.equal(
+      server.values.phone.replace(/\D/g, ""),
+      phone.replace(/\D/g, ""),
+    );
+  }
+  assert.equal(contactRules.formatPhone("01012345678"), "010-1234-5678");
+  assert.equal(contactRules.formatPhone("0101234567"), "010-1234-567");
+});
+
+test("date range keeps valid or empty end dates and corrects reversed ones", () => {
+  assert.deepEqual(
+    rules.changeRangeStart(
+      { from: "2026-11-03", to: "2026-11-03" },
+      "2026-11-04",
+    ),
+    { from: "2026-11-04", to: "2026-11-04" },
+  );
+  assert.equal(
+    rules.changeRangeStart(
+      { from: "2026-11-03", to: "2026-11-10" },
+      "2026-11-04",
+    ).to,
+    "2026-11-10",
+  );
+  assert.equal(
+    rules.changeRangeStart({ from: "2026-11-03", to: "" }, "2026-11-04").to,
+    "",
+  );
+  assert.deepEqual(
+    rules.changeRangeStart({ from: "2026-11-03", to: "2026-11-10" }, ""),
+    { from: "", to: "2026-11-10" },
+  );
+  assert.ok(rules.parseFilters({ from: "2026-11-04", to: "2026-11-04" }));
+  assert.equal(
+    rules.parseFilters({ from: "2026-11-04", to: "2026-11-03" }),
+    null,
+  );
 });

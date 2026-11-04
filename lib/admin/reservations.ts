@@ -58,7 +58,7 @@ export async function getReservationList(filters: Filters) {
   if (filters.to) query = query.lt("starts_at", dayEndExclusive(filters.to));
   if (filters.counselor) query = query.eq("counselor_id", filters.counselor);
   const { data, error, count } = await query
-    .order("starts_at", { ascending: false })
+    .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .range((filters.page - 1) * PAGE_SIZE, filters.page * PAGE_SIZE - 1)
     .returns<ReservationSummary[]>();

@@ -5,6 +5,10 @@ import {
   ReservationCards,
 } from "@/components/admin/reservation-cards";
 import { Button } from "@/components/ui/button";
+import {
+  ReservationDateRange,
+  ResetReservationFilters,
+} from "@/components/admin/reservation-date-range";
 import { requireAdmin } from "@/lib/admin/auth";
 import { getReservationList } from "@/lib/admin/reservations";
 import {
@@ -48,9 +52,13 @@ async function Reservations({
     <div className="space-y-4">
       <h1 className="text-xl font-bold">예약 관리</h1>
       <p className="text-sm text-muted">
-        상담 시작일 기준 · 한국 시간(Asia/Seoul) · 최근 상담 시각순
+        상담 시작일 기준 · 한국 시간(Asia/Seoul) · 최근 접수순
       </p>
-      <form action="/admin/reservations" className="grid gap-3 md:grid-cols-2">
+      <form
+        key={listUrl(filters)}
+        action="/admin/reservations"
+        className="grid gap-3 md:grid-cols-2"
+      >
         <label className="space-y-1 text-sm">
           상태
           <select
@@ -81,24 +89,7 @@ async function Reservations({
             ))}
           </select>
         </label>
-        <label className="min-w-0 space-y-1 text-sm">
-          상담 시작일 (부터)
-          <input
-            name="from"
-            type="date"
-            defaultValue={filters.from}
-            className={fieldClass}
-          />
-        </label>
-        <label className="min-w-0 space-y-1 text-sm">
-          상담 시작일 (까지)
-          <input
-            name="to"
-            type="date"
-            defaultValue={filters.to}
-            className={fieldClass}
-          />
-        </label>
+        <ReservationDateRange from={filters.from} to={filters.to} />
         <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm">
           <input
             type="checkbox"
@@ -110,9 +101,7 @@ async function Reservations({
         </label>
         <div className="flex flex-wrap gap-2">
           <Button type="submit">필터 적용</Button>
-          <Button href="/admin/reservations" variant="secondary">
-            초기화
-          </Button>
+          <ResetReservationFilters />
         </div>
       </form>
       <p className="text-sm text-muted">총 {result.count}건 · 페이지당 20건</p>

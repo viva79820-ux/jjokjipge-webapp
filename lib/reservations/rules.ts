@@ -17,8 +17,8 @@ export function validateContact(contact: ContactValues) {
   const errors: Partial<Record<ContactField, string>> = {};
   if (name.length < 1 || name.length > 30)
     errors.name = "이름을 1~30자로 입력해 주세요.";
-  if (!/^01\d{8,9}$/.test(digits))
-    errors.phone = "01로 시작하는 휴대폰 번호 10~11자리를 입력해 주세요.";
+  if (!/^010\d{8}$/.test(digits))
+    errors.phone = "010으로 시작하는 휴대폰 번호 11자리를 입력해 주세요.";
   if (!isValidEmail(email))
     errors.email = "올바른 이메일 주소를 입력해 주세요.";
   if (depositor.length < 1 || depositor.length > 30)
@@ -27,15 +27,9 @@ export function validateContact(contact: ContactValues) {
 }
 
 export function formatPhone(value: string) {
-  const digits = value.replace(/\D/g, "").slice(0, 11);
+  const digits = value.replace(/\D/g, "");
   if (digits.length <= 3) return digits;
-  // While typing, keep four digits in the middle until ten digits are complete.
-  const middleEnd = digits.length === 10 ? 6 : 7;
-  return [
-    digits.slice(0, 3),
-    digits.slice(3, middleEnd),
-    digits.slice(middleEnd),
-  ]
+  return [digits.slice(0, 3), digits.slice(3, 7), digits.slice(7)]
     .filter(Boolean)
     .join("-");
 }

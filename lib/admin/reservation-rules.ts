@@ -17,6 +17,12 @@ export type Filters = {
 export const PAGE_SIZE = 20;
 export const conflictMessage =
   "다른 작업으로 예약이 변경됐습니다. 새로고침 후 다시 확인해 주세요.";
+export function changeRangeStart(
+  dates: { from: string; to: string },
+  from: string,
+) {
+  return { from, to: from && dates.to && dates.to < from ? from : dates.to };
+}
 export function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
     value,

@@ -1,6 +1,6 @@
 import type { BookingState } from "./types";
 import { slugPattern, uuidPattern } from "./availability";
-import { validateContact } from "./rules";
+import { formatPhone, validateContact } from "./rules";
 
 export function validateReservation(form: FormData) {
   const text = (key: string) =>
@@ -35,7 +35,7 @@ export function validateReservation(form: FormData) {
     !Number.isFinite(Date.parse(startsAt))
   )
     errors.startsAt = "상담 시간을 선택해 주세요.";
-  const phone = digits.replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3");
+  const phone = formatPhone(digits);
   return {
     errors,
     values: {

@@ -263,7 +263,7 @@ export function BookingForm({
                 type: "tel",
                 autoComplete: "tel",
                 inputMode: "numeric",
-                maxLength: 13,
+                maxLength: undefined,
               },
               {
                 name: "email",
@@ -287,6 +287,9 @@ export function BookingForm({
                 maxLength={field.maxLength}
                 id={field.name}
                 required
+                placeholder={
+                  field.name === "phone" ? "010-1234-5678" : undefined
+                }
                 value={contact[field.name]}
                 onChange={(event) =>
                   changeContact(field.name, event.target.value)
@@ -309,6 +312,7 @@ export function BookingForm({
                 aria-describedby={
                   [
                     field.name === "email" ? "email-help" : "",
+                    field.name === "phone" ? "phone-help" : "",
                     errors[field.name] ? `${field.name}-error` : "",
                   ]
                     .filter(Boolean)
@@ -319,6 +323,11 @@ export function BookingForm({
               {field.name === "email" && (
                 <p id="email-help" className="mt-1 text-caption text-muted">
                   예약 조회에 쓰여요.
+                </p>
+              )}
+              {field.name === "phone" && (
+                <p id="phone-help" className="mt-1 text-caption text-muted">
+                  010으로 시작하는 휴대폰 번호 11자리를 입력해 주세요.
                 </p>
               )}
               {errorFor(field.name)}
