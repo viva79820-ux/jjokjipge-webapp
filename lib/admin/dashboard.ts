@@ -9,7 +9,7 @@ export async function getDashboard() {
   const db = await createClient();
   const now = new Date();
   const today = koreanDay(now);
-  const [daily, pending, upcoming, recent] = await Promise.all([
+  const [daily, pending, upcoming, recent, inquiries] = await Promise.all([
     db
       .from("reservations")
       .select("id", { count: "exact", head: true })
@@ -36,6 +36,10 @@ export async function getDashboard() {
       .order("id", { ascending: false })
       .limit(5)
       .returns<ReservationSummary[]>(),
+    db
+      .from("inquiries")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending"),
   ]);
   if (
     daily.error ||
@@ -54,5 +58,7 @@ export async function getDashboard() {
     pending: pending.count,
     upcoming: upcoming.data,
     recent: recent.data,
+    unanswered:
+      inquiries.error || inquiries.count === null ? null : inquiries.count,
   };
 }

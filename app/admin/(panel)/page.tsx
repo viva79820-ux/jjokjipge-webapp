@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { connection } from "next/server";
 import { AdminAccessDenied } from "@/components/admin/access-denied";
 import {
   AdminLoading,
@@ -20,6 +21,7 @@ export default function AdminPage() {
 }
 
 async function Dashboard() {
+  await connection();
   if (!(await requireAdmin())) return <AdminAccessDenied />;
   const data = await getDashboard();
   if (!data) return <AdminAccessDenied />;
@@ -61,7 +63,21 @@ async function Dashboard() {
       </section>
       <section className="rounded-card border border-border bg-surface p-4">
         <h2 className="font-bold">미답변 문의</h2>
-        <p className="mt-2 text-muted">고객센터 연결 예정</p>
+        {data.unanswered === null ? (
+          <p role="alert" className="my-2 text-error">
+            미답변 문의 수를 불러오지 못했습니다. 다시 불러와 주세요.
+          </p>
+        ) : (
+          <p className="my-2 text-2xl font-bold">
+            미답변 문의 {data.unanswered}건
+          </p>
+        )}
+        <Button
+          variant="secondary"
+          href="/admin/support/inquiries?status=pending"
+        >
+          미답변 문의 보기
+        </Button>
       </section>
     </div>
   );

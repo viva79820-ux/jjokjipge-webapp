@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { connection } from "next/server";
 import Link from "next/link";
 import { AdminAccessDenied } from "@/components/admin/access-denied";
 import { AdminMenuTabs } from "@/components/admin/menu-tabs";
@@ -28,6 +29,7 @@ export default function PanelLayout({
 }
 
 async function AdminPanel({ children }: { children: React.ReactNode }) {
+  await connection();
   const admin = await requireAdmin();
   if (!admin)
     return (

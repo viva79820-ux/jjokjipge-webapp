@@ -376,18 +376,35 @@ test("unknown counselors, empty data, missing detail and query errors are distin
   assert.equal(detail.calls.length, 0);
   assert.equal(await detail.reservations.getReservationDetail(id), null);
 });
-test("dashboard never queries inquiries, limits summaries and surfaces count errors", async () => {
+test("dashboard counts pending inquiries and preserves reservation summaries and errors", async () => {
   const responses = [
     { count: 2, error: null },
     { count: 3, error: null },
     { data: [], error: null },
     { data: [], error: null },
+    { count: 4, error: null },
   ];
   const h = queryHarness(responses);
   const data = await h.dashboard.getDashboard();
   assert.equal(data.daily, 2);
   assert.equal(data.pending, 3);
-  assert.ok(h.calls.every((c) => c[0][1] === "reservations"));
+  assert.ok(h.calls.slice(0, 4).every((c) => c[0][1] === "reservations"));
+  assert.equal(data.unanswered, 4);
+  assert.deepEqual(h.calls[4], [
+    ["from", "inquiries"],
+    ["select", "id", { count: "exact", head: true }],
+    ["eq", "status", "pending"],
+  ]);
+  for (const [response, expected] of [
+    [{ count: 0, error: null }, 0],
+    [{ count: null, error: {} }, null],
+  ]) {
+    const value = await queryHarness([
+      ...responses.slice(0, 4),
+      response,
+    ]).dashboard.getDashboard();
+    assert.equal(value.unanswered, expected);
+  }
   assert.ok(h.calls[0].some((s) => s[0] === "neq" && s[2] === "cancelled"));
   assert.ok(h.calls[2].some((s) => s[0] === "limit" && s[1] === 5));
   assert.deepEqual(
