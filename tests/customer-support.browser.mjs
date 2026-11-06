@@ -97,6 +97,7 @@ async function handleFixture(req, res) {
       );
       if (insertFailure) return json(res, { code: "XX000" }, 500);
       insertCount++;
+      row.inquiry_no = `I-20261106-${9999 + insertCount}`;
       return json(
         res,
         { inquiry_no: row.inquiry_no, created_at: row.created_at },
@@ -288,6 +289,13 @@ try {
     await until(() => textIncludes(text), text);
   }
   async function click(selector) {
+    await until(
+      () =>
+        evaluate(
+          `Boolean(document.querySelector(${JSON.stringify(selector)})?.checkVisibility())`,
+        ),
+      `visible: ${selector}`,
+    );
     const rect = await evaluate(
       `(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) throw Error('Missing element'); el.scrollIntoView({block:'center'}); const r = el.getBoundingClientRect(); return {x:r.x+r.width/2,y:r.y+r.height/2}; })()`,
     );
@@ -305,8 +313,15 @@ try {
     });
   }
   async function button(text) {
+    await until(
+      () =>
+        evaluate(
+          `Array.from(document.querySelectorAll('button')).some(el => el.textContent.trim() === ${JSON.stringify(text)} && !el.disabled && el.checkVisibility())`,
+        ),
+      `button ready: ${text}`,
+    );
     const index = await evaluate(
-      `Array.from(document.querySelectorAll('button')).findIndex(el => el.textContent.trim() === ${JSON.stringify(text)})`,
+      `Array.from(document.querySelectorAll('button')).findIndex(el => el.textContent.trim() === ${JSON.stringify(text)} && el.checkVisibility())`,
     );
     assert.ok(index >= 0, `Missing button: ${text}`);
     await evaluate(
@@ -344,7 +359,7 @@ try {
     await until(
       () =>
         evaluate(
-          `location.pathname === ${JSON.stringify(path)} && document.readyState !== 'loading' && Boolean(document.querySelector('main'))`,
+          `location.pathname === ${JSON.stringify(path)} && document.readyState === 'complete' && Boolean(document.querySelector('main'))`,
         ),
       path,
       55000,
@@ -361,6 +376,12 @@ try {
     assert.ok(
       await evaluate("document.documentElement.scrollWidth <= innerWidth"),
       `Horizontal overflow at ${width}`,
+    );
+    assert.ok(
+      await evaluate(
+        "Array.from(document.querySelectorAll('header > div > a, header > div > a > *')).every(el => {const r=el.getBoundingClientRect();return r.left>=0 && r.right<=innerWidth;})",
+      ),
+      `Header clipping at ${width}`,
     );
     assert.ok(
       await evaluate(
@@ -483,6 +504,7 @@ try {
     );
   }
   await phoneEdits("#inquiry-phone");
+  await fill("#inquiry-reservationNo", "R-테스트참고번호");
   await fill("#inquiry-content", "테스트 문의\n둘째 줄");
   await click("#inquiry-privacyConsent");
   for (const width of [360, 768, 1024]) await widthCheck(width);
@@ -523,8 +545,91 @@ try {
   await button("문의번호 복사");
   await waitText("선택된 문의번호를 직접 복사해 주세요.");
   assert.equal(await evaluate("getSelection().toString()"), row.inquiry_no);
-  await navigate("/support/inquiry");
+  for (const width of [360, 768, 1024]) await widthCheck(width);
+  assert.equal(
+    await evaluate(
+      "document.querySelector('header > div > a').textContent.trim()",
+    ),
+    "쪽집게천사 타로샵",
+  );
+  assert.equal(
+    await evaluate(
+      "document.querySelector('header > div > a').getAttribute('href')",
+    ),
+    "/",
+  );
+  await click('a[href="/support/lookup"]');
+  await waitText("로그인한 경우에도 두 값이 모두 필요합니다.");
+  await click('a[href="/support/inquiry"]');
+  await waitText("문의가 접수되었습니다.");
+  await button("새 문의 작성");
+  await until(
+    () => evaluate("document.activeElement.id === 'inquiry-category'"),
+    "new inquiry focus",
+  );
+  assert.ok(
+    await evaluate(
+      "Array.from(document.querySelectorAll('main input, main textarea, main select')).every(el => el.type==='checkbox' ? !el.checked : el.value==='')",
+    ),
+  );
+  assert.ok(
+    await evaluate(
+      "Array.from(document.querySelectorAll('main [role=alert]')).every(el=>!el.textContent.trim())",
+    ),
+  );
+  assert.equal(await textIncludes("문의가 접수되었습니다."), false);
+  assert.equal(
+    await textIncludes("선택된 문의번호를 직접 복사해 주세요."),
+    false,
+  );
+  assert.ok(
+    await evaluate(
+      "(()=>{const r=document.activeElement.getBoundingClientRect();return r.top>=0 && r.bottom<innerHeight-100;})()",
+    ),
+  );
+  assert.equal(
+    await evaluate("location.pathname + location.search"),
+    "/support/inquiry",
+  );
   assert.equal(insertCount, 1);
+  await button("문의 접수");
+  assert.equal(await evaluate("document.activeElement.id"), "inquiry-category");
+  assert.ok(
+    await evaluate(
+      "document.querySelector('#inquiry-category').getAttribute('aria-invalid')==='true'",
+    ),
+  );
+  await evaluate(
+    "document.querySelector('#inquiry-category').value='consultation';document.querySelector('#inquiry-category').dispatchEvent(new Event('change',{bubbles:true}))",
+  );
+  await fill("#inquiry-name", "테스트 두 번째");
+  await fill("#inquiry-email", "test@example.invalid");
+  await fill("#inquiry-phone", "01055555555");
+  await fill("#inquiry-content", "테스트 문의\n둘째 줄");
+  await click("#inquiry-privacyConsent");
+  await click('a[href="/support/lookup"]');
+  await waitText("로그인한 경우에도 두 값이 모두 필요합니다.");
+  await click('a[href="/support/inquiry"]');
+  await until(
+    () =>
+      evaluate(
+        "document.querySelector('#inquiry-name')?.value==='테스트 두 번째'",
+      ),
+    "draft preservation",
+  );
+  await button("문의 접수");
+  await waitText("문의가 접수되었습니다.");
+  assert.equal(insertCount, 2);
+  assert.equal(
+    await textIncludes("선택된 문의번호를 직접 복사해 주세요."),
+    false,
+  );
+  await evaluate(
+    "Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{window.testCopied=text}}})",
+  );
+  await button("문의번호 복사");
+  await waitText("문의번호를 복사했습니다.");
+  assert.equal(await evaluate("window.testCopied"), row.inquiry_no);
   console.log(
     "PASS form validation, correction, content retention, phone editing, double click, receipt, copy/fallback, refresh safety",
   );

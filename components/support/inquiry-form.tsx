@@ -42,13 +42,30 @@ export function InquiryForm() {
   const formRef = useRef<HTMLFormElement>(null);
   const locked = useRef(false);
   const focusRequested = useRef(false);
+  const newInquiryFocus = useRef(false);
   useEffect(() => {
+    if (!receipt && newInquiryFocus.current) {
+      newInquiryFocus.current = false;
+      const category =
+        formRef.current?.querySelector<HTMLSelectElement>('[name="category"]');
+      category?.focus();
+      category?.scrollIntoView({ block: "center" });
+    }
     if (!pending && focusRequested.current) {
       focusRequested.current = false;
       const first = Object.keys(errors)[0];
       if (first) focusField(formRef, first);
     }
-  }, [errors, pending]);
+  }, [errors, pending, receipt]);
+  function newInquiry() {
+    setValues(initialValues);
+    setErrors({});
+    setMessage("");
+    setReceipt(undefined);
+    locked.current = false;
+    focusRequested.current = false;
+    newInquiryFocus.current = true;
+  }
   function change<K extends InquiryField>(field: K, value: InquiryValues[K]) {
     const next = { ...values, [field]: value };
     setValues(next);
@@ -104,7 +121,8 @@ export function InquiryForm() {
   const errorFor = (field: InquiryField) => (
     <FieldError field={`inquiry-${field}`} message={errors[field]} />
   );
-  if (receipt) return <InquiryComplete receipt={receipt} />;
+  if (receipt)
+    return <InquiryComplete receipt={receipt} onNewInquiry={newInquiry} />;
   return (
     <section>
       <h1 className="text-lg font-bold md:text-xl">1:1 문의</h1>

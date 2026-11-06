@@ -6,7 +6,13 @@ import { Badge } from "@/components/ui/badge";
 import type { InquiryReceipt } from "@/lib/inquiries/types";
 import { supportDate } from "./form-fields";
 
-export function InquiryComplete({ receipt }: { receipt: InquiryReceipt }) {
+export function InquiryComplete({
+  receipt,
+  onNewInquiry,
+}: {
+  receipt: InquiryReceipt;
+  onNewInquiry: () => void;
+}) {
   const titleRef = useRef<HTMLHeadingElement>(null);
   const numberRef = useRef<HTMLParagraphElement>(null);
   const [message, setMessage] = useState("");
@@ -65,6 +71,9 @@ export function InquiryComplete({ receipt }: { receipt: InquiryReceipt }) {
           문의번호 복사
         </Button>
         <Button href="/support/lookup">문의 조회</Button>
+        <Button type="button" variant="secondary" onClick={onNewInquiry}>
+          새 문의 작성
+        </Button>
       </div>
       <p role="status" className="text-caption text-muted">
         {message}
