@@ -218,4 +218,54 @@ grant update (name, phone) on public.profiles to authenticated;
 
 ## 7. 이번 범위에서 빠진 것 (3주차 이후 별도 설계)
 
-products / orders / order_items(타로샵), classes, reviews(상담 완료 예약과 연결), notices / faqs / inquiries, contents, Storage 버킷(사진), 결제(PG) 컬럼.
+products / orders / order_items(타로샵), classes, reviews(상담 완료 예약과 연결), contents, 결제(PG) 컬럼. FAQ·문의는 고객센터 마이그레이션, 공지·공개 이미지 버킷은 아래 8장의 마이그레이션으로 별도 정의한다.
+
+## 8. 공지사항·공개 이미지 (공지사항 1단계)
+
+마이그레이션: `supabase/migrations/20261109010000_notices_schema.sql`. 실제 공지·포스터·시드·팝업 필드는 만들지 않는다.
+
+### public.notices
+
+| 컬럼                   | 타입·기본값                | 제약·의미                                                                                          |
+| ---------------------- | -------------------------- | -------------------------------------------------------------------------------------------------- |
+| id                     | uuid PK, gen_random_uuid() | 필수                                                                                               |
+| title                  | text                       | 필수, 공백만 불가(탭·줄바꿈 포함), 최대 100자                                                      |
+| body                   | text                       | 필수, 공백만 불가, 최대 5000자                                                                     |
+| image_path             | text null                  | 선택 이미지 1장, `notices/<8-4-4-4-12 자리 16진수 UUID>.<jpg 또는 jpeg 또는 png 또는 webp>`만 허용 |
+| image_alt              | text null                  | 값이 있으면 공백만 불가·최대 200자. image_path가 있으면 필수                                       |
+| is_pinned              | boolean, false             | 필수, 상단 고정                                                                                    |
+| is_published           | boolean, false             | 필수, 신규 기본 비공개                                                                             |
+| published_at           | timestamptz null           | 공개 상태이면 필수                                                                                 |
+| created_at, updated_at | timestamptz, now()         | 필수, 기존 private.set_updated_at() 트리거로 갱신                                                  |
+
+- 이미지 DB 값은 버킷 안의 상대 경로만 저장한다. 빈 문자열·전체 URL·버킷 접두사·다른 폴더·상위 경로·다른 확장자는 거부한다. 이미지가 없어도 유효한 대체 설명을 보관할 수 있다.
+- CHECK에서 NULL이 통과하는 특성을 고려해 필수값에는 NOT NULL, 이미지·설명 및 공개·시각의 결합에는 명시적인 IS NOT NULL을 사용한다.
+- 인덱스: `(is_published, is_pinned desc, published_at desc, id desc)`. id는 동일 정렬 값의 안정적인 보조 기준이다.
+- 최초 공개 시 **후속 서버 액션**이 서버 현재 시각을 published_at에 넣는다. 비공개로 바꾸거나 다시 공개해도 최초 값을 지우거나 덮어쓰지 않는다. 이번 DB 단계는 공개 시각 필수 CHECK만 둔다. 예약 공개·자동 게시 기능은 없다.
+- RLS: anon·authenticated는 공개 공지만 SELECT, 관리자는 비공개 포함 SELECT 및 CRUD. UPDATE는 USING과 WITH CHECK 모두 기존 private.is_admin()을 사용한다.
+- PUBLIC·anon·authenticated·service_role의 새 테이블 기본 권한을 모두 회수한 뒤 anon·authenticated에 SELECT, authenticated에 INSERT·UPDATE·DELETE만 부여한다. 쓰기는 RLS로 관리자만 가능하다. service_role에는 별도 권한을 부여하지 않는다. 기존 객체 권한은 유지한다.
+
+### Storage public-images
+
+- ID·이름 `public-images`, public=true, file_size_limit=5242880(5MiB), allowed_mime_types는 image/jpeg·image/png·image/webp 집합이다.
+- 공지는 `notices/`, 향후 상담사·매장은 `counselors/`, `stores/` 폴더를 사용한다. 이번에는 다른 테이블의 경로 제약을 바꾸지 않는다.
+- 버킷이 없으면 생성한다. 있으면 이름·공개 여부·용량·MIME 집합을 비교하며 MIME 배열 순서·중복은 무시한다. 같으면 행을 변경하지 않고 재사용한다. 다르면 SQLSTATE P0001, `NOTICES_BUCKET_CONFIG_MISMATCH`와 항목명으로 중단하며 설정을 바꾸지 않는다.
+- storage.objects에는 authenticated 대상 `public_images_select_admin`, `public_images_insert_admin`, `public_images_update_admin`, `public_images_delete_admin` 정책을 추가한다. 조건은 bucket_id='public-images' AND private.is_admin()이며 UPDATE는 양쪽 조건에 적용한다. 기존 정책·Storage 전역 권한·보호 장치는 변경하지 않는다.
+- **공개 URL을 알면 누구나 이미지를 볼 수 있다. 비공개 공지의 이미지도 예외가 아니다.** 관리자 SELECT 정책은 목록·메타데이터 접근 제한이며 공개 URL을 숨기지 않는다. 공개해도 되는 포스터·상담사·매장 이미지만 넣고 개인정보·비공개 자료는 넣지 않는다.
+
+### SQL 사전 검사와 실행 범위
+
+1. 기획 검토 후 SQL Editor에서 `supabase/tests/notices_preflight.sql` 전체를 실행한다. 초기 설치 전용이며 notices·신규 인덱스·신규 정책·public-images 버킷(이름 충돌 포함)이 이미 있으면 중단한다. 기존 버킷 재사용 기능은 마이그레이션 자체에 유지한다.
+2. SQLSTATE P0001과 `NOTICES_PREFLIGHT_OK` 및 검사 수가 포함된 **마지막 의도된 예외**만 성공이다. DETAIL에 검사 전 버킷과 storage.objects 정책 전체 원본 JSON을 제공한다. 결과창의 초기 snapshot도 확인할 수 있으며, 반드시 DETAIL JSON을 별도로 보관한다. 임시 테이블은 롤백되므로 원본을 거기에만 의존하지 않는다.
+3. `supabase/tests/notices_rollback_check.sql`의 baseline에 그 JSON을 넣고 전체를 **별도로** 실행한다. 첫 ROLLBACK으로 aborted 트랜잭션을 종료한다. `NOTICES_ROLLBACK_OK`와 원본 정책 전체 일치를 확인한다. baseline 누락·임의 초기값은 통과시키지 않는다.
+
+기존 객체 때문에 시작 단계에서 중단됐다면 설치 전용 롤백 확인을 실행하지 않는다. 기존 버킷은 변경·삭제하지 않았으므로 초기 snapshot과 읽기 전용 조회로 설정 및 정책을 대조한다. 사전 검사 실패를 롤백 확인 성공으로 대체할 수 없다.
+
+검사는 실제 SET LOCAL ROLE과 임시 테스트 사용자·프로필을 사용하고 전체 롤백한다. 사전 검사가 새로 만든 버킷 안에서만 동일 설정·MIME 순서 재사용과 설정 불일치를 하위 트랜잭션으로 검사하며, 실제 마이그레이션의 버킷 DO 블록을 그대로 재실행한다. CHECK/권한 오류는 지정 SQLSTATE만 인정한다. 0행 차단과 실제 원본 유지도 확인한다. updated_at은 now()가 트랜잭션 동안 고정되므로 과거 시각에서 now()로 바뀌는지 확인한다.
+
+Storage 검사는 메타데이터 SQL·정책·버킷 설정 검사다. 실제 파일 업로드·공개 URL·용량 초과 및 MIME 차단은 후속 Storage API 검사 대상이다. 직접 SQL이 Supabase의 보호 장치로 막히면 전체 검사 실패로 남기고 해당 항목은 미검증으로 보고한다. 보호 장치를 해제하거나 다른 오류를 성공 처리하지 않는다. 로컬 SQL 실행 환경이 없는 경우 파일 작성·본문 동기화 검사와 실제 SQL 실행을 구분해 보고한다.
+
+자동 검증 보조 파일:
+
+- `node --test tests/notices-schema.test.mjs`: 사전 검사의 마이그레이션 전체와 버킷 재실행 본문이 원본과 일치하는지만 확인한다. 보안 SQL 실행 검사가 아니다.
+- `node tests/notices-schema.model.mjs`: 별도 PGlite 실행 환경을 준비한 경우 인메모리 PostgreSQL에서 사전 검사와 롤백 확인을 실제 실행한다. 기본 모듈 위치는 무시되는 `node_modules/.cache/notices-pg-runtime/` 아래이며, 다른 환경에서는 `NOTICES_PGLITE_MODULE`로 모듈 경로/URL을 전달할 수 있다. 프로젝트 package.json·lockfile에는 의존성을 추가하지 않는다. Auth·Storage는 최소 모형이고 기존 관리자 함수·트리거 본문을 재사용한다. 기존 정책 원본·별도 롤백·기존 버킷 때문에 중단되는 사례도 확인한다. Supabase 고유 보호 트리거나 실제 Storage 서비스를 재현하지 않는다.

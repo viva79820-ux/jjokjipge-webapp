@@ -92,6 +92,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   - 개인정보(profiles, reservations, orders, inquiries): 본인 것만 읽게 하고, 관리자는 전체를 읽을 수 있게 한다. 비회원 조회와 생성은 서버 코드에서 처리한다.
 - DB 구조 변경은 `supabase/migrations/`에 SQL 마이그레이션 파일로만 한다. 대시보드에서 직접 고치지 않는다.
 - 관리자 여부는 `profiles.role`(`user` / `admin`)로 구분한다.
+- 공개 이미지는 Storage `public-images` 버킷의 폴더별(`notices/`, `counselors/`, `stores/`)로 저장하고 쓰기는 관리자만 한다. DB에는 버킷 안의 상대 경로만 저장한다. 공개 버킷은 URL을 알면 누구나 볼 수 있으므로 공개해도 되는 이미지만 넣는다.
 - 테이블 초안: profiles, stores, counselors(store_id, affiliation `store`/`partner`, approval_status, expert_url), consult_products, reservations, products, orders, order_items, classes, reviews, notices, faqs, inquiries, contents
   - counselors의 affiliation, approval_status, expert_url은 나중에 확장할 때 쓸 필드다. 지금은 필드만 만들고 관련 화면은 만들지 않는다.
 
