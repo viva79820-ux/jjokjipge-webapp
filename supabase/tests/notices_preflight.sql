@@ -5,6 +5,8 @@
 -- 3) notices_rollback_check.sql의 baseline에 JSON을 붙여 넣고 별도로 전체 실행한다.
 -- 지정 예외 외 오류면 실패이며 롤백 확인의 성공으로 이를 대체할 수 없다.
 -- psql은 ON_ERROR_STOP=1 권장. COMMIT 없음. Storage SQL은 실제 업로드/API 검사가 아니다.
+-- SQL 검사 통과, 실제 Storage API와 DELETE 실행 권한 미검증.
+-- Storage 직접 DELETE는 공통 삭제 보호와 RLS를 구분할 수 없어 실행하지 않는다.
 begin;
 
 -- 객체 생성 전 원본을 수집한다. 기존 정책 전체 정의(역할/명령/USING/WITH CHECK 포함).
@@ -373,7 +375,6 @@ select set_config('request.jwt.claim.sub','',true);
 select pg_temp.notice_no_rows('select id from storage.objects where bucket_id=''public-images''','anon Storage 목록/메타데이터 차단');
 select pg_temp.notice_denied('insert into storage.objects(bucket_id,name) values (''public-images'',''notices/anon.webp'')','42501','anon Storage INSERT');
 select pg_temp.notice_no_rows('update storage.objects set name=''침범'' where bucket_id=''public-images''','anon Storage UPDATE');
-select pg_temp.notice_no_rows('delete from storage.objects where bucket_id=''public-images''','anon Storage DELETE');
 reset role;
 
 set local role authenticated;
@@ -381,7 +382,6 @@ select set_config('request.jwt.claim.sub',(select id::text from notices_actors w
 select pg_temp.notice_no_rows('select id from storage.objects where bucket_id=''public-images''','회원 Storage 목록/메타데이터 차단');
 select pg_temp.notice_denied('insert into storage.objects(bucket_id,name) values (''public-images'',''notices/user.webp'')','42501','회원 Storage INSERT');
 select pg_temp.notice_no_rows('update storage.objects set name=''침범'' where bucket_id=''public-images''','회원 Storage UPDATE');
-select pg_temp.notice_no_rows('delete from storage.objects where bucket_id=''public-images''','회원 Storage DELETE');
 reset role;
 select pg_temp.notice_assert((select count(*)=1 and bool_and(name='notices/11111111-1111-4111-8111-111111111111.webp')
   from storage.objects where bucket_id='public-images'),'차단 후 Storage 실제 원본 보존');
@@ -392,10 +392,20 @@ select pg_temp.notice_assert((select count(*)=1 from storage.objects where id=(s
 with changed as (update storage.objects set name='notices/22222222-2222-4222-8222-222222222222.png'
   where id=(select id from notices_object) returning id)
 select pg_temp.notice_assert((select count(*)=1 from changed),'관리자 Storage UPDATE');
-with changed as (delete from storage.objects where id=(select id from notices_object) returning id)
-select pg_temp.notice_assert((select count(*)=1 from changed),'관리자 Storage DELETE');
 reset role;
-select pg_temp.notice_assert(not exists(select 1 from storage.objects where bucket_id='public-images'),'테스트 객체 삭제 확인');
+select pg_temp.notice_assert((select count(*)=1 and bool_and(name='notices/22222222-2222-4222-8222-222222222222.png')
+  from storage.objects where bucket_id='public-images'),'수정된 테스트 메타데이터 유지: 마지막 전체 롤백으로 제거');
+
+-- DELETE는 실행하지 않고 정책 정의와 테이블 권한만 카탈로그로 확인한다.
+-- 실제 Storage API 삭제 권한은 후속 검증 대상이며 42501을 DELETE RLS 성공으로 세지 않는다.
+select pg_temp.notice_assert((select cmd='DELETE' and roles=array['authenticated']::name[]
+  and permissive='PERMISSIVE' and with_check is null
+  and regexp_replace(qual,'[[:space:]]','','g')=
+    '((bucket_id=''public-images''::text)AND(SELECTprivate.is_admin()ASis_admin))'
+  from pg_policies where schemaname='storage' and tablename='objects' and policyname='public_images_delete_admin'),
+  'Storage DELETE 정책 카탈로그: 역할·명령·버킷·관리자 조건 (실행 미검증)');
+select pg_temp.notice_assert(has_table_privilege('authenticated','storage.objects','DELETE'),
+  'Storage DELETE 테이블 권한 카탈로그 (실행 미검증)');
 
 do $$
 declare original jsonb; current_policies jsonb; total integer;
@@ -407,6 +417,6 @@ begin
   perform pg_temp.notice_assert(current_policies=original->'policies','기존 Storage 정책 전체 정의 보존');
   select count(*) into total from notices_results;
   -- DETAIL은 롤백 밖으로 보관할 원본이다. 반드시 복사해 별도 확인 파일에 전달한다.
-  raise exception using errcode='P0001',message=format('NOTICES_PREFLIGHT_OK: 검사 %s개 통과. 의도된 전체 롤백. 실제 Storage API 미검증.',total),detail=original::text;
+  raise exception using errcode='P0001',message=format('NOTICES_PREFLIGHT_OK: 검사 %s개 통과. 의도된 전체 롤백. SQL 검사 통과, 실제 Storage API와 DELETE 실행 권한 미검증.',total),detail=original::text;
 end;
 $$;

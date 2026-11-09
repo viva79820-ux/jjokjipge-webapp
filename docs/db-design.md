@@ -263,9 +263,11 @@ products / orders / order_items(타로샵), classes, reviews(상담 완료 예�
 
 검사는 실제 SET LOCAL ROLE과 임시 테스트 사용자·프로필을 사용하고 전체 롤백한다. 사전 검사가 새로 만든 버킷 안에서만 동일 설정·MIME 순서 재사용과 설정 불일치를 하위 트랜잭션으로 검사하며, 실제 마이그레이션의 버킷 DO 블록을 그대로 재실행한다. CHECK/권한 오류는 지정 SQLSTATE만 인정한다. 0행 차단과 실제 원본 유지도 확인한다. updated_at은 now()가 트랜잭션 동안 고정되므로 과거 시각에서 now()로 바뀌는지 확인한다.
 
-Storage 검사는 메타데이터 SQL·정책·버킷 설정 검사다. 실제 파일 업로드·공개 URL·용량 초과 및 MIME 차단은 후속 Storage API 검사 대상이다. 직접 SQL이 Supabase의 보호 장치로 막히면 전체 검사 실패로 남기고 해당 항목은 미검증으로 보고한다. 보호 장치를 해제하거나 다른 오류를 성공 처리하지 않는다. 로컬 SQL 실행 환경이 없는 경우 파일 작성·본문 동기화 검사와 실제 SQL 실행을 구분해 보고한다.
+Storage 검사는 SELECT·INSERT·UPDATE 메타데이터 SQL·정책·버킷 설정 검사다. storage.objects 직접 DELETE는 공통 삭제 보호의 42501을 RLS 차단과 구분할 수 없어 anon·회원·관리자 모두 실행하지 않는다. 테스트 메타데이터는 마지막 전체 트랜잭션 롤백으로 제거한다. DELETE 정책의 대상 역할·명령·버킷·관리자 조건과 authenticated 테이블 DELETE 권한은 카탈로그로만 확인한다. 이는 DELETE 실행 권한 검증이 아니다.
+
+성공 예외에는 실제 수행 검사 수와 “SQL 검사 통과, 실제 Storage API와 DELETE 실행 권한 미검증”을 표시한다. 실제 파일 업로드·공개 URL·용량 초과·MIME 차단·Storage API 삭제 권한은 후속 API 검사 대상이다. 보호 트리거·우회 설정·권한을 변경하지 않고 다른 예상 밖 오류는 그대로 검사 실패로 남긴다. 로컬 SQL 실행 환경이 없는 경우 파일 작성·본문 동기화 검사와 실제 SQL 실행을 구분해 보고한다.
 
 자동 검증 보조 파일:
 
-- `node --test tests/notices-schema.test.mjs`: 사전 검사의 마이그레이션 전체와 버킷 재실행 본문이 원본과 일치하는지만 확인한다. 보안 SQL 실행 검사가 아니다.
-- `node tests/notices-schema.model.mjs`: 별도 PGlite 실행 환경을 준비한 경우 인메모리 PostgreSQL에서 사전 검사와 롤백 확인을 실제 실행한다. 기본 모듈 위치는 무시되는 `node_modules/.cache/notices-pg-runtime/` 아래이며, 다른 환경에서는 `NOTICES_PGLITE_MODULE`로 모듈 경로/URL을 전달할 수 있다. 프로젝트 package.json·lockfile에는 의존성을 추가하지 않는다. Auth·Storage는 최소 모형이고 기존 관리자 함수·트리거 본문을 재사용한다. 기존 정책 원본·별도 롤백·기존 버킷 때문에 중단되는 사례도 확인한다. Supabase 고유 보호 트리거나 실제 Storage 서비스를 재현하지 않는다.
+- `node --test tests/notices-schema.test.mjs`: 마이그레이션이 기존 검토 커밋과 동일하고, 사전 검사의 마이그레이션 전체와 버킷 재실행 본문이 원본과 일치하는지 확인한다. 보안 SQL 실행 검사가 아니다.
+- `node tests/notices-schema.model.mjs`: 별도 PGlite 실행 환경을 준비한 경우 인메모리 PostgreSQL에서 사전 검사와 롤백 확인을 실제 실행한다. 기본 모듈 위치는 무시되는 `node_modules/.cache/notices-pg-runtime/` 아래이며, 다른 환경에서는 `NOTICES_PGLITE_MODULE`로 모듈 경로/URL을 전달할 수 있다. 프로젝트 package.json·lockfile에는 의존성을 추가하지 않는다. Auth·Storage는 최소 모형이고 기존 관리자 함수·트리거 본문을 재사용한다. 기존 정책 원본·별도 롤백·기존 버킷 때문에 중단되는 사례도 확인한다. 직접 DELETE를 42501로 거부하는 모형 보호 트리거 유무 양쪽에서 검사를 실행하고, 비롤백 카운터로 사전 검사 중 DELETE 실행 시도가 없음을 확인한다. 양쪽 검사 수도 같아야 하며 예상 밖 UPDATE 오류는 그대로 실패해야 한다. Supabase 보호 구현 전체나 실제 Storage 서비스를 재현한 것은 아니다.

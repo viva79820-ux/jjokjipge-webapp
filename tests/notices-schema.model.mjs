@@ -18,21 +18,24 @@ const fn = (name) => {
 };
 const preflight = read("../supabase/tests/notices_preflight.sql");
 const rollback = read("../supabase/tests/notices_rollback_check.sql");
-const db = new PGlite();
-const run = (sql) => db.exec(sql);
-async function expect(sql, code, pattern) {
-  try {
-    await run(sql);
-  } catch (error) {
-    assert.equal(error.code, code);
-    assert.match(error.message, pattern);
-    return error;
+async function model(protectedDelete) {
+  const db = new PGlite();
+  const run = (sql) => db.exec(sql);
+  async function expect(sql, code, pattern) {
+    try {
+      await run(sql);
+    } catch (error) {
+      assert.equal(error.code, code);
+      assert.match(error.message, pattern);
+      return error;
+    }
+    throw Error("Expected database error was missing");
   }
-  throw Error("Expected database error was missing");
-}
-try {
-  console.log((await db.query("select version() as version")).rows[0].version);
-  await run(`
+  try {
+    console.log(
+      (await db.query("select version() as version")).rows[0].version,
+    );
+    await run(`
     create role anon;
     create role authenticated;
     create role service_role bypassrls;
@@ -62,79 +65,134 @@ try {
     insert into storage.buckets(id,name) values ('unrelated-model-bucket','unrelated-model-bucket');
     insert into storage.objects(bucket_id,name) values ('unrelated-model-bucket','untouched');
   `);
-  const success = await expect(
-    preflight,
-    "P0001",
-    /^NOTICES_PREFLIGHT_OK: 검사 \d+개 통과/,
-  );
-  const baseline = JSON.parse(success.detail);
-  assert.equal(baseline.eligible, true);
-  assert.equal(baseline.bucket, null);
-  assert.equal(baseline.policies.length, 1);
-  const withBaseline = (value) =>
-    rollback.replace(
-      "baseline jsonb := null;",
-      `baseline jsonb := '${JSON.stringify(value).replaceAll("'", "''")}'::jsonb;`,
+    let deleteAttempts;
+    if (protectedDelete) {
+      await run(`
+      create sequence storage.model_delete_attempts minvalue 0 start 0;
+      grant usage on sequence storage.model_delete_attempts to anon, authenticated;
+      create function storage.model_protect_delete() returns trigger language plpgsql as $$
+      begin
+        perform nextval('storage.model_delete_attempts');
+        raise exception using errcode='42501', message='Direct deletion from storage tables is not allowed. Use the Storage API instead.';
+      end;
+      $$;
+      create trigger model_protect_delete before delete on storage.objects
+      for each statement execute function storage.model_protect_delete();
+    `);
+      // 모형 보호가 실제로 발동하는지 먼저 확인한다. 보호는 끝까지 유지한다.
+      await expect(
+        "delete from storage.objects where false",
+        "42501",
+        /^Direct deletion from storage tables is not allowed\./,
+      );
+      deleteAttempts = (
+        await db.query("select last_value from storage.model_delete_attempts")
+      ).rows[0].last_value;
+    }
+    const success = await expect(
+      preflight,
+      "P0001",
+      /^NOTICES_PREFLIGHT_OK: 검사 \d+개 통과/,
     );
-  const rollbackResult = await run(withBaseline(baseline));
-  assert.equal(rollbackResult.at(-1).rows[0].result, "NOTICES_ROLLBACK_OK");
-  const remaining = (
-    await db.query(
-      "select to_regclass('public.notices') as notices, (select count(*)::int from storage.buckets where id='public-images') as buckets",
-    )
-  ).rows[0];
-  assert.deepEqual(remaining, { notices: null, buckets: 0 });
-  assert.equal(
-    (
+    const baseline = JSON.parse(success.detail);
+    assert.match(
+      success.message,
+      /SQL 검사 통과, 실제 Storage API와 DELETE 실행 권한 미검증/,
+    );
+    assert.equal(baseline.eligible, true);
+    assert.equal(baseline.bucket, null);
+    assert.equal(baseline.policies.length, 1);
+    const withBaseline = (value) =>
+      rollback.replace(
+        "baseline jsonb := null;",
+        `baseline jsonb := '${JSON.stringify(value).replaceAll("'", "''")}'::jsonb;`,
+      );
+    const rollbackResult = await run(withBaseline(baseline));
+    assert.equal(rollbackResult.at(-1).rows[0].result, "NOTICES_ROLLBACK_OK");
+    if (protectedDelete) {
+      // 시퀀스는 롤백되지 않는다. 실행 시도 자체가 없음을 확인해 42501 오집계를 막는다.
+      assert.equal(
+        (await db.query("select last_value from storage.model_delete_attempts"))
+          .rows[0].last_value,
+        deleteAttempts,
+      );
+    }
+    const remaining = (
       await db.query(
-        "select count(*)::int as count from storage.objects where name='untouched'",
+        "select to_regclass('public.notices') as notices, (select count(*)::int from storage.buckets where id='public-images') as buckets",
       )
-    ).rows[0].count,
-    1,
-  );
-  // 원본을 누락하거나 변조한 경우 롤백 확인이 성공하지 않아야 한다.
-  await expect(rollback, "P0001", /^NOTICES_ROLLBACK_BASELINE_REQUIRED/);
-  await expect(
-    withBaseline({ ...baseline, policies: [] }),
-    "P0001",
-    /^NOTICES_ROLLBACK_FAILED: storage.objects/,
-  );
-  // 기존 버킷이 있는 실제 환경에서는 첫 단계에서 중단하고 행/정책 전체를 보존한다.
-  await run(
-    "insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types) values ('public-images','public-images',false,9,array['image/gif'])",
-  );
-  const before = (
-    await db.query(
-      "select to_jsonb(b) as snapshot from storage.buckets b where id='public-images'",
-    )
-  ).rows[0].snapshot;
-  const stopped = await expect(
-    preflight,
-    "P0001",
-    /^NOTICES_PREFLIGHT_NOT_INITIAL:/,
-  );
-  assert.equal(JSON.parse(stopped.detail).eligible, false);
-  await run("rollback");
-  assert.deepEqual(
-    (
+    ).rows[0];
+    assert.deepEqual(remaining, { notices: null, buckets: 0 });
+    assert.equal(
+      (
+        await db.query(
+          "select count(*)::int as count from storage.objects where name='untouched'",
+        )
+      ).rows[0].count,
+      1,
+    );
+    // 원본을 누락하거나 변조한 경우 롤백 확인이 성공하지 않아야 한다.
+    await expect(rollback, "P0001", /^NOTICES_ROLLBACK_BASELINE_REQUIRED/);
+    await expect(
+      withBaseline({ ...baseline, policies: [] }),
+      "P0001",
+      /^NOTICES_ROLLBACK_FAILED: storage.objects/,
+    );
+    // 기존 버킷이 있는 실제 환경에서는 첫 단계에서 중단하고 행/정책 전체를 보존한다.
+    // 예상 밖 UPDATE 오류는 성공 예외까지 진행시키거나 42501로 처리하면 안 된다.
+    await run(`
+    create function storage.model_unexpected_update() returns trigger language plpgsql as $$
+    begin raise exception using errcode='XX000', message='MODEL_UNEXPECTED_UPDATE'; end;
+    $$;
+    create trigger model_unexpected_update before update on storage.objects
+    for each statement execute function storage.model_unexpected_update();
+  `);
+    await expect(preflight, "XX000", /^MODEL_UNEXPECTED_UPDATE$/);
+    await run(
+      "rollback; drop trigger model_unexpected_update on storage.objects",
+    );
+    await run(
+      "insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types) values ('public-images','public-images',false,9,array['image/gif'])",
+    );
+    const before = (
       await db.query(
         "select to_jsonb(b) as snapshot from storage.buckets b where id='public-images'",
       )
-    ).rows[0].snapshot,
-    before,
-  );
-  await expect(
-    withBaseline(JSON.parse(stopped.detail)),
-    "P0001",
-    /^NOTICES_ROLLBACK_BASELINE_REQUIRED/,
-  );
-  console.log(success.message);
-  console.log(
-    "NOTICES_ROLLBACK_OK: baseline comparison and missing objects independently verified",
-  );
-  console.log(
-    "PASS: isolated PostgreSQL model, exact migration, role/RLS tests, bucket subtransactions, preserved existing bucket/policy, rejected invalid baseline. No live Supabase or Storage API verification.",
-  );
-} finally {
-  await db.close();
+    ).rows[0].snapshot;
+    const stopped = await expect(
+      preflight,
+      "P0001",
+      /^NOTICES_PREFLIGHT_NOT_INITIAL:/,
+    );
+    assert.equal(JSON.parse(stopped.detail).eligible, false);
+    await run("rollback");
+    assert.deepEqual(
+      (
+        await db.query(
+          "select to_jsonb(b) as snapshot from storage.buckets b where id='public-images'",
+        )
+      ).rows[0].snapshot,
+      before,
+    );
+    await expect(
+      withBaseline(JSON.parse(stopped.detail)),
+      "P0001",
+      /^NOTICES_ROLLBACK_BASELINE_REQUIRED/,
+    );
+    console.log(success.message);
+    console.log(
+      "NOTICES_ROLLBACK_OK: baseline comparison and missing objects independently verified",
+    );
+    console.log(
+      `PASS: isolated PostgreSQL model (DELETE protection=${protectedDelete}), exact migration, role/RLS tests, bucket subtransactions, preserved existing bucket/policy, rejected invalid baseline. Storage DELETE catalog only; no live Supabase or Storage API verification.`,
+    );
+    return success.message.match(/검사 (\d+)개/)[1];
+  } finally {
+    await db.close();
+  }
 }
+assert.equal(
+  await model(false),
+  await model(true),
+  "삭제 보호 오류를 추가 성공 검사로 집계하면 안 됩니다.",
+);
