@@ -1,3 +1,4 @@
+import { siteConfig } from "@/lib/site-config";
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
@@ -9,8 +10,8 @@ const pretendard = localFont({
   variable: "--font-pretendard",
 });
 export const metadata: Metadata = {
-  title: "쪽집게천사",
-  description: "쪽집게천사 상담 안내",
+  title: siteConfig.name,
+  description: `${siteConfig.name} 상담 안내`,
 };
 export default function RootLayout({
   children,

@@ -1,3 +1,4 @@
+import { siteConfig } from "@/lib/site-config";
 import { Suspense } from "react";
 import { connection } from "next/server";
 import Link from "next/link";
@@ -42,7 +43,7 @@ async function AdminPanel({ children }: { children: React.ReactNode }) {
     <>
       <header className="flex flex-col gap-3 border-b border-border p-4 md:flex-row md:items-center md:justify-between md:p-6">
         <p className="shrink-0 text-xl font-extrabold text-brand">
-          쪽집게천사 관리자
+          {siteConfig.name} 관리자
         </p>
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 md:justify-end">
           <p className="w-full min-w-0 text-caption break-all text-muted md:text-right md:text-sm">

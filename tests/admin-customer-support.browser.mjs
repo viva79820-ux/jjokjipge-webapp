@@ -344,21 +344,26 @@ try {
   await button("저장 전 확인");
   await confirm();
   await until(
-    () => evaluate(`location.pathname==='/admin/support/faqs/${id}'`),
-    "created edit",
+    () =>
+      evaluate(
+        "location.pathname==='/admin/support/faqs' && location.search.includes('notice=saved')",
+      ),
+    "created list",
   );
   assert.equal(faqRows[0].is_active, false);
+  await text("FAQ를 저장했습니다.");
+  await click('a[href*="/faqs/' + id + '"]');
   await fill("[name=question]", "테스트 수정 FAQ");
   await click("input[type=checkbox]");
   await button("저장 전 확인");
   await confirm();
   await text("FAQ를 저장했습니다.");
   assert.equal(faqRows[0].is_active, true);
+  await click('a[href*="/faqs/' + id + '"]');
   await fill("[name=answer]", "두 번째 저장");
   await button("저장 전 확인");
   await confirm();
   assert.equal(faqRows[0].answer, "두 번째 저장");
-  await click('a[href="/admin/support/faqs"]');
   await text("총 1건");
   await click('a[href*="/faqs/new"]');
   await text("FAQ 등록");
@@ -393,6 +398,19 @@ try {
     ),
     "보존할 초안",
   );
+  await button("돌아가기");
+  await until(
+    () =>
+      evaluate(
+        "document.activeElement?.textContent.includes('최신 내용 다시 불러오기')",
+      ),
+    "conflict focus",
+  );
+  assert.ok(
+    await evaluate(
+      "document.activeElement.getBoundingClientRect().bottom<=innerHeight",
+    ),
+  );
   await button("최신 내용 다시 불러오기");
   await text("작성 중인 입력이 사라지고");
   await confirm();
@@ -404,6 +422,18 @@ try {
   );
   await go("/support");
   await text("테스트 수정 FAQ");
+  await text("쪽집게천사 운명나라");
+  for (const width of [360, 768, 1024]) {
+    await cdp("Emulation.setDeviceMetricsOverride", {
+      width,
+      height: 900,
+      deviceScaleFactor: 1,
+      mobile: false,
+    });
+    assert.ok(
+      await evaluate("document.documentElement.scrollWidth<=innerWidth"),
+    );
+  }
   await go("/admin/support/faqs");
   await click('a[href*="/faqs/new"]');
   await text("FAQ 등록");
@@ -414,13 +444,50 @@ try {
     ),
     "",
   );
-  await go(`/admin/support/inquiries/${id}`);
+  await go(
+    `/admin/support/inquiries/${id}?returnTo=${encodeURIComponent("/admin/support/inquiries?category=shop&status=pending&page=2")}`,
+  );
   await text("답변 등록");
+  await fill("[name=answer]", "충돌 답변 초안");
+  inquiry.updated_at = stamp();
+  await button("저장 전 확인");
+  await button("확인 후 처리");
+  await text("다른 작업으로 문의가 변경됐습니다.");
+  await button("돌아가기");
+  await until(
+    () =>
+      evaluate(
+        "document.activeElement?.textContent.includes('최신 내용 다시 불러오기')",
+      ),
+    "inquiry conflict focus",
+  );
+  assert.ok(
+    await evaluate(
+      "document.activeElement.getBoundingClientRect().bottom<=innerHeight",
+    ),
+  );
+  await button("최신 내용 다시 불러오기");
+  await text("작성 중인 입력이 사라지고");
+  assert.equal(
+    await evaluate(
+      "Array.from(document.querySelectorAll('[name=answer]')).find(e=>e.checkVisibility()).value",
+    ),
+    "충돌 답변 초안",
+  );
+  await confirm();
   await fill("[name=answer]", "테스트 답변 등록");
   await button("저장 전 확인");
   await text("저장하면 고객이 문의 조회에서 답변을 확인할 수 있습니다.");
   await confirm();
   assert.equal(inquiry.status, "answered");
+  await text("답변을 저장했습니다.");
+  assert.ok(await evaluate("location.search.includes('status=answered')"));
+  assert.ok(
+    await evaluate(
+      "location.search.includes('category=shop') && !new URLSearchParams(location.search).has('page')",
+    ),
+  );
+  await click('a[href*="/inquiries/' + id + '"]');
   await fill("[name=answer]", "테스트 답변 수정");
   await button("저장 전 확인");
   await confirm();

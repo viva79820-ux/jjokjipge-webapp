@@ -1,10 +1,11 @@
+import { siteConfig } from "@/lib/site-config";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { CounselorListItem } from "@/components/counselor/counselor-list-item";
 import { getCounselors } from "@/lib/data/counselors";
 
-export const metadata: Metadata = { title: "전화상담 | 쪽집게천사" };
+export const metadata: Metadata = { title: `전화상담 | ${siteConfig.name}` };
 type SearchParams = Promise<{ type?: string | string[] }>;
 const filters = [
   { label: "전체", href: "/consult", value: "all" },

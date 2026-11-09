@@ -1,3 +1,4 @@
+import { siteConfig } from "@/lib/site-config";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -16,7 +17,7 @@ type Props = { params: Promise<{ id: string }> };
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const counselor = await getCounselor((await params).id);
   if (!counselor) notFound();
-  return { title: `${counselor.name} 선생님 | 쪽집게천사` };
+  return { title: `${counselor.name} 선생님 | ${siteConfig.name}` };
 }
 export default function CounselorPage({ params }: Props) {
   return (

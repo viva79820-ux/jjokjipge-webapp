@@ -1,10 +1,13 @@
+import { siteConfig } from "@/lib/site-config";
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { getFaqs } from "@/lib/data/faqs";
 import { FaqList } from "@/components/support/faq-list";
 
-export const metadata: Metadata = { title: "자주 묻는 질문 | 쪽집게천사" };
+export const metadata: Metadata = {
+  title: `자주 묻는 질문 | ${siteConfig.name}`,
+};
 
 async function FaqContent() {
   await connection();

@@ -30,6 +30,35 @@ const labels = {
 const rules = load("../lib/admin/support-rules.ts", {
   "../inquiries/validation": { categoryLabels: labels },
 });
+test("saved navigation keeps only approved filters and fixed notice codes", () => {
+  assert.equal(
+    rules.supportSavedUrl(
+      "faqs",
+      "/admin/support/faqs?category=shop&status=private&page=2",
+    ),
+    "/admin/support/faqs?category=shop&status=private&page=2&notice=saved",
+  );
+  assert.equal(
+    rules.supportSavedUrl(
+      "inquiries",
+      "/admin/support/inquiries?category=shop&status=pending&page=3",
+    ),
+    "/admin/support/inquiries?category=shop&status=answered&notice=saved",
+  );
+  assert.equal(
+    rules.supportSavedUrl("inquiries", "//external.invalid"),
+    "/admin/support/inquiries?status=answered&notice=saved",
+  );
+  for (const notice of ["arbitrary", ["saved", "saved"]])
+    assert.equal(rules.supportListQuery({ notice }).valid, false);
+  const parsed = rules.supportListQuery({ category: "shop", notice: "saved" });
+  assert.equal(parsed.saved, true);
+  assert.ok(rules.parseSupportFilters("faqs", parsed.filters));
+  assert.equal(
+    rules.supportReturn("faqs", "/admin/support/faqs?notice=saved"),
+    "/admin/support/faqs",
+  );
+});
 const id = "11111111-1111-4111-8111-111111111111",
   version = "2026-11-06T01:02:03.123456+00:00";
 const faq = {

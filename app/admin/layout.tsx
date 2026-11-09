@@ -1,7 +1,8 @@
+import { siteConfig } from "@/lib/site-config";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "쪽집게천사 관리자",
+  title: `${siteConfig.name} 관리자`,
   robots: { index: false, follow: false },
 };
 

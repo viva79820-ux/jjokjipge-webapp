@@ -86,6 +86,26 @@ export function supportReturn(kind: Kind, value: unknown) {
     return base;
   }
 }
+export function supportSavedUrl(kind: Kind, returnTo: unknown) {
+  const url = new URL(
+    supportReturn(kind, returnTo),
+    "https://internal.invalid",
+  );
+  if (kind === "inquiries") {
+    url.searchParams.set("status", "answered");
+    url.searchParams.delete("page");
+  }
+  url.searchParams.set("notice", "saved");
+  return url.pathname + "?" + url.searchParams;
+}
+export function supportListQuery(search: Search) {
+  const { notice, ...filters } = search;
+  return {
+    filters,
+    saved: notice === "saved",
+    valid: notice === undefined || notice === "saved",
+  };
+}
 export function scalar(form: FormData, key: string) {
   const a = form.getAll(key);
   return a.length === 1 && typeof a[0] === "string" ? a[0] : null;

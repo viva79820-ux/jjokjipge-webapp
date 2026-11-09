@@ -7,7 +7,7 @@ import { getCounselors } from "@/lib/data/counselors";
 import { getStores } from "@/lib/data/stores";
 import { siteConfig } from "@/lib/site-config";
 
-export const metadata: Metadata = { title: "매장상담 | 쪽집게천사" };
+export const metadata: Metadata = { title: `매장상담 | ${siteConfig.name}` };
 
 export default function StoresPage() {
   return (

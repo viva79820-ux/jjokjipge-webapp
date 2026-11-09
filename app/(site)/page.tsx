@@ -1,3 +1,4 @@
+import { siteConfig } from "@/lib/site-config";
 import Link from "next/link";
 import { Grid2X2, Layers, Sparkles, Store } from "lucide-react";
 import { Suspense } from "react";
@@ -25,7 +26,7 @@ async function HomeContent() {
   const recommended = counselors.filter((c) => c.isRecommended);
   return (
     <div className="space-y-7 px-4 pt-4 md:space-y-9 md:px-6">
-      <h1 className="sr-only">쪽집게천사 홈</h1>
+      <h1 className="sr-only">{siteConfig.name} 홈</h1>
       <CounselorBanner counselors={recommended} />
       <section aria-label="상담 카테고리" className="grid grid-cols-4 gap-2">
         {categories.map(({ label, href, icon: Icon }, index) => (

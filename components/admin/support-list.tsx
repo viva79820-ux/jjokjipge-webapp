@@ -10,6 +10,7 @@ import {
   visibilityLabels,
   parseSupportFilters,
   supportUrl,
+  supportListQuery,
   type Kind,
   type Search,
 } from "@/lib/admin/support-rules";
@@ -27,7 +28,8 @@ export async function SupportList({
 }) {
   await connection();
   if (!(await requireAdmin())) return <AdminAccessDenied />;
-  const filters = parseSupportFilters(kind, await searchParams);
+  const query = supportListQuery(await searchParams);
+  const filters = query.valid ? parseSupportFilters(kind, query.filters) : null;
   const base = `/admin/support/${kind}`;
   if (!filters)
     return (
@@ -40,7 +42,14 @@ export async function SupportList({
     kind === "faqs" ? await getFaqList(filters) : await getInquiryList(filters);
   if (!result) return <AdminAccessDenied />;
   const pages = Math.max(1, Math.ceil(result.count / 20));
-  if (filters.page > pages) redirect(supportUrl(kind, filters, pages));
+  if (filters.page > pages) {
+    const validPage = supportUrl(kind, filters, pages);
+    redirect(
+      query.saved
+        ? `${validPage}${validPage.includes("?") ? "&" : "?"}notice=saved`
+        : validPage,
+    );
+  }
   const returnTo = supportUrl(kind, filters);
   const categories = kind === "faqs" ? faqCategories : categoryLabels;
   const statuses = kind === "faqs" ? visibilityLabels : inquiryStatuses;
@@ -49,6 +58,11 @@ export async function SupportList({
       <h1 className="text-xl font-bold">
         {kind === "faqs" ? "FAQ 관리" : "문의 관리"}
       </h1>
+      {query.saved && (
+        <p role="status" tabIndex={-1} className="text-brand">
+          {kind === "faqs" ? "FAQ를 저장했습니다." : "답변을 저장했습니다."}
+        </p>
+      )}
       {kind === "faqs" && (
         <Button href={`${base}/new?returnTo=${encodeURIComponent(returnTo)}`}>
           FAQ 등록

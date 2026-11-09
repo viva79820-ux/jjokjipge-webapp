@@ -1,3 +1,4 @@
+import { siteConfig } from "@/lib/site-config";
 import Link from "next/link";
 import { Sparkles } from "lucide-react";
 import { TopTabs } from "@/components/top-tabs";
@@ -14,7 +15,7 @@ export function SiteHeader() {
             className="shrink-0 text-gold"
             aria-hidden="true"
           />
-          <span className="min-w-0 text-center">쪽집게천사 타로샵</span>
+          <span className="min-w-0 text-center">{siteConfig.name}</span>
           <Sparkles
             size={18}
             className="shrink-0 text-gold"

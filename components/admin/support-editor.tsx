@@ -16,6 +16,7 @@ import {
   categoryLabels,
   answerError,
   supportReturn,
+  supportSavedUrl,
   type FaqInput,
 } from "@/lib/admin/support-rules";
 import type { FaqRow, InquiryDetail } from "@/lib/admin/support-types";
@@ -63,11 +64,21 @@ export function SupportEditor(props: Props) {
   const [modal, setModal] = useState<"save" | "delete" | "reload" | null>(null);
   const [pending, startTransition] = useTransition();
   const lock = useRef(false),
+    reloadRef = useRef<HTMLDivElement>(null),
     noticeRef = useRef<HTMLParagraphElement>(null),
     errorRef = useRef<HTMLParagraphElement>(null),
     formRef = useRef<HTMLFormElement>(null);
   const router = useRouter();
   const returnTo = supportReturn(kind, props.returnTo);
+  useEffect(() => {
+    if (conflicted && !modal && !pending) {
+      const frame = requestAnimationFrame(() => {
+        reloadRef.current?.querySelector("button")?.focus();
+        reloadRef.current?.scrollIntoView({ block: "center" });
+      });
+      return () => cancelAnimationFrame(frame);
+    }
+  }, [conflicted, modal, pending]);
   useEffect(() => {
     if (!pending && !modal && notice) {
       noticeRef.current?.focus();
@@ -156,18 +167,15 @@ export function SupportEditor(props: Props) {
           return;
         }
         if (res.row) {
-          const wasNew = !original;
           setOriginal(res.row);
           if (kind === "faqs") setFaq(toInput(res.row as FaqRow));
           else setAnswer((res.row as InquiryDetail).answer ?? "");
-          if (wasNew) {
+          if (!props.initial) {
             setOriginal(null);
             setFaq(blank);
             setNotice("");
-            router.push(
-              `/admin/support/faqs/${res.row.id}?returnTo=${encodeURIComponent(returnTo)}`,
-            );
           }
+          router.replace(supportSavedUrl(kind, returnTo));
         }
       } catch {
         setError("처리 결과를 확인하지 못했습니다. 최신 내용을 확인해 주세요.");
@@ -340,6 +348,21 @@ export function SupportEditor(props: Props) {
             <Button type="submit" disabled={pending}>
               저장 전 확인
             </Button>
+            {conflicted && !modal && (
+              <div ref={reloadRef}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={pending}
+                  onClick={() => {
+                    setError("");
+                    setModal("reload");
+                  }}
+                >
+                  최신 내용 다시 불러오기
+                </Button>
+              </div>
+            )}
             {kind === "faqs" && original && (
               <Button
                 type="button"
@@ -354,26 +377,13 @@ export function SupportEditor(props: Props) {
               </Button>
             )}
           </div>
+          {!modal && error && (
+            <p ref={errorRef} tabIndex={-1} role="alert" className="text-error">
+              {error}
+            </p>
+          )}
         </fieldset>
       </form>
-      {conflicted && !modal && (
-        <Button
-          type="button"
-          variant="secondary"
-          disabled={pending}
-          onClick={() => {
-            setError("");
-            setModal("reload");
-          }}
-        >
-          최신 내용 다시 불러오기
-        </Button>
-      )}
-      {!modal && error && (
-        <p ref={errorRef} tabIndex={-1} role="alert" className="text-error">
-          {error}
-        </p>
-      )}
       {modal && (
         <Modal
           title={

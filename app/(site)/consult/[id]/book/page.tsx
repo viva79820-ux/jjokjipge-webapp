@@ -1,3 +1,4 @@
+import { siteConfig } from "@/lib/site-config";
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import Link from "next/link";
@@ -19,7 +20,7 @@ type Props = {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const counselor = await getCounselor((await params).id);
   if (!counselor) notFound();
-  return { title: `${counselor.name} 선생님 예약 | 쪽집게천사` };
+  return { title: `${counselor.name} 선생님 예약 | ${siteConfig.name}` };
 }
 
 export default function BookingPage(props: Props) {
