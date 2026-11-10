@@ -15,7 +15,8 @@ export function NoticeImage({ src, alt }: { src: string; alt: string }) {
           src={src}
           alt={alt}
           onError={() => setFailed(true)}
-          className="h-auto max-w-full rounded-card"
+          className="h-auto w-full rounded-card"
+          data-notice-detail-image
         />
       )}
       <a

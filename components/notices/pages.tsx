@@ -144,18 +144,32 @@ export async function NoticeDetailPage({
     );
   const src = publicImageUrl(row.image_path);
   return (
-    <article className="space-y-4 wrap-anywhere">
+    <article className="space-y-6 wrap-anywhere md:space-y-8">
       <Button href={back} variant="secondary">
         목록으로 돌아가기
       </Button>
-      <h1 className="text-xl font-bold">{row.title}</h1>
-      {row.is_pinned && <Badge>고정</Badge>}
-      <p className="text-sm text-muted">
-        {row.published_at && formatTime(row.published_at)}
+      <header className="space-y-3 border-b border-border pb-4 md:pb-6">
+        <h1 className="text-2xl leading-tight font-extrabold md:text-3xl">
+          {row.title}
+        </h1>
+        <div className="flex flex-wrap items-center gap-2">
+          {row.is_pinned && <Badge>고정</Badge>}
+          <p className="text-sm text-muted">
+            {row.published_at && formatTime(row.published_at)}
+          </p>
+        </div>
+      </header>
+      <p className="whitespace-pre-wrap text-body leading-7 md:text-base md:leading-8">
+        {row.body}
       </p>
-      <p className="whitespace-pre-wrap">{row.body}</p>
       {src && (
-        <NoticeImage key={src} src={src} alt={row.image_alt || "공지 이미지"} />
+        <div className="border-t border-border pt-6 md:pt-8">
+          <NoticeImage
+            key={src}
+            src={src}
+            alt={row.image_alt || "공지 이미지"}
+          />
+        </div>
       )}
     </article>
   );

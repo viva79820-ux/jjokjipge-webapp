@@ -58,6 +58,7 @@ export function NoticeEditor({
   const prefix = useId(),
     router = useRouter();
   const back = returnUrl(returnTo);
+  const imageSrc = file ? preview : publicImageUrl(path);
   useEffect(() => {
     const t = requestAnimationFrame(() =>
       setDraftId((value) => value || crypto.randomUUID()),
@@ -356,7 +357,6 @@ export function NoticeEditor({
             [
               ["title", "제목", 100],
               ["body", "본문", 5000],
-              ["image_alt", "이미지 설명", 200],
             ] as const
           ).map(([k, label, max]) => (
             <div key={k}>
@@ -378,12 +378,8 @@ export function NoticeEditor({
                   id={`${prefix}-${k}`}
                   name={k}
                   maxLength={max}
-                  value={k === "title" ? title : alt}
-                  onChange={(e) =>
-                    k === "title"
-                      ? setTitle(e.target.value)
-                      : setAlt(e.target.value)
-                  }
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
                   className={control}
                   aria-invalid={!!errors[k]}
                   aria-describedby={`${prefix}-${k}-error`}
@@ -403,72 +399,116 @@ export function NoticeEditor({
               )}
             </div>
           ))}
-          <label className="block">
-            이미지 선택
-            <input
-              className={control}
-              type="file"
-              disabled={hasUpload}
-              accept="image/jpeg,image/png,image/webp"
-              onChange={async (e) => {
-                const selected = e.target.files?.[0];
-                if (!selected) return;
-                setBusy(true);
-                try {
-                  await inspectImage(selected);
-                  setFile(selected);
-                  uploaded.current = null;
-                  setMessage("");
-                } catch (err) {
-                  setMessage(
-                    err instanceof Error
-                      ? err.message
-                      : "이미지를 확인해 주세요.",
-                  );
-                  e.target.value = "";
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            />
-          </label>
-          {((file && preview) || (!file && publicImageUrl(path))) && (
-            <Image
-              unoptimized
-              width={1200}
-              height={1200}
-              src={file ? preview : publicImageUrl(path)!}
-              alt={alt || "선택 이미지 미리보기"}
-              className="h-auto max-w-full"
-            />
-          )}
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={hasUpload}
-            onClick={() => {
-              setFile(null);
-              setPath("");
-            }}
+          <section
+            aria-labelledby={`${prefix}-image-heading`}
+            className="space-y-4 rounded-card border border-border bg-surface p-3 md:p-4"
           >
-            첨부 제거
-          </Button>
-          <label className="flex min-h-11 items-center gap-2">
-            <input
-              type="checkbox"
-              checked={pin}
-              onChange={(e) => setPin(e.target.checked)}
-            />
-            상단 고정
-          </label>
-          <label className="flex min-h-11 items-center gap-2">
-            <input
-              type="checkbox"
-              checked={pub}
-              onChange={(e) => setPub(e.target.checked)}
-            />
-            공개
-          </label>
+            <h2 id={`${prefix}-image-heading`} className="text-lg font-bold">
+              첨부 이미지
+            </h2>
+            <label className="block">
+              파일 선택
+              <input
+                className={control}
+                type="file"
+                disabled={hasUpload}
+                accept="image/jpeg,image/png,image/webp"
+                onChange={async (e) => {
+                  const selected = e.target.files?.[0];
+                  if (!selected) return;
+                  setBusy(true);
+                  try {
+                    await inspectImage(selected);
+                    setPreview("");
+                    setFile(selected);
+                    uploaded.current = null;
+                    setMessage("");
+                  } catch (err) {
+                    setMessage(
+                      err instanceof Error
+                        ? err.message
+                        : "이미지를 확인해 주세요.",
+                    );
+                    e.target.value = "";
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              />
+            </label>
+            {imageSrc && (
+              <div className="space-y-2">
+                <Image
+                  unoptimized
+                  width={1200}
+                  height={1200}
+                  src={imageSrc}
+                  alt={alt || "선택 이미지 미리보기"}
+                  className="max-h-80 h-auto w-auto max-w-full object-contain"
+                  data-notice-image-preview
+                />
+                <a
+                  href={imageSrc}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex min-h-11 cursor-pointer items-center text-brand underline"
+                >
+                  이미지 크게 보기
+                </a>
+              </div>
+            )}
+            <div>
+              <label htmlFor={`${prefix}-image_alt`}>이미지 설명</label>
+              <input
+                id={`${prefix}-image_alt`}
+                name="image_alt"
+                maxLength={200}
+                value={alt}
+                onChange={(e) => setAlt(e.target.value)}
+                className={control}
+                aria-invalid={!!errors.image_alt}
+                aria-describedby={`${prefix}-image_alt-error`}
+              />
+              <p
+                id={`${prefix}-image_alt-error`}
+                role="alert"
+                className="text-error"
+              >
+                {errors.image_alt}
+              </p>
+            </div>
+            {imageSrc && (
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={hasUpload}
+                onClick={() => {
+                  setFile(null);
+                  setPath("");
+                }}
+              >
+                첨부 제거
+              </Button>
+            )}
+          </section>
+          <div className="space-y-2 border-t border-border pt-4">
+            <label className="flex min-h-11 items-center gap-2">
+              <input
+                type="checkbox"
+                checked={pin}
+                onChange={(e) => setPin(e.target.checked)}
+              />
+              상단 고정
+            </label>
+            <label className="flex min-h-11 items-center gap-2">
+              <input
+                type="checkbox"
+                checked={pub}
+                onChange={(e) => setPub(e.target.checked)}
+              />
+              공개
+            </label>
+          </div>
           <div className="flex flex-wrap gap-2">
             <Button type="submit">저장 전 확인</Button>
             {initial && (

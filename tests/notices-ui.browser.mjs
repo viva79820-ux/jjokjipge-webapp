@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { spawnSync } from "node:child_process";
 import { createHmac } from "node:crypto";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   browser,
   server,
@@ -13,6 +15,7 @@ import {
 const uid = "11111111-1111-4111-8111-111111111111",
   rows = [],
   files = new Map(),
+  imageDimensions = new Map(),
   issues = [];
 let admin = true,
   seq = 0,
@@ -62,8 +65,10 @@ async function handle(req, res) {
     res.end(JSON.stringify(user));
     return;
   }
-  let raw = "";
-  for await (const c of req) raw += c;
+  const chunks = [];
+  for await (const c of req) chunks.push(c);
+  const rawBuffer = Buffer.concat(chunks);
+  const raw = rawBuffer.toString();
   if (u.pathname.startsWith("/storage/v1/")) {
     if (u.pathname.includes("/object/info/")) {
       const path = u.pathname.split("/public-images/")[1];
@@ -73,8 +78,37 @@ async function handle(req, res) {
         return;
       }
       res.end(
-        JSON.stringify({ size: files.get(path), content_type: "image/png" }),
+        JSON.stringify({
+          size: Buffer.isBuffer(files.get(path))
+            ? files.get(path).length
+            : files.get(path),
+          content_type: "image/png",
+        }),
       );
+      return;
+    }
+    if (
+      req.method === "GET" &&
+      u.pathname.includes("/object/public/public-images/")
+    ) {
+      const path = u.pathname.split("/public-images/")[1];
+      const image = files.get(path);
+      const dimensions = imageDimensions.get(path);
+      if (!Buffer.isBuffer(image)) {
+        res.writeHead(404);
+        res.end("{}");
+        return;
+      }
+      if (dimensions) {
+        res.setHeader("Cache-Control", "no-store");
+        res.setHeader("Content-Type", "image/svg+xml");
+        res.end(
+          `<svg xmlns="http://www.w3.org/2000/svg" width="${dimensions.width}" height="${dimensions.height}" viewBox="0 0 ${dimensions.width} ${dimensions.height}"><rect width="100%" height="100%" fill="#5e3363"/><rect width="25%" height="25%" fill="#f2c775"/></svg>`,
+        );
+      } else {
+        res.setHeader("Content-Type", "image/png");
+        res.end(image);
+      }
       return;
     }
     if (req.method === "POST") {
@@ -91,7 +125,7 @@ async function handle(req, res) {
         );
         return;
       }
-      files.set(path, Buffer.byteLength(raw));
+      files.set(path, rawBuffer);
       if (loseUploadResponse) {
         loseUploadResponse = false;
         req.socket.destroy();
@@ -208,6 +242,16 @@ try {
     console.log("MOCK_OPEN", path);
     await b.go(base + path);
   };
+  const screenshot = async (name) => {
+    const directory = process.env.NOTICES_SCREENSHOT_DIR;
+    if (!directory) return;
+    mkdirSync(directory, { recursive: true });
+    const { data } = await b.call("Page.captureScreenshot", {
+      format: "png",
+      captureBeyondViewport: true,
+    });
+    writeFileSync(join(directory, name), Buffer.from(data, "base64"));
+  };
   const confirm = async () => {
     await until(
       () => b.evaluate("!!document.querySelector('dialog[open]')"),
@@ -246,6 +290,19 @@ try {
     mobile: false,
   });
   await go("/admin/notices/new");
+  assert.equal(
+    await b.evaluate(
+      "document.querySelector('[data-notice-image-preview]')===null",
+    ),
+    true,
+  );
+  assert.equal(
+    await b.evaluate(
+      "Array.from(document.querySelectorAll('button')).some(e=>e.textContent.trim()==='첨부 제거')",
+    ),
+    false,
+  );
+  await text("첨부 이미지");
   await b.fill("title", "모의 공지");
   await b.fill("body", "긴본문".repeat(100));
   await b.button("저장 전 확인");
@@ -260,11 +317,21 @@ try {
   assert.equal(rows.length, 1);
   const id = rows[0].id;
   assert.equal(rows[0].image_path, null);
-  const selectImage = async () => {
+  const selectImage = async (width = 20, height = 30, name = "fixture.png") => {
     await b.evaluate(
-      `(async()=>{const c=document.createElement('canvas');c.width=20;c.height=30;const blob=await new Promise(r=>c.toBlob(r,'image/png'));const data=new DataTransfer();data.items.add(new File([blob],'fixture.png',{type:'image/png'}));const el=Array.from(document.querySelectorAll('input[type=file]')).find(e=>e.checkVisibility());el.files=data.files;el.dispatchEvent(new Event('change',{bubbles:true}));})()`,
+      `(async()=>{const c=document.createElement('canvas');c.width=${width};c.height=${height};const x=c.getContext('2d');x.fillStyle='#5e3363';x.fillRect(0,0,c.width,c.height);x.fillStyle='#f2c775';x.fillRect(0,0,Math.max(1,c.width/4),Math.max(1,c.height/4));const blob=await new Promise(r=>c.toBlob(r,'image/png'));const data=new DataTransfer();data.items.add(new File([blob],${JSON.stringify(name)},{type:'image/png'}));const el=Array.from(document.querySelectorAll('input[type=file]')).find(e=>e.checkVisibility());el.files=data.files;el.dispatchEvent(new Event('change',{bubbles:true}));})()`,
     );
     await b.fill("image_alt", "모의 이미지");
+    await until(
+      () =>
+        b.evaluate(
+          `(()=>{const image=document.querySelector('[data-notice-image-preview]');return image?.src.startsWith('blob:')&&image.naturalWidth===${width}&&image.naturalHeight===${height}})()`,
+        ),
+      "selected image preview",
+    );
+    return b.evaluate(
+      "document.querySelector('[data-notice-image-preview]').src",
+    );
   };
   await go("/notices");
   await text("등록된 공지사항이 없습니다.");
@@ -280,18 +347,74 @@ try {
   await b.evaluate(
     "Array.from(document.querySelectorAll('input[type=checkbox]')).filter(e=>e.checkVisibility()).at(-1).click()",
   );
-  await b.evaluate(
-    `(async()=>{const c=document.createElement('canvas');c.width=20;c.height=30;const blob=await new Promise(r=>c.toBlob(r,'image/png'));const f=new File([blob],'fixture.png',{type:'image/png'});const data=new DataTransfer();data.items.add(f);const el=Array.from(document.querySelectorAll('input[type=file]')).find(e=>e.checkVisibility());el.files=data.files;el.dispatchEvent(new Event('change',{bubbles:true}));})()`,
-  );
-  await b.fill("image_alt", "모의 이미지");
+  await selectImage(240, 1200, "세로-포스터.png");
   await b.button("저장 전 확인");
   await confirm();
   assert.equal(rows[0].is_published, true);
   assert.equal(files.size, 1);
+  imageDimensions.set(rows[0].image_path, { width: 240, height: 1200 });
   await go("/notices");
   await text("모의 공지");
+  const longTitle =
+    "모바일에서도 자연스럽게 여러 줄로 표시되는 긴 공지사항 제목입니다";
+  const longBody =
+    "첫째 줄에는 공지 내용을 읽기 쉽게 적습니다.\n\n둘째 줄은 줄바꿈을 유지합니다.\n" +
+    "띄어쓰기없는긴문자열".repeat(20);
+  rows[0].title = longTitle;
+  rows[0].body = longBody;
+  rows[0].is_pinned = true;
   await go("/notices/" + id);
-  await text("긴본문");
+  await text("첫째 줄");
+  await until(
+    () =>
+      b.evaluate(
+        "document.querySelector('[data-notice-detail-image]')?.naturalHeight===1200",
+      ),
+    "customer notice image",
+  );
+  const detailLayout = await b.evaluate(
+    `(()=>{
+      const title=document.querySelector('article h1');
+      const body=document.querySelector('article>p.whitespace-pre-wrap');
+      const image=document.querySelector('[data-notice-detail-image]');
+      const header=document.querySelector('article header');
+      const imageArea=image.parentElement.parentElement;
+      const titleRect=title.getBoundingClientRect();
+      const bodyRect=body.getBoundingClientRect();
+      const imageRect=image.getBoundingClientRect();
+      return {
+        titleSize:parseFloat(getComputedStyle(title).fontSize),
+        bodySize:parseFloat(getComputedStyle(body).fontSize),
+        titleLines:Math.round(titleRect.height/parseFloat(getComputedStyle(title).lineHeight)),
+        headerBottom:header.getBoundingClientRect().bottom,
+        bodyTop:bodyRect.top,
+        bodyBottom:bodyRect.bottom,
+        imageTop:imageArea.getBoundingClientRect().top,
+        imageWidth:imageRect.width,
+        imageHeight:imageRect.height,
+        naturalWidth:image.naturalWidth,
+        naturalHeight:image.naturalHeight,
+      };
+    })()`,
+  );
+  assert.ok(detailLayout.titleSize > detailLayout.bodySize);
+  assert.ok(detailLayout.titleLines >= 2);
+  assert.ok(detailLayout.bodyTop > detailLayout.headerBottom);
+  assert.ok(detailLayout.imageTop > detailLayout.bodyBottom);
+  assert.ok(detailLayout.imageHeight > 320);
+  assert.ok(
+    Math.abs(
+      detailLayout.imageWidth / detailLayout.imageHeight -
+        detailLayout.naturalWidth / detailLayout.naturalHeight,
+    ) < 0.01,
+  );
+  assert.deepEqual(
+    await b.evaluate(
+      `(()=>{const a=Array.from(document.querySelectorAll('a')).find(e=>e.textContent.includes('원본 이미지'));return {target:a.target,rel:a.rel}})()`,
+    ),
+    { target: "_blank", rel: "noopener noreferrer" },
+  );
+  await screenshot("customer-notice-detail-360.png");
   for (const width of [360, 768, 1024]) {
     await b.call("Emulation.setDeviceMetricsOverride", {
       width,
@@ -303,6 +426,36 @@ try {
       await b.evaluate("document.documentElement.scrollWidth<=innerWidth"),
     );
   }
+  imageDimensions.set(rows[0].image_path, { width: 1200, height: 240 });
+  await b.call("Emulation.setDeviceMetricsOverride", {
+    width: 360,
+    height: 900,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+  await go("/notices/" + id);
+  await until(
+    () =>
+      b.evaluate(
+        "document.querySelector('[data-notice-detail-image]')?.naturalWidth===1200",
+      ),
+    "wide customer notice image",
+  );
+  const wideDetail = await b.evaluate(
+    `(()=>{const image=document.querySelector('[data-notice-detail-image]');const rect=image.getBoundingClientRect();return {width:rect.width,height:rect.height,naturalWidth:image.naturalWidth,naturalHeight:image.naturalHeight,overflow:document.documentElement.scrollWidth>innerWidth}})()`,
+  );
+  assert.equal(wideDetail.overflow, false);
+  assert.ok(wideDetail.width > wideDetail.height);
+  assert.ok(
+    Math.abs(
+      wideDetail.width / wideDetail.height -
+        wideDetail.naturalWidth / wideDetail.naturalHeight,
+    ) < 0.01,
+  );
+  rows[0].title = "모의 공지";
+  rows[0].body = "긴본문".repeat(100);
+  rows[0].is_pinned = false;
+  imageDimensions.set(rows[0].image_path, { width: 240, height: 1200 });
   await b.call("Emulation.setDeviceMetricsOverride", {
     width: 768,
     height: 900,
@@ -310,6 +463,99 @@ try {
     mobile: false,
   });
   await go("/admin/notices/" + id);
+  await until(
+    () =>
+      b.evaluate(
+        "document.querySelector('[data-notice-image-preview]')?.naturalHeight===1200",
+      ),
+    "existing image preview",
+  );
+  const previewLayout = async () =>
+    b.evaluate(
+      `(()=>{
+        const image=document.querySelector('[data-notice-image-preview]');
+        const rect=image.getBoundingClientRect();
+        const section=image.closest('section').getBoundingClientRect();
+        return {
+          width:rect.width,
+          height:rect.height,
+          naturalWidth:image.naturalWidth,
+          naturalHeight:image.naturalHeight,
+          withinSection:rect.left>=section.left&&rect.right<=section.right,
+        };
+      })()`,
+    );
+  const checkPreview = async ({ small = false } = {}) => {
+    const layout = await previewLayout();
+    assert.ok(layout.height <= 320);
+    assert.ok(layout.withinSection);
+    assert.ok(
+      Math.abs(
+        layout.width / layout.height -
+          layout.naturalWidth / layout.naturalHeight,
+      ) < 0.01,
+    );
+    if (small) {
+      assert.ok(layout.width <= layout.naturalWidth);
+      assert.ok(layout.height <= layout.naturalHeight);
+    }
+  };
+  await checkPreview();
+  for (const width of [360, 1024, 768]) {
+    await b.call("Emulation.setDeviceMetricsOverride", {
+      width,
+      height: 900,
+      deviceScaleFactor: 1,
+      mobile: false,
+    });
+    await checkPreview();
+    assert.equal(
+      await b.evaluate(
+        `document.documentElement.scrollWidth<=innerWidth&&Array.from(document.querySelectorAll('button')).filter(e=>e.checkVisibility()).every(e=>{const r=e.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth})`,
+      ),
+      true,
+    );
+  }
+  const existingLink = await b.evaluate(
+    `(()=>{const a=Array.from(document.querySelectorAll('a')).find(e=>e.textContent.trim()==='이미지 크게 보기');return {href:a.href,target:a.target,rel:a.rel}})()`,
+  );
+  assert.equal(existingLink.target, "_blank");
+  assert.equal(existingLink.rel, "noopener noreferrer");
+  assert.ok(existingLink.href.includes("/storage/v1/object/public/"));
+  let writesBeforePreview = writes;
+  await b.evaluate(
+    `(()=>{const a=Array.from(document.querySelectorAll('a')).find(e=>e.textContent.trim()==='이미지 크게 보기');a.addEventListener('click',e=>e.preventDefault(),{once:true});a.click()})()`,
+  );
+  await delay(200);
+  assert.equal(writes, writesBeforePreview);
+  await screenshot("admin-notice-editor-768.png");
+
+  const tallBlob = await selectImage(200, 1000, "새-세로.png");
+  await checkPreview();
+  const blobLink = await b.evaluate(
+    `(()=>{const a=Array.from(document.querySelectorAll('a')).find(e=>e.textContent.trim()==='이미지 크게 보기');return {href:a.href,target:a.target,rel:a.rel}})()`,
+  );
+  assert.equal(blobLink.href, tallBlob);
+  assert.equal(blobLink.target, "_blank");
+  assert.equal(blobLink.rel, "noopener noreferrer");
+  writesBeforePreview = writes;
+  await b.evaluate(
+    `(()=>{const a=Array.from(document.querySelectorAll('a')).find(e=>e.textContent.trim()==='이미지 크게 보기');a.addEventListener('click',e=>e.preventDefault(),{once:true});a.click()})()`,
+  );
+  await delay(200);
+  assert.equal(writes, writesBeforePreview);
+
+  const wideBlob = await selectImage(1000, 200, "새-가로.png");
+  assert.notEqual(wideBlob, tallBlob);
+  await checkPreview();
+  await until(
+    () =>
+      b.evaluate(`fetch(${JSON.stringify(tallBlob)}).then(()=>false,()=>true)`),
+    "old object URL revoked",
+  );
+  await selectImage(40, 30, "작은-이미지.png");
+  await checkPreview({ small: true });
+
   // A -> B: DB succeeds, response is lost, failed read must preserve both.
   const a = rows[0].image_path;
   await selectImage();
