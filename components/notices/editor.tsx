@@ -18,6 +18,7 @@ import {
   parseNotice,
   returnUrl,
   publicImageUrl,
+  noticeMatches,
   type Notice,
 } from "@/lib/notices/rules";
 export function NoticeEditor({
@@ -27,7 +28,7 @@ export function NoticeEditor({
 }: {
   initial: Notice | null;
   returnTo: string;
-  initialCleanup?: () => Promise<boolean>;
+  initialCleanup?: (expected: FormData) => Promise<boolean>;
 }) {
   const [original, setOriginal] = useState(initial),
     [draftId, setDraftId] = useState("");
@@ -50,6 +51,7 @@ export function NoticeEditor({
   const [hasUpload, setHasUpload] = useState(false);
   const uploaded = useRef<string | null>(null),
     uploadToken = useRef<(() => Promise<boolean>) | null>(null),
+    originalCleanup = useRef(initialCleanup),
     deleting = useRef(false),
     lock = useRef(false),
     reloadRef = useRef<HTMLDivElement>(null);
@@ -160,6 +162,7 @@ export function NoticeEditor({
         const r = await reloadNotice(original?.id || draftId);
         if (r.row) {
           setOriginal(r.row);
+          originalCleanup.current = r.recovery;
           setTitle(r.row.title);
           setBody(r.row.body);
           setPath(r.row.image_path || "");
@@ -193,12 +196,13 @@ export function NoticeEditor({
             const reserved = await prepareNoticeUpload(ext);
             if (!reserved) throw Error("관리자 업로드 권한을 확인해 주세요.");
             uploadToken.current = reserved.cleanup;
+            uploaded.current = reserved.path;
             try {
               return await uploadImage(createClient(), file!, reserved.path);
             } catch (error) {
               // DB has not been called. Cleanup only this reserved upload.
               try {
-                await reserved.cleanup();
+                if (await reserved.cleanup()) uploaded.current = null;
               } catch {
                 /* Network loss may leave an orphan; never broaden cleanup. */
               }
@@ -208,6 +212,7 @@ export function NoticeEditor({
           save: (p) => saveNotice(form(p)),
           discard: async () =>
             uploadToken.current ? await uploadToken.current() : false,
+          pendingUpload: () => uploaded.current,
         },
         path,
         !!file,
@@ -234,32 +239,50 @@ export function NoticeEditor({
         setMessage(r.message);
         return;
       }
-      if (
-        deleting.current &&
-        r.missing &&
-        original &&
-        original.image_path === initial?.image_path
-      ) {
+      if (r.state === "rejected" && !r.missing) {
+        setMessage(r.message);
+        return;
+      }
+      if (deleting.current && r.missing && original) {
         // Confirmed absent row; cleanup remains scoped to the server-read image.
+        const expected = form();
+        expected.set("mode", "delete");
+        const pending = originalCleanup.current;
+        const retryCleanup = pending ? () => pending(expected) : undefined;
+        let remaining = retryCleanup;
+        try {
+          if (retryCleanup && (await retryCleanup())) remaining = undefined;
+        } catch {
+          /* Keep retry permission. */
+        }
         finish({
           state: "saved",
           message: "공지 삭제를 확인했습니다.",
           row: original,
           deleted: true,
-          cleanup: initialCleanup,
+          cleanup: remaining,
         });
         return;
       }
-      if (
-        r.row &&
-        r.row.image_path === (uploaded.current || path) &&
-        r.row.title === title.trim() &&
-        r.row.body === body.trim() &&
-        r.row.image_alt === (alt.trim() || null) &&
-        r.row.is_pinned === pin &&
-        r.row.is_published === pub
-      ) {
-        finish({ ...r, state: "saved", message: "저장 결과를 확인했습니다." });
+      if (r.row && noticeMatches(r.row, form(uploaded.current || path))) {
+        const expected = form(uploaded.current || path);
+        const pending =
+          original?.image_path && original.image_path !== r.row.image_path
+            ? originalCleanup.current
+            : undefined;
+        const retryCleanup = pending ? () => pending(expected) : undefined;
+        let remaining = retryCleanup;
+        try {
+          if (retryCleanup && (await retryCleanup())) remaining = undefined;
+        } catch {
+          /* Keep retry permission. */
+        }
+        finish({
+          ...r,
+          state: "saved",
+          cleanup: remaining,
+          message: "저장 결과를 확인했습니다.",
+        });
       } else {
         setMessage(
           "현재 저장 내용과 일치하지 않습니다. 최신 내용을 확인하거나 다시 저장해 주세요.",
@@ -493,6 +516,10 @@ export function NoticeEditor({
                 setMessage(
                   "새 파일 정리를 확인하지 못했습니다. 다시 시도해 주세요.",
                 );
+            } catch {
+              setMessage(
+                "새 파일 정리 응답을 확인하지 못했습니다. 정리만 다시 시도해 주세요.",
+              );
             } finally {
               setBusy(false);
             }

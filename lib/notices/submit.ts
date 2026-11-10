@@ -5,6 +5,7 @@ export async function submitNoticeAttempt(
     upload: () => Promise<string>;
     save: (path: string) => Promise<Result>;
     discard: (path: string) => Promise<boolean>;
+    pendingUpload?: () => string | null;
   },
   path: string,
   hasFile: boolean,
@@ -18,7 +19,7 @@ export async function submitNoticeAttempt(
         state: "rejected",
         message: "이미지 업로드에 실패했습니다. DB는 변경하지 않았습니다.",
       } as Result,
-      uploaded: null,
+      uploaded: deps.pendingUpload?.() || null,
     };
   }
   let result: Result;

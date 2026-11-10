@@ -24,6 +24,7 @@ export type Result = {
   cleanup?: () => Promise<boolean>;
   deleted?: boolean;
   missing?: boolean;
+  recovery?: (expected: FormData) => Promise<boolean>;
 };
 const denied: Result = {
   state: "rejected",
@@ -49,7 +50,8 @@ export async function prepareNoticeUpload(ext: string) {
   return { path, cleanup: cleanupAction(path, admin.userId) };
 }
 export async function reloadNotice(id: string): Promise<Result> {
-  if (!(await requireAdmin())) return denied;
+  const admin = await requireAdmin();
+  if (!admin) return denied;
   if (!uuid(id)) return denied;
   try {
     const { data, error } = await (
@@ -62,7 +64,14 @@ export async function reloadNotice(id: string): Promise<Result> {
     return error
       ? unknown
       : data
-        ? { state: "saved", message: "최신 내용을 불러왔습니다.", row: data }
+        ? {
+            state: "saved",
+            message: "최신 내용을 불러왔습니다.",
+            row: data,
+            recovery: data.image_path
+              ? cleanupAction(data.image_path, admin.userId, undefined, data)
+              : undefined,
+          }
         : { state: "rejected", message: "공지가 없습니다.", missing: true };
   } catch {
     return unknown;

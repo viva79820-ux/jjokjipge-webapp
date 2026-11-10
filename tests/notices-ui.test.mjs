@@ -195,8 +195,101 @@ function harness({
     "@/lib/supabase/public": { createPublicClient: () => db },
     "./rules": rules,
   });
-  return { ...actions, ...data, calls, paths };
+  return {
+    ...actions,
+    ...data,
+    calls,
+    paths,
+    setCurrent(value, error = null) {
+      current = value;
+      readError = error;
+    },
+  };
 }
+test("recovery uses normalized saved fields including null images and rejects mismatches", () => {
+  const empty = { ...row, image_path: null, image_alt: null };
+  const f = form({
+    image_path: "",
+    image_alt: "",
+    is_published: "false",
+    title: "  제목  ",
+    body: " 본문\n둘째 줄 ",
+  });
+  assert.equal(
+    rules.noticeMatches({ ...empty, body: "본문\n둘째 줄" }, f),
+    true,
+  );
+  assert.equal(rules.noticeMatches({ ...empty, body: "다른 내용" }, f), false);
+  assert.equal(rules.noticeMatches({ ...empty, image_path: fresh }, f), false);
+  f.append("title", "중복");
+  assert.equal(rules.noticeMatches(empty, f), false);
+});
+test("recovered cleanup verifies the server snapshot version and persisted outcome before removing", async () => {
+  const h = harness();
+  const prior = (await h.reloadNotice(id)).recovery;
+  const expected = form({ image_path: fresh, is_published: "false" });
+  const saved = {
+    ...row,
+    image_path: fresh,
+    updated_at: "2026-11-09T00:00:01.654321+00:00",
+  };
+  for (const value of [row, { ...saved, title: "다른 제목" }, null]) {
+    h.setCurrent(value);
+    assert.equal(await prior(expected), false);
+  }
+  h.setCurrent(saved, {});
+  assert.equal(await prior(expected), false);
+  h.setCurrent(saved);
+  assert.equal(
+    await prior(form({ image_path: fresh, version: "다른 버전" })),
+    false,
+  );
+  assert.equal(await prior(expected), true);
+  assert.deepEqual(
+    h.calls.filter((c) => c.removed).map((c) => c.removed),
+    [[old]],
+  );
+  assert.equal(
+    h.calls.some((c) => ["update", "insert", "delete"].includes(c.kind)),
+    false,
+  );
+  const refreshed = (await h.reloadNotice(id)).recovery;
+  h.setCurrent(null);
+  assert.equal(
+    await refreshed(form({ mode: "delete", version: saved.updated_at })),
+    true,
+  );
+  assert.deepEqual(h.calls.filter((c) => c.removed).at(-1).removed, [fresh]);
+  const shared = harness({ refs: 1 });
+  const preserve = (await shared.reloadNotice(id)).recovery;
+  shared.setCurrent(saved);
+  assert.equal(await preserve(expected), true);
+  assert.equal(
+    shared.calls.some((c) => c.removed),
+    false,
+  );
+});
+test("upload response loss preserves a known reserved path when cleanup fails", async () => {
+  let pending = fresh,
+    saved = 0;
+  const r = await submit.submitNoticeAttempt(
+    {
+      upload: async () => {
+        throw Error("response lost after upload");
+      },
+      save: async () => {
+        saved++;
+      },
+      discard: async () => false,
+      pendingUpload: () => pending,
+    },
+    old,
+    true,
+  );
+  assert.equal(r.uploaded, fresh);
+  assert.equal(saved, 0);
+  assert.equal(r.result.state, "rejected");
+});
 test("notice scalar validation and safe URLs", () => {
   assert.deepEqual(
     rules.parseNotice(

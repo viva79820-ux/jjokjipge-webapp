@@ -137,7 +137,7 @@ export async function NoticeDetailPage({
         returnTo={back}
         initialCleanup={
           row.image_path
-            ? cleanupAction(row.image_path, access!.userId)
+            ? cleanupAction(row.image_path, access!.userId, undefined, row)
             : undefined
         }
       />

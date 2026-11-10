@@ -126,3 +126,12 @@ export function publicImageUrl(path: string | null) {
   if (!imagePath(path)) return null;
   return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
 }
+export function noticeMatches(row: Notice, form: FormData) {
+  const parsed = parseNotice(form);
+  return (
+    !Object.keys(parsed.errors).length &&
+    (Object.keys(parsed.patch) as (keyof typeof parsed.patch)[]).every(
+      (key) => row[key] === parsed.patch[key],
+    )
+  );
+}

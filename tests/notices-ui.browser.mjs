@@ -18,6 +18,8 @@ let admin = true,
   seq = 0,
   cleanupFail = false,
   loseResponse = false,
+  loseUploadResponse = false,
+  readFail = false,
   writes = 0;
 const stamp = () =>
   `2026-11-09T01:00:00.${String(++seq).padStart(6, "0")}+00:00`;
@@ -78,8 +80,23 @@ async function handle(req, res) {
     if (req.method === "POST") {
       assert.equal(req.headers.authorization, `Bearer ${token}`);
       const path = u.pathname.split("/public-images/")[1];
-      assert.ok(!files.has(path));
+      if (files.has(path)) {
+        res.writeHead(409);
+        res.end(
+          JSON.stringify({
+            statusCode: "409",
+            error: "Duplicate",
+            message: "Object already exists",
+          }),
+        );
+        return;
+      }
       files.set(path, Buffer.byteLength(raw));
+      if (loseUploadResponse) {
+        loseUploadResponse = false;
+        req.socket.destroy();
+        return;
+      }
       res.end(JSON.stringify({ Key: "public-images/" + path }));
       return;
     }
@@ -107,6 +124,11 @@ async function handle(req, res) {
     return;
   }
   assert.equal(table, "notices");
+  if (readFail && req.method === "GET") {
+    res.writeHead(400);
+    res.end("{}");
+    return;
+  }
   let selected = rows.filter((row) =>
     [...u.searchParams].every(
       ([k, v]) => !v.startsWith("eq.") || String(row[k]) === v.slice(3),
@@ -187,6 +209,10 @@ try {
     await b.go(base + path);
   };
   const confirm = async () => {
+    await until(
+      () => b.evaluate("!!document.querySelector('dialog[open]')"),
+      "modal opened",
+    );
     assert.ok(
       await b.evaluate(
         "(()=>{const d=document.querySelector('dialog[open]');const r=d.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight&&document.documentElement.scrollWidth<=innerWidth})()",
@@ -226,10 +252,20 @@ try {
   await b.button("돌아가기");
   assert.equal(writes, 0);
   await b.button("저장 전 확인");
+  loseResponse = true;
   await confirm();
+  await text("결과를 확인하지 못했습니다.");
+  await b.button("저장 결과 다시 확인");
   await text("공지를 저장했습니다.");
   assert.equal(rows.length, 1);
   const id = rows[0].id;
+  assert.equal(rows[0].image_path, null);
+  const selectImage = async () => {
+    await b.evaluate(
+      `(async()=>{const c=document.createElement('canvas');c.width=20;c.height=30;const blob=await new Promise(r=>c.toBlob(r,'image/png'));const data=new DataTransfer();data.items.add(new File([blob],'fixture.png',{type:'image/png'}));const el=Array.from(document.querySelectorAll('input[type=file]')).find(e=>e.checkVisibility());el.files=data.files;el.dispatchEvent(new Event('change',{bubbles:true}));})()`,
+    );
+    await b.fill("image_alt", "모의 이미지");
+  };
   await go("/notices");
   await text("등록된 공지사항이 없습니다.");
   await go("/admin/notices/new");
@@ -274,7 +310,128 @@ try {
     mobile: false,
   });
   await go("/admin/notices/" + id);
+  // A -> B: DB succeeds, response is lost, failed read must preserve both.
+  const a = rows[0].image_path;
+  await selectImage();
+  loseResponse = true;
+  await b.button("저장 전 확인");
+  await confirm();
+  await text("결과를 확인하지 못했습니다.");
+  const imageB = rows[0].image_path;
+  assert.notEqual(imageB, a);
+  assert.ok(files.has(a) && files.has(imageB));
+  readFail = true;
+  await b.button("저장 결과 다시 확인");
+  await until(
+    () =>
+      b.evaluate(
+        "Array.from(document.querySelectorAll('button')).some(e=>e.textContent.trim()==='저장 결과 다시 확인'&&!e.disabled)",
+      ),
+    "result read finished",
+  );
+  await text("결과를 확인하지 못했습니다.");
+  assert.ok(files.has(a) && files.has(imageB));
+  readFail = false;
+  admin = false;
+  await b.button("저장 결과 다시 확인");
+  await text("관리자 권한이 필요합니다.");
+  assert.ok(files.has(a) && files.has(imageB));
+  assert.ok(await b.evaluate("document.querySelector('fieldset').disabled"));
+  admin = true;
+  await b.button("저장 결과 다시 확인");
+  await text("공지를 저장했습니다.");
+  assert.ok(!files.has(a) && files.has(imageB));
+  console.log(
+    "PASS replacement lost-response recovery and failed-read preservation",
+  );
+  await go("/admin/notices/" + id);
+  // Keep an image referenced by another notice, even after replacement.
+  const shared = {
+    ...rows[0],
+    id: "33333333-3333-4333-8333-333333333333",
+    title: "참조 보존 모형",
+  };
+  rows.push(shared);
+  await selectImage();
+  loseResponse = true;
+  await b.button("저장 전 확인");
+  await confirm();
+  await text("결과를 확인하지 못했습니다.");
+  await b.button("저장 결과 다시 확인");
+  await text("공지를 저장했습니다.");
+  assert.ok(files.has(imageB));
+  rows.splice(rows.indexOf(shared), 1);
+  files.delete(imageB); // Fixture-only teardown of the reference fixture.
+  await go("/admin/notices/" + id);
+  // Retain the original regression: response loss while keeping the same image.
+  const keptImage = rows[0].image_path;
+  await b.fill("title", "이미지 유지 복구");
+  loseResponse = true;
+  await b.button("저장 전 확인");
+  await confirm();
+  await text("결과를 확인하지 못했습니다.");
+  await b.button("저장 결과 다시 확인");
+  await text("공지를 저장했습니다.");
+  assert.equal(rows[0].image_path, keptImage);
+  assert.ok(files.has(keptImage));
+  await go("/admin/notices/" + id);
+  // Cleanup failure remains visible; retry never repeats DB writes.
+  const beforeReplace = rows[0].image_path;
+  await selectImage();
+  cleanupFail = true;
+  loseResponse = true;
+  await b.button("저장 전 확인");
+  await confirm();
+  await text("결과를 확인하지 못했습니다.");
+  await b.button("저장 결과 다시 확인");
+  await text("파일 정리만 재시도");
+  assert.ok(files.has(beforeReplace) && files.has(rows[0].image_path));
+  let countBeforeRetry = writes;
+  cleanupFail = false;
+  await b.button("파일 정리만 재시도");
+  await text("공지를 저장했습니다.");
+  assert.equal(writes, countBeforeRetry);
+  assert.ok(!files.has(beforeReplace));
+  await go("/admin/notices/" + id);
+  const beforeRemove = rows[0].image_path;
+  await b.button("첨부 제거");
+  loseResponse = true;
+  await b.button("저장 전 확인");
+  await confirm();
+  await text("결과를 확인하지 못했습니다.");
+  await b.button("저장 결과 다시 확인");
+  await text("공지를 저장했습니다.");
+  assert.equal(rows[0].image_path, null);
+  assert.ok(!files.has(beforeRemove));
+  console.log(
+    "PASS reference guard, cleanup-only retry and attachment removal recovery",
+  );
+  await go("/admin/notices/" + id);
+  // Upload persists but loses its response, and cleanup is initially unavailable.
+  await selectImage();
+  cleanupFail = true;
+  loseUploadResponse = true;
+  countBeforeRetry = writes;
+  await b.button("저장 전 확인");
+  await confirm();
+  await text("이번 업로드 파일 정리만 재시도");
+  assert.equal(writes, countBeforeRetry);
+  assert.equal(files.size, 1);
+  cleanupFail = false;
+  await b.button("이번 업로드 파일 정리만 재시도");
+  await text("이번 업로드 파일의 정리·참조 확인을 마쳤습니다.");
+  assert.equal(files.size, 0);
+  assert.equal(writes, countBeforeRetry);
+  await b.button("저장 전 확인");
+  await confirm();
+  await text("공지를 저장했습니다.");
+  await go("/admin/notices/" + id);
   await b.fill("body", "유지할 충돌 초안");
+  const previous = rows[0].image_path;
+  const latestPath = "notices/44444444-4444-4444-8444-444444444444.png";
+  files.set(latestPath, 100);
+  rows[0].image_path = latestPath;
+  files.delete(previous); // Simulate a separate successful editor's cleanup.
   rows[0].updated_at = stamp();
   await b.button("저장 전 확인");
   await b.button("확인 후 처리");
@@ -295,15 +452,30 @@ try {
   await b.button("최신 내용 다시 불러오기");
   await text("작성 중인 입력");
   await confirm();
+  // Recovery must use the reloaded original's image and exact version.
+  await selectImage();
   await b.fill("title", "응답 유실 저장");
   loseResponse = true;
   await b.button("저장 전 확인");
   await confirm();
   await text("결과를 확인하지 못했습니다.");
-  assert.equal(files.size, 1);
+  assert.equal(files.size, 2);
   await b.button("저장 결과 다시 확인");
   await text("공지를 저장했습니다.");
+  assert.ok(!files.has(latestPath) && files.has(rows[0].image_path));
   await go("/admin/notices/" + id);
+  // A second explicit reload changes the original again before DELETE recovery.
+  const beforeDelete = rows[0].image_path;
+  const deletePath = "notices/55555555-5555-4555-8555-555555555555.png";
+  files.set(deletePath, 100);
+  rows[0].image_path = deletePath;
+  rows[0].updated_at = stamp();
+  files.delete(beforeDelete);
+  await b.button("저장 전 확인");
+  await b.button("확인 후 처리");
+  await text("다른 작업으로 공지가 변경됐습니다.");
+  await b.button("최신 내용 다시 불러오기");
+  await confirm();
   cleanupFail = true;
   loseResponse = true;
   await b.button("공지 삭제");
@@ -319,6 +491,9 @@ try {
   await text("공지를 저장했습니다.");
   assert.equal(writes, before);
   assert.equal(files.size, 0);
+  console.log(
+    "PASS upload response-loss cleanup retry and reloaded-original replacement/delete recovery",
+  );
   admin = false;
   await go("/admin/notices");
   await text("관리자 권한");
