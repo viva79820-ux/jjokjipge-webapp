@@ -6,6 +6,13 @@ export default function Page() {
     <div className="px-4 pt-6 md:px-6 md:pt-8">
       <h1 className="mb-4 text-lg font-bold md:text-xl">카테고리</h1>
       <Link
+        href="/notices"
+        className="mb-3 flex min-h-24 items-center justify-between rounded-card border border-border bg-surface p-4"
+      >
+        <span className="font-bold">공지사항</span>
+        <ChevronRight size={20} aria-hidden="true" className="text-muted" />
+      </Link>
+      <Link
         href="/support"
         className="flex min-h-24 items-center gap-3 rounded-card border border-border bg-surface p-3 md:p-4"
       >
