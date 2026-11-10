@@ -36,10 +36,22 @@ test("preflight uses the complete unchanged migration and exact bucket block", (
 });
 
 test("popup preflight uses the complete popup migration DDL", () => {
-  const migration = read(
-    "../supabase/migrations/20261110010000_notices_popup_setting.sql",
-  ).trimEnd();
+  const migrationFile =
+    "../supabase/migrations/20261110010000_notices_popup_setting.sql";
+  const migrationSource = read(migrationFile);
+  const migration = migrationSource.trimEnd();
   const preflight = read("../supabase/tests/notices_popup_preflight.sql");
+  assert.equal(
+    migrationSource,
+    execFileSync(
+      "git",
+      [
+        "show",
+        "6fa4de25afd58e76e230587f9085a2528abda99b:supabase/migrations/20261110010000_notices_popup_setting.sql",
+      ],
+      { encoding: "utf8" },
+    ),
+  );
   assert.equal(
     preflight
       .split("-- BEGIN EXACT MIGRATION\n")[1]
@@ -59,16 +71,27 @@ test("popup preflight uses the complete popup migration DDL", () => {
 test("popup checks use rollback baseline and real database roles without Storage", () => {
   const preflight = read("../supabase/tests/notices_popup_preflight.sql");
   const rollback = read("../supabase/tests/notices_popup_rollback_check.sql");
-  assert.match(preflight, /^--[\s\S]*\nbegin;\n/);
+  assert.match(preflight, /^--[\s\S]*\nrollback;\nbegin;\n/);
   assert.doesNotMatch(preflight, /\bcommit\s*;/i);
   assert.match(preflight, /set local role anon;/i);
   assert.match(preflight, /set local role authenticated;/i);
+  assert.match(preflight, /auth\.uid\(\) = \(/);
+  assert.match(preflight, /not \(select private\.is_admin\(\)\)/);
+  assert.match(preflight, /gen_random_uuid\(\)/);
+  assert.match(
+    preflight,
+    /기존 일반 회원 ID를 사용한 DB 역할\/RLS 검사\(실제 로그인 검증 아님\)/,
+  );
+  assert.match(
+    preflight,
+    /프로필 없는 비관리자 인증 역할을 사용한 DB RLS 검사\(실제 일반 회원 로그인·Auth 세션 검증 아님\)/,
+  );
   assert.match(preflight, /NOTICES_POPUP_PREFLIGHT_OK/);
   assert.match(preflight, /detail = baseline::text/);
   assert.doesNotMatch(preflight, /\bstorage\./i);
   assert.doesNotMatch(
     preflight,
-    /\b(?:insert\s+into|update|delete\s+from)\s+public\.profiles\b/i,
+    /\b(?:insert\s+into|update|delete\s+from)\s+(?:auth\.users|public\.profiles)\b/i,
   );
   assert.match(rollback, /^--[\s\S]*\nrollback;\n/);
   assert.match(rollback, /baseline jsonb := null;/);

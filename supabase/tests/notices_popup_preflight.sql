@@ -2,6 +2,8 @@
 -- SQLSTATE P0001과 NOTICES_POPUP_PREFLIGHT_OK로 끝나는 마지막 예외만 성공이다.
 -- 성공 예외 DETAIL의 baseline JSON을 보관한 뒤 notices_popup_rollback_check.sql에 입력한다.
 -- COMMIT하지 않으며 실제 공지·사용자·profiles·Storage는 변경하지 않는다.
+-- 다른 작업이 없는 새 SQL Editor에서 파일 전체를 실행한다.
+rollback;
 begin;
 
 do $$
@@ -49,11 +51,6 @@ begin
     raise exception using
       errcode = 'P0001',
       message = 'NOTICES_POPUP_PREFLIGHT_PREREQUISITE_FAILED: 기존 관리자 profile 필요';
-  end if;
-  if not exists (select 1 from public.profiles where role = 'user') then
-    raise exception using
-      errcode = 'P0001',
-      message = 'NOTICES_POPUP_PREFLIGHT_PREREQUISITE_FAILED: 기존 일반 회원 profile 필요';
   end if;
 end;
 $$;
@@ -255,6 +252,96 @@ begin
 end;
 $$;
 
+create temporary table notices_popup_actors (
+  kind text primary key,
+  id uuid not null,
+  mode text not null
+);
+insert into notices_popup_actors (kind, id, mode)
+select 'admin', id, 'admin_profile'
+from public.profiles
+where role = 'admin'
+order by id
+limit 1;
+
+with existing_user as (
+  select id
+  from public.profiles
+  where role = 'user'
+  order by id
+  limit 1
+),
+fallback_candidates as (
+  select gen_random_uuid() as id
+  from generate_series(1, 16)
+),
+fallback as (
+  select c.id
+  from fallback_candidates c
+  where not exists (
+    select 1
+    from public.profiles p
+    where p.id = c.id
+  )
+  order by c.id
+  limit 1
+)
+insert into notices_popup_actors (kind, id, mode)
+select
+  'non_admin',
+  coalesce((select id from existing_user), (select id from fallback)),
+  case
+    when exists (select 1 from existing_user) then 'existing_user'
+    else 'profileless'
+  end;
+
+do $$
+begin
+  if (
+    select id
+    from notices_popup_actors
+    where kind = 'non_admin'
+  ) = (
+    select id
+    from notices_popup_actors
+    where kind = 'admin'
+  ) or exists (
+    select 1
+    from public.profiles p
+    join notices_popup_actors a on a.id = p.id
+    where a.kind = 'non_admin'
+      and p.role = 'admin'
+  ) or exists (
+    select 1
+    from notices_popup_actors a
+    where a.kind = 'non_admin'
+      and (
+        (
+          a.mode = 'existing_user'
+          and not exists (
+            select 1
+            from public.profiles p
+            where p.id = a.id
+              and p.role = 'user'
+          )
+        )
+        or (
+          a.mode = 'profileless'
+          and exists (
+            select 1
+            from public.profiles p
+            where p.id = a.id
+          )
+        )
+      )
+  ) then
+    raise exception using
+      errcode = 'P0001',
+      message = 'NOTICES_POPUP_PREFLIGHT_PREREQUISITE_FAILED: 비관리자 검사 ID 선택 실패';
+  end if;
+end;
+$$;
+
 create temporary table notices_popup_baseline as
 select jsonb_build_object(
   'format', 'notices-popup-preflight-v1',
@@ -263,25 +350,13 @@ select jsonb_build_object(
   'test_ids', (
     select jsonb_agg(id::text order by id::text)
     from notices_popup_test_ids
+  ),
+  'non_admin_mode', (
+    select mode
+    from notices_popup_actors
+    where kind = 'non_admin'
   )
 ) as snapshot;
-
-create temporary table notices_popup_actors as
-select 'admin'::text as kind, (
-  select id
-  from public.profiles
-  where role = 'admin'
-  order by id
-  limit 1
-) as id
-union all
-select 'user'::text, (
-  select id
-  from public.profiles
-  where role = 'user'
-  order by id
-  limit 1
-);
 
 create temporary table notices_popup_results (
   label text not null
@@ -643,16 +718,28 @@ reset role;
 set local role authenticated;
 select set_config(
   'request.jwt.claim.sub',
-  (select id::text from notices_popup_actors where kind = 'user'),
+  (select id::text from notices_popup_actors where kind = 'non_admin'),
   true
 );
 select set_config(
   'request.jwt.claims',
   jsonb_build_object(
-    'sub', (select id::text from notices_popup_actors where kind = 'user'),
+    'sub', (select id::text from notices_popup_actors where kind = 'non_admin'),
     'role', 'authenticated'
   )::text,
   true
+);
+select pg_temp.notices_popup_assert(
+  auth.uid() = (
+    select id
+    from notices_popup_actors
+    where kind = 'non_admin'
+  ),
+  '비관리자 인증 역할 auth.uid() 일치'
+);
+select pg_temp.notices_popup_assert(
+  not (select private.is_admin()),
+  '비관리자 인증 역할 private.is_admin()=false'
 );
 select pg_temp.notices_popup_assert(
   (
@@ -660,29 +747,37 @@ select pg_temp.notices_popup_assert(
     from public.notices
     where id in (select id from notices_popup_test_ids)
   ),
-  '일반 회원 공개 공지만 조회'
+  '비관리자 인증 역할 공개 공지만 조회'
+);
+select pg_temp.notices_popup_assert(
+  not exists (
+    select 1
+    from public.notices
+    where id = (select id from notices_popup_test_ids where kind = 'draft_popup')
+  ),
+  '비관리자 인증 역할 비공개 팝업 미노출'
 );
 select pg_temp.notices_popup_denied(
   format(
-    'insert into public.notices(id,title,body) values (%L,''일반 회원 침범'',''검사 본문'')',
+    'insert into public.notices(id,title,body) values (%L,''비관리자 침범'',''검사 본문'')',
     (select id from notices_popup_test_ids where kind = 'denied_insert')
   ),
   '42501',
-  '일반 회원 INSERT RLS 거부'
+  '비관리자 인증 역할 INSERT RLS 거부'
 );
 select pg_temp.notices_popup_no_rows(
   format(
     'update public.notices set is_popup=false where id=%L',
     (select id from notices_popup_test_ids where kind = 'popup_old')
   ),
-  '일반 회원 UPDATE 0행'
+  '비관리자 인증 역할 UPDATE 0행'
 );
 select pg_temp.notices_popup_no_rows(
   format(
     'delete from public.notices where id=%L',
     (select id from notices_popup_test_ids where kind = 'popup_old')
   ),
-  '일반 회원 DELETE 0행'
+  '비관리자 인증 역할 DELETE 0행'
 );
 reset role;
 
@@ -697,7 +792,7 @@ select pg_temp.notices_popup_assert(
       where kind in ('popup_old', 'popup_tie_low', 'popup_tie_high')
     )
   ),
-  '비로그인·일반 회원 쓰기 차단 후 팝업 원본 보존'
+  '비로그인·비관리자 인증 역할 쓰기 차단 후 팝업 원본 보존'
 );
 
 set local role authenticated;
@@ -763,14 +858,23 @@ do $$
 declare
   total integer;
   baseline jsonb;
+  non_admin_description text;
 begin
   select count(*) into total from notices_popup_results;
   select snapshot into baseline from notices_popup_baseline;
+  select case mode
+    when 'existing_user' then '기존 일반 회원 ID를 사용한 DB 역할/RLS 검사(실제 로그인 검증 아님)'
+    when 'profileless' then '프로필 없는 비관리자 인증 역할을 사용한 DB RLS 검사(실제 일반 회원 로그인·Auth 세션 검증 아님)'
+  end
+  into non_admin_description
+  from notices_popup_actors
+  where kind = 'non_admin';
   raise exception using
     errcode = 'P0001',
     message = format(
-      'NOTICES_POPUP_PREFLIGHT_OK: 검사 %s개 통과. 의도된 전체 롤백.',
-      total
+      'NOTICES_POPUP_PREFLIGHT_OK: 검사 %s개 통과. %s. 의도된 전체 롤백.',
+      total,
+      non_admin_description
     ),
     detail = baseline::text;
 end;

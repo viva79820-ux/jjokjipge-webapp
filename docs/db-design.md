@@ -279,10 +279,10 @@ Storage 검사는 SELECT·INSERT·UPDATE 메타데이터 SQL·정책·버킷 설
 
 기존 공지 스키마가 적용됐고 `is_popup`이 아직 없는 DB에서 다음 순서로 실행한다. 초기 설치 전용 `supabase/tests/notices_preflight.sql`은 다시 실행하지 않는다.
 
-1. `supabase/tests/notices_popup_preflight.sql` 전체를 실행한다. 마지막 SQLSTATE P0001 예외의 `NOTICES_POPUP_PREFLIGHT_OK`만 성공이며, DETAIL의 작은 baseline JSON을 별도로 보관한다.
+1. 다른 작업이 없는 새 SQL Editor에서 `supabase/tests/notices_popup_preflight.sql` 전체를 실행한다. 파일 첫 `ROLLBACK`이 이전 실패로 중단된 트랜잭션을 정리하고 새 트랜잭션을 시작한다. 마지막 SQLSTATE P0001 예외의 `NOTICES_POPUP_PREFLIGHT_OK`만 성공이며, DETAIL의 작은 baseline JSON을 별도로 보관한다.
 2. `supabase/tests/notices_popup_rollback_check.sql`의 `baseline`에 그 JSON 원본을 입력하고 파일 전체를 별도로 실행한다. 첫 `ROLLBACK`으로 사전 검사 트랜잭션을 종료한 뒤 `NOTICES_POPUP_ROLLBACK_OK`를 확인한다.
 3. 두 검사가 성공한 뒤에만 `supabase/migrations/20261110010000_notices_popup_setting.sql`을 적용한다. 이미 `is_popup`이 있는 DB에서 재검사하려고 열이나 기존 자료를 지우지 않는다.
 
-사전 검사는 기존 관리자·일반 회원 profile을 읽어 실제 DB 역할 전환과 RLS를 확인하지만 계정이나 profile을 생성·수정하지 않는다. 검사용 공지만 트랜잭션 안에서 만들며 성공 예외로 열과 검사 자료를 모두 롤백한다. 기존 행·구조·정책·권한·트리거는 내용 대신 개수와 해시로 비교하고 Storage는 조회하거나 변경하지 않는다.
+사전 검사에는 기존 관리자 profile이 반드시 필요하다. 일반 회원 profile이 있으면 그 ID를 사용하고, 없으면 profiles에 없는 임시 UUID를 사용한다. 두 경우 모두 실제 `SET LOCAL ROLE authenticated`와 JWT claim으로 `auth.uid()` 및 `private.is_admin() = false`를 확인하지만 실제 로그인은 검증하지 않는다. 특히 임시 UUID 방식은 실제 일반 회원 로그인이나 Auth 세션 검사가 아니라 프로필 없는 비관리자 인증 역할의 DB RLS 검사다. 실제 계정이나 profile은 생성·수정하지 않는다. 검사용 공지만 트랜잭션 안에서 만들며 성공 예외로 열과 검사 자료를 모두 롤백한다. 기존 행·구조·정책·권한·트리거는 내용 대신 개수와 해시로 비교하고 Storage는 조회하거나 변경하지 않는다.
 
 `node --test tests/notices-schema.test.mjs`는 마이그레이션 DDL과 사전 검사 본문의 일치를 정적으로 확인한다. `node tests/notices-popup-schema.model.mjs`는 준비된 PGlite 환경에서 역할·RLS·성공 예외·전체 롤백·이미 적용된 DB의 거부를 실행 확인하며, 실제 Supabase나 Storage에는 접근하지 않는다.
