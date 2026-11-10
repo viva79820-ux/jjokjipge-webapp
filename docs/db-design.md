@@ -222,7 +222,7 @@ products / orders / order_items(타로샵), classes, reviews(상담 완료 예�
 
 ## 8. 공지사항·공개 이미지 (공지사항 1단계)
 
-마이그레이션: `supabase/migrations/20261109010000_notices_schema.sql`. 실제 공지·포스터·시드·팝업 필드는 만들지 않는다.
+기본 마이그레이션은 `supabase/migrations/20261109010000_notices_schema.sql`, 팝업 표시 설정 추가 마이그레이션은 `supabase/migrations/20261110010000_notices_popup_setting.sql`이다. 별도 팝업 콘텐츠·포스터·시드는 만들지 않는다.
 
 ### public.notices
 
@@ -235,6 +235,7 @@ products / orders / order_items(타로샵), classes, reviews(상담 완료 예�
 | image_alt              | text null                  | 값이 있으면 공백만 불가·최대 200자. image_path가 있으면 필수                                       |
 | is_pinned              | boolean, false             | 필수, 상단 고정                                                                                    |
 | is_published           | boolean, false             | 필수, 신규 기본 비공개                                                                             |
+| is_popup               | boolean, false             | 필수, 기존 공지의 제목·본문·이미지를 홈 팝업 대상으로 사용할지 설정                                |
 | published_at           | timestamptz null           | 공개 상태이면 필수                                                                                 |
 | created_at, updated_at | timestamptz, now()         | 필수, 기존 private.set_updated_at() 트리거로 갱신                                                  |
 
@@ -242,6 +243,8 @@ products / orders / order_items(타로샵), classes, reviews(상담 완료 예�
 - CHECK에서 NULL이 통과하는 특성을 고려해 필수값에는 NOT NULL, 이미지·설명 및 공개·시각의 결합에는 명시적인 IS NOT NULL을 사용한다.
 - 인덱스: `(is_published, is_pinned desc, published_at desc, id desc)`. id는 동일 정렬 값의 안정적인 보조 기준이다.
 - 최초 공개 시 **후속 서버 액션**이 서버 현재 시각을 published_at에 넣는다. 비공개로 바꾸거나 다시 공개해도 최초 값을 지우거나 덮어쓰지 않는다. 이번 DB 단계는 공개 시각 필수 CHECK만 둔다. 예약 공개·자동 게시 기능은 없다.
+- 홈 팝업 후보는 `is_published = true AND is_popup = true`인 공지만 포함한다. 후보가 여러 건이면 `published_at DESC, id DESC` 순서의 첫 1건을 표시한다.
+- `is_pinned`는 공지 목록의 상단 고정 설정이고 `is_popup`은 홈 팝업 표시 설정이므로 서로 독립적이다. 비공개 상태에서도 `is_popup = true`인 초안을 저장할 수 있다.
 - RLS: anon·authenticated는 공개 공지만 SELECT, 관리자는 비공개 포함 SELECT 및 CRUD. UPDATE는 USING과 WITH CHECK 모두 기존 private.is_admin()을 사용한다.
 - PUBLIC·anon·authenticated·service_role의 새 테이블 기본 권한을 모두 회수한 뒤 anon·authenticated에 SELECT, authenticated에 INSERT·UPDATE·DELETE만 부여한다. 쓰기는 RLS로 관리자만 가능하다. service_role에는 별도 권한을 부여하지 않는다. 기존 객체 권한은 유지한다.
 
@@ -271,3 +274,15 @@ Storage 검사는 SELECT·INSERT·UPDATE 메타데이터 SQL·정책·버킷 설
 
 - `node --test tests/notices-schema.test.mjs`: 마이그레이션이 기존 검토 커밋과 동일하고, 사전 검사의 마이그레이션 전체와 버킷 재실행 본문이 원본과 일치하는지 확인한다. 보안 SQL 실행 검사가 아니다.
 - `node tests/notices-schema.model.mjs`: 별도 PGlite 실행 환경을 준비한 경우 인메모리 PostgreSQL에서 사전 검사와 롤백 확인을 실제 실행한다. 기본 모듈 위치는 무시되는 `node_modules/.cache/notices-pg-runtime/` 아래이며, 다른 환경에서는 `NOTICES_PGLITE_MODULE`로 모듈 경로/URL을 전달할 수 있다. 프로젝트 package.json·lockfile에는 의존성을 추가하지 않는다. Auth·Storage는 최소 모형이고 기존 관리자 함수·트리거 본문을 재사용한다. 기존 정책 원본·별도 롤백·기존 버킷 때문에 중단되는 사례도 확인한다. 직접 DELETE를 42501로 거부하는 모형 보호 트리거 유무 양쪽에서 검사를 실행하고, 비롤백 카운터로 사전 검사 중 DELETE 실행 시도가 없음을 확인한다. 양쪽 검사 수도 같아야 하며 예상 밖 UPDATE 오류는 그대로 실패해야 한다. Supabase 보호 구현 전체나 실제 Storage 서비스를 재현한 것은 아니다.
+
+### 팝업 설정 마이그레이션 사전 검사와 롤백 확인
+
+기존 공지 스키마가 적용됐고 `is_popup`이 아직 없는 DB에서 다음 순서로 실행한다. 초기 설치 전용 `supabase/tests/notices_preflight.sql`은 다시 실행하지 않는다.
+
+1. `supabase/tests/notices_popup_preflight.sql` 전체를 실행한다. 마지막 SQLSTATE P0001 예외의 `NOTICES_POPUP_PREFLIGHT_OK`만 성공이며, DETAIL의 작은 baseline JSON을 별도로 보관한다.
+2. `supabase/tests/notices_popup_rollback_check.sql`의 `baseline`에 그 JSON 원본을 입력하고 파일 전체를 별도로 실행한다. 첫 `ROLLBACK`으로 사전 검사 트랜잭션을 종료한 뒤 `NOTICES_POPUP_ROLLBACK_OK`를 확인한다.
+3. 두 검사가 성공한 뒤에만 `supabase/migrations/20261110010000_notices_popup_setting.sql`을 적용한다. 이미 `is_popup`이 있는 DB에서 재검사하려고 열이나 기존 자료를 지우지 않는다.
+
+사전 검사는 기존 관리자·일반 회원 profile을 읽어 실제 DB 역할 전환과 RLS를 확인하지만 계정이나 profile을 생성·수정하지 않는다. 검사용 공지만 트랜잭션 안에서 만들며 성공 예외로 열과 검사 자료를 모두 롤백한다. 기존 행·구조·정책·권한·트리거는 내용 대신 개수와 해시로 비교하고 Storage는 조회하거나 변경하지 않는다.
+
+`node --test tests/notices-schema.test.mjs`는 마이그레이션 DDL과 사전 검사 본문의 일치를 정적으로 확인한다. `node tests/notices-popup-schema.model.mjs`는 준비된 PGlite 환경에서 역할·RLS·성공 예외·전체 롤백·이미 적용된 DB의 거부를 실행 확인하며, 실제 Supabase나 Storage에는 접근하지 않는다.
