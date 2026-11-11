@@ -62,27 +62,31 @@
 | slug                   | text unique not null                                               | 주소 `/consult/[slug]`. 지금 더미 주소(`/consult/a`)와 맞추려고 둠 |
 | store_id               | uuid FK → stores, null 허용                                        | 근무 매장                                                          |
 | name                   | text not null                                                      | 활동명                                                             |
-| field                  | text check in ('tarot','saju')                                     | 대표 분야                                                          |
-| tags                   | text[] default '{}'                                                | 첫 번째가 대표 분야                                                |
+| field                  | text not null check in ('tarot','saju')                            | 대표 분야. 반드시 fields에 포함. 9장                               |
+| fields                 | text[] not null, 기본값 없음                                       | 전체 분야. tarot·saju 1~2개. 9장                                   |
+| tags                   | text[] not null default '{}'                                       | 상담 주제용. 기존 값은 유지. 9장                                   |
+| careers                | text[] not null default '{}'                                       | 경력·교육·자격 목록. 빈 배열 허용, 최대 20개. 9장                  |
 | intro                  | text                                                               | 목록용 한 줄                                                       |
 | description            | text                                                               | 상세 소개                                                          |
-| image_path             | text null                                                          |                                                                    |
+| image_path             | text null                                                          | `counselors/<uuid>.<jpg\|jpeg\|png\|webp>` 또는 null. 9장          |
 | is_recommended, is_new | boolean default false                                              | 메인 추천·신규 탭                                                  |
 | affiliation            | text default 'store' check in ('store','partner')                  | 확장 대비(화면 없음)                                               |
 | approval_status        | text default 'approved' check in ('pending','approved','rejected') | 확장 대비                                                          |
 | expert_url             | text null                                                          | 네이버 엑스퍼트 연결 대비                                          |
-| sort_order             | int, is_active boolean                                             |                                                                    |
+| sort_order             | int not null default 0                                             |                                                                    |
+| is_active              | boolean not null default false                                     | 신규 기본 비공개. 기존 행 값은 유지. 9장                           |
 
 ### 2.4 consult_products (상담 상품)
 
-| 컬럼         | 타입                                   | 설명               |
-| ------------ | -------------------------------------- | ------------------ |
-| id           | uuid PK                                |                    |
-| counselor_id | uuid FK → counselors on delete cascade | 상담사별 상품      |
-| name         | text not null                          | 예: 타로 상담 20분 |
-| minutes      | int not null check (minutes > 0)       |                    |
-| price        | int not null check (price >= 0)        | 원 단위            |
-| sort_order   | int, is_active boolean                 |                    |
+| 컬럼         | 타입                                   | 설명                                     |
+| ------------ | -------------------------------------- | ---------------------------------------- |
+| id           | uuid PK                                |                                          |
+| counselor_id | uuid FK → counselors on delete cascade | 상담사별 상품                            |
+| name         | text not null                          | 예: 타로 상담 20분                       |
+| minutes      | int not null check (minutes > 0)       |                                          |
+| price        | int not null check (price >= 0)        | 원 단위                                  |
+| sort_order   | int not null default 0                 |                                          |
+| is_active    | boolean not null default false         | 신규 기본 비공개. 기존 행 값은 유지. 9장 |
 
 - 고객이 "모든 상담사 같은 가격"으로 정해도 이 구조로 담을 수 있다(상담사마다 같은 행). 가격 자료가 오면 값만 바꾼다 → 6장 결정 필요 3번.
 
@@ -286,3 +290,55 @@ Storage 검사는 SELECT·INSERT·UPDATE 메타데이터 SQL·정책·버킷 설
 사전 검사에는 기존 관리자 profile이 반드시 필요하다. 일반 회원 profile이 있으면 그 ID를 사용하고, 없으면 profiles에 없는 임시 UUID를 사용한다. 두 경우 모두 실제 `SET LOCAL ROLE authenticated`와 JWT claim으로 `auth.uid()` 및 `private.is_admin() = false`를 확인하지만 실제 로그인은 검증하지 않는다. 특히 임시 UUID 방식은 실제 일반 회원 로그인이나 Auth 세션 검사가 아니라 프로필 없는 비관리자 인증 역할의 DB RLS 검사다. 실제 계정이나 profile은 생성·수정하지 않는다. 검사용 공지만 트랜잭션 안에서 만들며 성공 예외로 열과 검사 자료를 모두 롤백한다. 기존 행·구조·정책·권한·트리거는 내용 대신 개수와 해시로 비교하고 Storage는 조회하거나 변경하지 않는다.
 
 `node --test tests/notices-schema.test.mjs`는 마이그레이션 DDL과 사전 검사 본문의 일치를 정적으로 확인한다. `node tests/notices-popup-schema.model.mjs`는 준비된 PGlite 환경에서 역할·RLS·성공 예외·전체 롤백·이미 적용된 DB의 거부를 실행 확인하며, 실제 Supabase나 Storage에는 접근하지 않는다.
+
+## 9. 상담사 분야·경력·이미지 경로 (관리자 상담사·상품 DB)
+
+마이그레이션은 `supabase/migrations/20261111010000_counselors_admin_schema.sql`이다. 실제 상담사·사진·상품·계정은 넣지 않는다. 고객 화면은 아직 기존 `field`·`tags`만 읽고, `fields`를 쓰는 화면은 다음 단계다.
+
+### 대표 분야와 전체 분야
+
+- `field`는 대표 분야다. 이름·타입·NOT NULL·허용값 `tarot`/`saju`는 유지한다.
+- `fields`는 상담사가 하는 전체 분야다. `text[] NOT NULL`이고 기본값은 없다. 신규 INSERT는 `fields`를 명시해야 한다.
+- 허용 원소는 `tarot`, `saju`뿐이다. 1개 또는 2개이며 중복·NULL 원소·빈 문자열·다른 값은 거부한다. 1차원이고 시작 인덱스는 1이다.
+- `field` 값은 반드시 `fields`에 포함된다. 둘 다 고르면 `[tarot, saju]`와 `[saju, tarot]` 모두 가능하다.
+- 기존 행은 `fields = ARRAY[field]`로 이관한다. `field`·`tags`·이름·소개·이미지·공개 여부·정렬 등 기존 값은 바꾸지 않는다.
+- `tags`는 앞으로 상담 주제에 쓴다. 이번 단계에서는 기존 값을 재분류하거나 지우지 않는다.
+
+### careers
+
+- `text[] NOT NULL DEFAULT '{}'`다. 기존 행에는 빈 배열을 넣는다. 실제 경력 문구는 마이그레이션에 넣지 않는다.
+- 빈 배열을 허용하고 순서를 유지한다. 최대 20개, 각 항목은 공백만으로 구성될 수 없고 `char_length` 기준 200자 이하다.
+- NULL 원소와 다차원 배열은 거부한다. 빈 배열이 아니면 시작 인덱스는 1이다.
+
+### 이미지 경로
+
+- `image_path`는 NULL을 허용한다. 값이 있으면 `counselors/<8-4-4-4-12 자리 소문자 16진수 UUID>.<jpg|jpeg|png|webp>`만 허용한다.
+- 빈 문자열·전체 URL·버킷 접두사·다른 폴더·상위 경로는 거부한다.
+- 기존 값이 이 형식과 다르면 마이그레이션은 `COUNSELORS_IMAGE_PATH_INVALID`로 중단한다. 값을 지우거나 다른 파일로 바꾸지 않는다.
+- 이 제약은 경로 형식만 본다. 파일 존재·MIME·크기는 후속 업로드 화면에서 확인한다. `public-images` 버킷과 Storage 정책·전역 권한·보호 트리거는 바꾸지 않는다.
+
+### 신규 기본 비공개와 기존 행
+
+- `counselors.is_active`와 `consult_products.is_active`의 기본값만 `false`로 바꾼다. 기존 행의 true/false는 유지한다.
+- 추천·신규·소속·승인 상태 등 다른 기본값, 상품명·시간·가격, 예약의 상품명·시간·가격은 바꾸지 않는다.
+- 분야 이관 UPDATE는 기존 `counselors_set_updated_at` 트리거를 끄지 않는다. 그래서 기존 상담사 행의 `updated_at`이 갱신될 수 있다. 검사에서 허용하는 이관 변경은 새 컬럼과 그 `updated_at`뿐이다.
+
+### 권한
+
+- 기존 RLS·정책·테이블 권한·트리거는 유지한다. 관리자 쓰기는 관리자 본인 세션과 RLS다.
+- 배열·경로 검사는 `private`의 순수 함수다. `SECURITY INVOKER`, `search_path`는 빈 값으로 고정하고, 실행 권한은 `anon`·`authenticated`에만 준다. `service_role` 권한은 늘리지 않는다.
+- 새 공개 RPC나 관리자 우회 경로는 만들지 않는다.
+
+### SQL 사전 검사와 롤백 확인
+
+이미 예약 스키마가 적용됐고 `fields`·`careers`가 아직 없는 DB에서 다음 순서로 실행한다.
+
+1. 다른 작업이 없는 새 SQL Editor에서 `supabase/tests/counselors_admin_preflight.sql` 전체를 실행한다. 파일 첫 `ROLLBACK`이 이전 실패로 중단된 트랜잭션을 정리하고 새 트랜잭션을 시작한다. 마지막 SQLSTATE P0001 예외의 `COUNSELORS_ADMIN_PREFLIGHT_OK`만 성공이다. DETAIL의 baseline JSON을 별도로 보관한다. 임시 테이블은 롤백되므로 baseline을 거기에만 의존하지 않는다.
+2. `supabase/tests/counselors_admin_rollback_check.sql`의 `baseline`에 그 JSON 원본을 넣고 파일 전체를 별도로 실행한다. 배포 전 파일의 baseline은 `null`이며, 값을 넣지 않으면 실패해야 한다. 첫 `ROLLBACK`으로 사전 검사 트랜잭션을 종료한 뒤 `COUNSELORS_ADMIN_ROLLBACK_OK`를 확인한다. 실행 결과나 임시 baseline은 파일에 다시 저장하지 않는다.
+3. 두 검사가 성공한 뒤에만 이 마이그레이션을 main에 반영한다. 이미 `fields`·`careers`가 있는 DB에서 재검사하려고 열이나 기존 자료를 지우지 않는다.
+
+사전 검사에는 기존 관리자 profile이 필요하다. 일반 회원 profile이 있으면 그 ID를 쓰고, 없으면 profiles에 없는 임시 UUID를 쓴다. 두 경우 모두 `SET LOCAL ROLE`과 JWT claim으로 `auth.uid()`·`private.is_admin()`을 확인하지만 실제 로그인은 검증하지 않는다. 실제 계정이나 profile은 생성·수정하지 않는다. 검사용 행은 이름에 "테스트"가 있고 트랜잭션 안에서만 만들며, 성공 예외로 모두 되돌린다. 기존 행은 내용 대신 개수와 해시로 비교한다.
+
+이 SQL 검사는 역할·RLS·CHECK·경로 형식·기본값·전체 롤백을 본다. 실제 Storage API, 파일 존재, MIME, 용량, 실제 로그인 세션은 검사하지 않는다.
+
+`node --test tests/counselors-admin-schema.test.mjs`는 마이그레이션 본문과 사전 검사 본문, baseline·롤백 형식을 정적으로 맞춘다. `node tests/counselors-admin-schema.model.mjs`는 준비된 PGlite에서 역할·RLS·CHECK·성공 예외·전체 롤백·이미 적용된 DB의 거부·잘못된 기존 이미지 경로의 중단을 실행한다. 이 모형은 `btree_gist`가 없어 예약 겹침 배제 제약만 재현하지 못하며, 실제 Supabase나 Storage 검증이 아니다.
