@@ -24,6 +24,7 @@ let admin = true,
   loseUploadResponse = false,
   readFail = false,
   writes = 0;
+const noticeReads = [];
 const stamp = () =>
   `2026-11-09T01:00:00.${String(++seq).padStart(6, "0")}+00:00`;
 const user = {
@@ -152,12 +153,22 @@ async function handle(req, res) {
     res.end(JSON.stringify({ role: admin ? "admin" : "user" }));
     return;
   }
+  if (["counselors", "faqs", "stores"].includes(table)) {
+    res.setHeader("Content-Range", "0-0/0");
+    res.end("[]");
+    return;
+  }
   if (table === "reservations" || table === "inquiries") {
     res.setHeader("Content-Range", "0-0/0");
     res.end("[]");
     return;
   }
   assert.equal(table, "notices");
+  if (req.method === "GET")
+    noticeReads.push({
+      auth: req.headers.authorization || "",
+      search: u.searchParams.toString(),
+    });
   if (readFail && req.method === "GET") {
     res.writeHead(400);
     res.end("{}");
@@ -190,6 +201,19 @@ async function handle(req, res) {
       return;
     }
   }
+  const order = u.searchParams.get("order");
+  if (order)
+    selected.sort((a, b) => {
+      for (const part of order.split(",")) {
+        const [column, direction] = part.split(".");
+        if (a[column] === b[column]) continue;
+        if (a[column] == null) return 1;
+        if (b[column] == null) return -1;
+        const cmp = a[column] > b[column] ? 1 : -1;
+        return direction === "desc" ? -cmp : cmp;
+      }
+      return 0;
+    });
   const count = selected.length;
   const offset = Number(u.searchParams.get("offset") || 0),
     limit = Number(u.searchParams.get("limit") || 20);
@@ -345,7 +369,7 @@ try {
   );
   await go("/admin/notices/" + id);
   await b.evaluate(
-    "Array.from(document.querySelectorAll('input[type=checkbox]')).filter(e=>e.checkVisibility()).at(-1).click()",
+    "(()=>{const label=Array.from(document.querySelectorAll('label')).find(e=>e.checkVisibility()&&e.textContent.trim()==='공개');label.querySelector('input').click()})()",
   );
   await selectImage(240, 1200, "세로-포스터.png");
   await b.button("저장 전 확인");
@@ -739,6 +763,542 @@ try {
   assert.equal(files.size, 0);
   console.log(
     "PASS upload response-loss cleanup retry and reloaded-original replacement/delete recovery",
+  );
+  const setChecked = async (label, checked) => {
+    await b.evaluate(
+      `(()=>{const label=Array.from(document.querySelectorAll('label')).find(e=>e.checkVisibility()&&e.textContent.trim()===${JSON.stringify(label)});const input=label.querySelector('input');if(input.checked!==${checked})input.click()})()`,
+    );
+  };
+  const popupOpen = () =>
+    b.evaluate(
+      "!!document.querySelector('dialog[open]')&&document.body.innerText.includes('공지 자세히 보기')",
+    );
+  const popupSettled = () =>
+    b.evaluate(
+      "document.querySelector('[data-notice-popup-ready=\"yes\"]')!==null",
+    );
+  const expectHomePopup = async (open) => {
+    await until(popupSettled, open ? "popup ready" : "popup stayed closed");
+    if (open) await until(popupOpen, "popup dialog");
+    else assert.equal(await popupOpen(), false);
+  };
+  const seoulToday = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  for (const width of [360, 768, 1024]) {
+    await b.call("Emulation.setDeviceMetricsOverride", {
+      width,
+      height: 900,
+      deviceScaleFactor: 1,
+      mobile: false,
+    });
+    await go("/category");
+    const card = await b.evaluate(
+      `(()=>{
+        const notice=Array.from(document.querySelectorAll('a')).find(a=>a.getAttribute('href')==='/notices');
+        const support=Array.from(document.querySelectorAll('a')).find(a=>a.getAttribute('href')==='/support');
+        const caption=notice.querySelectorAll('p')[1];
+        const icon=notice.querySelector('svg');
+        const chevron=notice.querySelectorAll('svg')[1];
+        const cap=caption.getBoundingClientRect();
+        const ch=chevron.getBoundingClientRect();
+        const ir=icon.getBoundingClientRect();
+        return {
+          title:notice.querySelector('p').textContent,
+          caption:caption.textContent,
+          icon:Math.round(ir.width),
+          color:getComputedStyle(icon).color,
+          hidden:icon.getAttribute('aria-hidden'),
+          above:notice.getBoundingClientRect().bottom<=support.getBoundingClientRect().top+1,
+          gap:ch.left-cap.right,
+          inside:ch.right<=notice.getBoundingClientRect().right+1,
+          overflow:document.documentElement.scrollWidth>innerWidth,
+          height:notice.getBoundingClientRect().height,
+          support:support.getAttribute('href'),
+        };
+      })()`,
+    );
+    assert.equal(card.title, "공지사항");
+    assert.equal(card.caption, "매장 소식 · 운영시간 · 이용 안내");
+    assert.equal(card.icon, 28);
+    assert.equal(card.color, "rgb(201, 162, 39)");
+    assert.equal(card.hidden, "true");
+    assert.equal(card.above, true);
+    assert.equal(card.support, "/support");
+    assert.ok(card.gap > 0);
+    assert.equal(card.inside, true);
+    assert.equal(card.overflow, false);
+    assert.ok(card.height >= 96);
+    if (width === 360) await screenshot("category-notice-card-360.png");
+  }
+  await b.evaluate(
+    "Array.from(document.querySelectorAll('a')).find(a=>a.getAttribute('href')==='/notices').click()",
+  );
+  await text("등록된 공지사항이 없습니다.");
+  await go("/category");
+  await b.evaluate(
+    "Array.from(document.querySelectorAll('a')).find(a=>a.getAttribute('href')==='/support').click()",
+  );
+  await text("자주 묻는 질문");
+  await b.call("Emulation.setDeviceMetricsOverride", {
+    width: 360,
+    height: 900,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+  await go("/");
+  await expectHomePopup(false);
+  await text("추천 상담사");
+  const t1 = "2026-11-09T00:00:00.000000+00:00";
+  const t2 = "2026-11-10T00:00:00.000000+00:00";
+  const t3 = "2026-11-11T00:00:00.000000+00:00";
+  const tieLow = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const tieHigh = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+  const addNotice = (partial) => {
+    const row = {
+      image_path: null,
+      image_alt: null,
+      is_pinned: false,
+      is_published: false,
+      is_popup: false,
+      published_at: null,
+      body: "본문",
+      created_at: stamp(),
+      updated_at: stamp(),
+      ...partial,
+    };
+    rows.push(row);
+    return row;
+  };
+  addNotice({
+    id: "10000000-0000-4000-8000-000000000001",
+    title: "고정 이전 팝업",
+    is_pinned: true,
+    is_published: true,
+    is_popup: true,
+    published_at: t1,
+  });
+  addNotice({
+    id: "20000000-0000-4000-8000-000000000002",
+    title: "비공개 최신",
+    is_published: false,
+    is_popup: true,
+    published_at: t3,
+  });
+  addNotice({
+    id: "30000000-0000-4000-8000-000000000003",
+    title: "공개만 최신",
+    is_published: true,
+    is_popup: false,
+    is_pinned: true,
+    published_at: t3,
+  });
+  addNotice({
+    id: tieLow,
+    title: "동률 낮은 아이디",
+    is_published: true,
+    is_popup: true,
+    published_at: t2,
+  });
+  const winner = addNotice({
+    id: tieHigh,
+    title: "동률 최신 아이디",
+    is_published: true,
+    is_popup: true,
+    published_at: t2,
+    body: "첫 줄\n둘째 줄" + "가".repeat(400),
+  });
+  const beforeReads = noticeReads.length;
+  await go("/");
+  await expectHomePopup(true);
+  await text("동률 최신 아이디");
+  assert.equal(
+    await b.evaluate("document.body.innerText.includes('비공개 최신')"),
+    false,
+  );
+  assert.equal(
+    await b.evaluate("document.body.innerText.includes('공개만 최신')"),
+    false,
+  );
+  assert.equal(
+    await b.evaluate("document.body.innerText.includes('고정 이전 팝업')"),
+    false,
+  );
+  assert.equal(
+    await b.evaluate("document.body.innerText.includes('동률 낮은 아이디')"),
+    false,
+  );
+  assert.equal(
+    await b.evaluate("document.body.innerText.includes('끝표시')"),
+    false,
+  );
+  winner.body = "첫 줄\n둘째 줄" + "가".repeat(290) + "끝표시";
+  const homeQuery = noticeReads
+    .slice(beforeReads)
+    .find((q) => q.search.includes("is_popup"));
+  assert.ok(homeQuery);
+  assert.notEqual(homeQuery.auth, `Bearer ${token}`);
+  const query = decodeURIComponent(homeQuery.search);
+  assert.ok(query.includes("is_published=eq.true"));
+  assert.ok(query.includes("is_popup=eq.true"));
+  assert.ok(query.includes("published_at.desc"));
+  assert.ok(query.includes("id.desc"));
+  assert.ok(query.includes("limit=1"));
+  assert.ok(query.includes("select=id,title,body,image_path,image_alt"));
+  assert.equal(query.includes("is_pinned"), false);
+  const popupFrame = async () =>
+    b.evaluate(
+      `(()=>{
+        const dialog=document.querySelector('dialog[open]');
+        const tab=document.querySelector('nav[aria-label="하단 메뉴"]');
+        const buttons=[...dialog.querySelectorAll('button')];
+        const marked=dialog.querySelector('[data-notice-popup-image]');
+        const image=marked?.tagName==='IMG'?marked:marked?.querySelector('img');
+        const tabTop=tab.getBoundingClientRect().top;
+        const box=dialog.getBoundingClientRect();
+        return {
+          title:dialog.querySelector('h2').textContent,
+          lines:dialog.innerText.includes('첫 줄')&&dialog.innerText.includes('둘째 줄'),
+          buttons:buttons.map(e=>e.textContent.trim()),
+          buttonOk:buttons.every(e=>{const r=e.getBoundingClientRect();return r.height>=44&&r.top>=box.top&&r.bottom<=box.bottom+1&&r.bottom<=tabTop+1&&r.left>=0&&r.right<=innerWidth}),
+          dialogBottom:box.bottom,
+          tabTop,
+          overflow:document.documentElement.scrollWidth>innerWidth,
+          image:image?{width:image.getBoundingClientRect().width,height:image.getBoundingClientRect().height,naturalWidth:image.naturalWidth,naturalHeight:image.naturalHeight}:null,
+          failed:dialog.innerText.includes('이미지를 불러오지 못했습니다.'),
+        };
+      })()`,
+    );
+  let frame = await popupFrame();
+  assert.equal(frame.title, "공지사항");
+  assert.equal(frame.lines, true);
+  assert.equal(frame.image, null);
+  assert.equal(frame.failed, false);
+  assert.deepEqual(frame.buttons, [
+    "공지 자세히 보기",
+    "오늘 하루 보지 않기",
+    "닫기",
+  ]);
+  assert.equal(frame.buttonOk, true);
+  assert.ok(frame.dialogBottom <= frame.tabTop);
+  assert.equal(frame.overflow, false);
+  assert.equal(
+    await b.evaluate(
+      "document.activeElement?.closest('dialog')===document.querySelector('dialog[open]')",
+    ),
+    true,
+  );
+  const imagePath = "notices/66666666-6666-4666-8666-666666666666.png";
+  files.set(imagePath, Buffer.from("fixture"));
+  winner.image_path = imagePath;
+  winner.image_alt = "팝업 이미지";
+  const checkImage = async (size, { small = false } = {}) => {
+    imageDimensions.set(imagePath, size);
+    await go("/");
+    await expectHomePopup(true);
+    await until(
+      () =>
+        b.evaluate(
+          `document.querySelector('[data-notice-popup-image]')?.naturalWidth===${size.width}`,
+        ),
+      "popup image decoded",
+    );
+    frame = await popupFrame();
+    assert.equal(frame.failed, false);
+    assert.equal(frame.buttonOk, true);
+    assert.ok(frame.dialogBottom <= frame.tabTop);
+    assert.ok(
+      Math.abs(
+        frame.image.width / frame.image.height -
+          frame.image.naturalWidth / frame.image.naturalHeight,
+      ) < 0.02,
+    );
+    if (small) {
+      assert.ok(frame.image.width <= frame.image.naturalWidth + 1);
+      assert.ok(frame.image.height <= frame.image.naturalHeight + 1);
+    }
+  };
+  await checkImage({ width: 240, height: 1200 });
+  assert.ok((await popupFrame()).image.height <= 270);
+  assert.equal(
+    await b.evaluate("document.body.innerText.includes('끝표시')"),
+    false,
+  );
+  await screenshot("home-notice-popup-360.png");
+  await checkImage({ width: 1200, height: 240 });
+  await checkImage({ width: 40, height: 30 }, { small: true });
+  imageDimensions.delete(imagePath);
+  files.delete(imagePath);
+  await go("/");
+  await expectHomePopup(true);
+  await text("이미지를 불러오지 못했습니다.");
+  frame = await popupFrame();
+  assert.equal(frame.failed, true);
+  assert.equal(frame.buttonOk, true);
+  assert.equal(frame.lines, true);
+  winner.image_path = null;
+  winner.image_alt = null;
+  await go("/");
+  await expectHomePopup(true);
+  assert.equal((await popupFrame()).image, null);
+  await b.call("Input.dispatchKeyEvent", {
+    type: "keyDown",
+    key: "Escape",
+    code: "Escape",
+    windowsVirtualKeyCode: 27,
+  });
+  await until(async () => !(await popupOpen()), "escape closed popup");
+  assert.equal(await b.evaluate("document.activeElement?.id"), "home-start");
+  assert.equal(
+    await b.evaluate(
+      "sessionStorage.getItem('jjokjipge:notice-popup:session')",
+    ),
+    tieHigh,
+  );
+  assert.equal(
+    await b.evaluate("localStorage.getItem('jjokjipge:notice-popup:today')"),
+    null,
+  );
+  await go("/category");
+  await go("/");
+  await expectHomePopup(false);
+  await text("추천 상담사");
+  await b.evaluate(
+    "sessionStorage.removeItem('jjokjipge:notice-popup:session')",
+  );
+  await go("/");
+  await expectHomePopup(true);
+  await b.button("닫기");
+  await until(async () => !(await popupOpen()), "close button");
+  await go("/");
+  await expectHomePopup(false);
+  await b.evaluate(
+    "sessionStorage.removeItem('jjokjipge:notice-popup:session')",
+  );
+  await go("/");
+  await expectHomePopup(true);
+  await b.button("오늘 하루 보지 않기");
+  await until(async () => !(await popupOpen()), "today hide");
+  const todayRecord = JSON.parse(
+    await b.evaluate("localStorage.getItem('jjokjipge:notice-popup:today')"),
+  );
+  assert.deepEqual(todayRecord, { id: tieHigh, date: seoulToday });
+  assert.equal(
+    await b.evaluate(
+      "sessionStorage.getItem('jjokjipge:notice-popup:session')",
+    ),
+    null,
+  );
+  await go("/");
+  await expectHomePopup(false);
+  await b.evaluate(
+    "localStorage.setItem('jjokjipge:notice-popup:today', JSON.stringify({id:'ffffffff-ffff-4fff-8fff-ffffffffffff', date:'1999-01-01'}))",
+  );
+  await go("/");
+  await expectHomePopup(true);
+  await b.evaluate(
+    `localStorage.setItem('jjokjipge:notice-popup:today', JSON.stringify({id:'ffffffff-ffff-4fff-8fff-ffffffffffff', date:${JSON.stringify(seoulToday)}}));window.dispatchEvent(new StorageEvent('storage',{key:'jjokjipge:notice-popup:today'}))`,
+  );
+  await until(async () => !(await popupOpen()), "other tab today hide");
+  await b.evaluate("localStorage.removeItem('jjokjipge:notice-popup:today')");
+  await go("/");
+  await expectHomePopup(true);
+  await b.button("공지 자세히 보기");
+  await text("동률 최신 아이디");
+  assert.equal(
+    await b.evaluate(
+      "sessionStorage.getItem('jjokjipge:notice-popup:session')",
+    ),
+    tieHigh,
+  );
+  await go("/");
+  await expectHomePopup(false);
+  await b.evaluate(
+    "sessionStorage.setItem('jjokjipge:notice-popup:session','ffffffff-ffff-4fff-8fff-ffffffffffff');localStorage.setItem('jjokjipge:notice-popup:today','{');localStorage.setItem('jjokjipge:notice-popup:other','keep')",
+  );
+  const newer = addNotice({
+    id: "99999999-9999-4999-8999-999999999999",
+    title: "새 팝업 공지",
+    is_published: true,
+    is_popup: true,
+    published_at: "2026-11-12T00:00:00.000000+00:00",
+    body: "새 본문",
+  });
+  await go("/");
+  await expectHomePopup(true);
+  await text("새 팝업 공지");
+  assert.equal(
+    await b.evaluate("document.body.innerText.includes('동률 최신 아이디')"),
+    false,
+  );
+  assert.equal(
+    await b.evaluate("localStorage.getItem('jjokjipge:notice-popup:other')"),
+    "keep",
+  );
+  await b.button("닫기");
+  await go("/");
+  await expectHomePopup(false);
+  await text("추천 상담사");
+  assert.equal(
+    await b.evaluate("document.body.innerText.includes('동률 최신 아이디')"),
+    false,
+  );
+  assert.equal(
+    await b.evaluate("document.body.innerText.includes('동률 낮은 아이디')"),
+    false,
+  );
+  newer.is_published = false;
+  readFail = true;
+  await go("/");
+  await expectHomePopup(false);
+  await text("추천 상담사");
+  assert.equal(
+    await b.evaluate("document.body.innerText.includes('Application error')"),
+    false,
+  );
+  readFail = false;
+  await go("/notices");
+  await delay(300);
+  assert.equal(await popupOpen(), false);
+  await go("/admin/notices");
+  await delay(300);
+  assert.equal(await popupOpen(), false);
+  await go("/");
+  await expectHomePopup(true);
+  await b.evaluate(`(()=>{
+    const original=Storage.prototype.setItem;
+    Storage.prototype.setItem=function(key,value){
+      if(String(key).startsWith('jjokjipge:notice-popup'))throw Error('denied');
+      return original.call(this,key,value);
+    };
+  })()`);
+  await b.button("닫기");
+  await until(async () => !(await popupOpen()), "memory close");
+  assert.equal(
+    await b.evaluate("document.body.innerText.includes('Application error')"),
+    false,
+  );
+  await go("/");
+  await expectHomePopup(true);
+  rows.length = 0;
+  files.clear();
+  imageDimensions.clear();
+  await b.evaluate("sessionStorage.clear();localStorage.clear()");
+  await go("/admin/notices/new");
+  await b.fill("title", "팝업 초안");
+  await b.fill("body", "비공개 팝업 초안");
+  await setChecked("홈 팝업으로 표시", true);
+  assert.equal(
+    await b.evaluate(
+      "(()=>{const value=(label)=>Array.from(document.querySelectorAll('label')).find(e=>e.textContent.trim()===label).querySelector('input').checked;return value('상단 고정')===false&&value('공개')===false&&value('홈 팝업으로 표시')===true})()",
+    ),
+    true,
+  );
+  await b.button("저장 전 확인");
+  await confirm();
+  await text("공지를 저장했습니다.");
+  const draft = rows.find((row) => row.title === "팝업 초안");
+  assert.equal(draft.is_popup, true);
+  assert.equal(draft.is_published, false);
+  assert.equal(draft.is_pinned, false);
+  assert.equal(draft.published_at, null);
+  await go("/admin/notices");
+  await text("팝업 대상");
+  assert.equal(
+    await b.evaluate("document.body.innerText.includes('현재 표시 중')"),
+    false,
+  );
+  await go("/");
+  await expectHomePopup(false);
+  await text("추천 상담사");
+  await go("/admin/notices/" + draft.id);
+  await setChecked("공개", true);
+  await b.button("저장 전 확인");
+  await confirm();
+  const publishedAt = draft.published_at;
+  assert.ok(publishedAt);
+  assert.equal(draft.is_popup, true);
+  await go("/");
+  await expectHomePopup(true);
+  await text("팝업 초안");
+  await go("/admin/notices/" + draft.id);
+  await setChecked("홈 팝업으로 표시", false);
+  await b.button("저장 전 확인");
+  await confirm();
+  assert.equal(draft.published_at, publishedAt);
+  assert.equal(draft.is_popup, false);
+  await go("/");
+  await expectHomePopup(false);
+  await go("/admin/notices/" + draft.id);
+  await setChecked("홈 팝업으로 표시", true);
+  await b.button("저장 전 확인");
+  await confirm();
+  assert.equal(draft.published_at, publishedAt);
+  await go("/");
+  await expectHomePopup(true);
+  await go("/admin/notices/" + draft.id);
+  await setChecked("공개", false);
+  await b.button("저장 전 확인");
+  await confirm();
+  assert.equal(draft.published_at, publishedAt);
+  await go("/");
+  await expectHomePopup(false);
+  await go("/admin/notices/" + draft.id);
+  await b.fill("body", "팝업 체크 초안");
+  await setChecked("홈 팝업으로 표시", true);
+  draft.updated_at = stamp();
+  await b.button("저장 전 확인");
+  await confirm();
+  await text("다른 작업으로 공지가 변경됐습니다.");
+  assert.equal(
+    await b.evaluate(
+      "Array.from(document.querySelectorAll('[name=body]')).find(e=>e.checkVisibility()).value",
+    ),
+    "팝업 체크 초안",
+  );
+  assert.equal(
+    await b.evaluate(
+      "Array.from(document.querySelectorAll('label')).find(e=>e.textContent.trim()==='홈 팝업으로 표시').querySelector('input').checked",
+    ),
+    true,
+  );
+  await b.button("최신 내용 다시 불러오기");
+  await confirm();
+  await setChecked("홈 팝업으로 표시", true);
+  await setChecked("공개", true);
+  loseResponse = true;
+  await b.button("저장 전 확인");
+  await confirm();
+  await text("결과를 확인하지 못했습니다.");
+  draft.is_popup = false;
+  await b.button("저장 결과 다시 확인");
+  await text("현재 저장 내용과 일치하지 않습니다.");
+  assert.equal(
+    await b.evaluate(
+      "Array.from(document.querySelectorAll('label')).find(e=>e.textContent.trim()==='홈 팝업으로 표시').querySelector('input').checked",
+    ),
+    true,
+  );
+  await b.button("최신 내용 다시 불러오기");
+  await confirm();
+  await b.button("공지 삭제");
+  await confirm();
+  await until(
+    () =>
+      b.evaluate(
+        "document.body.innerText.includes('공지를 삭제했습니다.')||document.body.innerText.includes('공지를 저장했습니다.')",
+      ),
+    "notice deleted",
+  );
+  assert.equal(rows.length, 0);
+  await go("/");
+  await expectHomePopup(false);
+  await text("추천 상담사");
+  console.log(
+    "PASS home popup query, dismissal, images, category card, admin popup setting",
   );
   admin = false;
   await go("/admin/notices");

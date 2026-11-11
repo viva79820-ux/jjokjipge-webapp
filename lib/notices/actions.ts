@@ -36,6 +36,7 @@ const unknown: Result = {
 };
 function invalidate(id: string) {
   for (const path of [
+    "/",
     "/admin/notices",
     `/admin/notices/${id}`,
     "/notices",

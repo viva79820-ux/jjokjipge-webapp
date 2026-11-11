@@ -1,8 +1,16 @@
 import "server-only";
+import { connection } from "next/server";
 import { createPublicClient } from "@/lib/supabase/public";
 import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/admin/auth";
-import { columns, summaryColumns, uuid, type Notice } from "./rules";
+import {
+  columns,
+  popupColumns,
+  summaryColumns,
+  uuid,
+  type Notice,
+  type NoticePopup,
+} from "./rules";
 export async function noticeList(page: number, status = "", admin = false) {
   if (admin && !(await requireAdmin())) return null;
   if (
@@ -34,7 +42,12 @@ export async function noticeList(page: number, status = "", admin = false) {
   return {
     data: data as Pick<
       Notice,
-      "id" | "title" | "is_pinned" | "is_published" | "published_at"
+      | "id"
+      | "title"
+      | "is_pinned"
+      | "is_published"
+      | "is_popup"
+      | "published_at"
     >[],
     count: count || 0,
   };
@@ -48,4 +61,25 @@ export async function noticeDetail(id: string, admin = false) {
   const { data, error } = await q.maybeSingle();
   if (error) throw Error("공지를 불러오지 못했습니다.");
   return data as Notice | null;
+}
+export async function homePopupNotice() {
+  const { data, error } = await createPublicClient()
+    .from("notices")
+    .select(popupColumns)
+    .eq("is_published", true)
+    .eq("is_popup", true)
+    .order("published_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw Error("홈 팝업을 불러오지 못했습니다.");
+  return (data as NoticePopup | null) ?? null;
+}
+export async function loadHomePopup() {
+  await connection();
+  try {
+    return await homePopupNotice();
+  } catch {
+    return null;
+  }
 }

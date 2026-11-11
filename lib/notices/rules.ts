@@ -6,13 +6,20 @@ export type Notice = {
   image_alt: string | null;
   is_pinned: boolean;
   is_published: boolean;
+  is_popup: boolean;
   published_at: string | null;
   created_at: string;
   updated_at: string;
 };
 export const columns =
-  "id,title,body,image_path,image_alt,is_pinned,is_published,published_at,created_at,updated_at";
-export const summaryColumns = "id,title,is_pinned,is_published,published_at";
+  "id,title,body,image_path,image_alt,is_pinned,is_published,is_popup,published_at,created_at,updated_at";
+export const summaryColumns =
+  "id,title,is_pinned,is_published,is_popup,published_at";
+export const popupColumns = "id,title,body,image_path,image_alt";
+export type NoticePopup = Pick<
+  Notice,
+  "id" | "title" | "body" | "image_path" | "image_alt"
+>;
 export const bucket = "public-images";
 export const maxBytes = 5242880;
 export const uuid = (s: unknown): s is string =>
@@ -89,7 +96,8 @@ export function parseNotice(f: FormData) {
     alt = scalar(f, "image_alt"),
     path = scalar(f, "image_path"),
     pin = scalar(f, "is_pinned"),
-    pub = scalar(f, "is_published");
+    pub = scalar(f, "is_published"),
+    popup = scalar(f, "is_popup");
   for (const [k, v, max] of [
     ["title", title, 100],
     ["body", body, 5000],
@@ -110,6 +118,8 @@ export function parseNotice(f: FormData) {
     errors.is_pinned = "고정 여부를 확인해 주세요.";
   if (!["true", "false"].includes(pub || ""))
     errors.is_published = "공개 여부를 확인해 주세요.";
+  if (popup !== "true" && popup !== "false")
+    errors.is_popup = "팝업 여부를 확인해 주세요.";
   return {
     errors,
     patch: {
@@ -119,6 +129,7 @@ export function parseNotice(f: FormData) {
       image_alt: alt?.trim() || null,
       is_pinned: pin === "true",
       is_published: pub === "true",
+      is_popup: popup === "true",
     },
   };
 }

@@ -6,6 +6,7 @@ import { getCounselors } from "@/lib/data/counselors";
 import { CounselorBanner } from "@/components/counselor/counselor-banner";
 import { CounselorCarousel } from "@/components/counselor/counselor-carousel";
 import { CounselorList } from "@/components/counselor/counselor-list";
+import { HomeNoticePopup } from "@/components/notices/home-popup";
 import { SectionTitle } from "@/components/ui/section-title";
 import { Button } from "@/components/ui/button";
 const categories = [
@@ -16,9 +17,15 @@ const categories = [
 ];
 export default function Home() {
   return (
-    <Suspense fallback={null}>
-      <HomeContent />
-    </Suspense>
+    <>
+      <h1 id="home-start" tabIndex={-1} className="sr-only">
+        {siteConfig.name} 홈
+      </h1>
+      <HomeNoticePopup />
+      <Suspense fallback={null}>
+        <HomeContent />
+      </Suspense>
+    </>
   );
 }
 async function HomeContent() {
@@ -26,7 +33,6 @@ async function HomeContent() {
   const recommended = counselors.filter((c) => c.isRecommended);
   return (
     <div className="space-y-7 px-4 pt-4 md:space-y-9 md:px-6">
-      <h1 className="sr-only">{siteConfig.name} 홈</h1>
       <CounselorBanner counselors={recommended} />
       <section aria-label="상담 카테고리" className="grid grid-cols-4 gap-2">
         {categories.map(({ label, href, icon: Icon }, index) => (

@@ -8,12 +8,16 @@ export function Modal({
   onClose,
   children,
   footer,
+  restoreFocusId,
+  clearBottomTabs = false,
 }: {
   title: string;
   busy: boolean;
   onClose: () => void;
   children: ReactNode;
   footer: ReactNode;
+  restoreFocusId?: string;
+  clearBottomTabs?: boolean;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -31,10 +35,17 @@ export function Modal({
       dialog.close();
       document.body.style.overflow = originalOverflow;
       document.documentElement.style.overflow = originalRootOverflow;
-      if (trigger instanceof HTMLElement && trigger.isConnected)
+      const preferred = restoreFocusId
+        ? document.getElementById(restoreFocusId)
+        : null;
+      if (preferred instanceof HTMLElement) preferred.focus();
+      else if (trigger instanceof HTMLElement && trigger.isConnected)
         trigger.focus();
     };
-  }, []);
+  }, [restoreFocusId]);
+  const frame = clearBottomTabs
+    ? "fixed top-4 left-1/2 max-h-[calc(100dvh_-_8.5rem)] w-[calc(100%_-_2rem)] max-w-lg -translate-x-1/2"
+    : "fixed inset-0 m-auto max-h-[calc(100dvh_-_2rem)] w-[calc(100%_-_2rem)] max-w-lg";
   return (
     <dialog
       ref={dialogRef}
@@ -44,9 +55,11 @@ export function Modal({
         event.preventDefault();
         if (!busy) onClose();
       }}
-      className="fixed inset-0 m-auto max-h-[calc(100dvh_-_2rem)] w-[calc(100%_-_2rem)] max-w-lg overflow-hidden rounded-card border border-border bg-surface p-0 text-foreground backdrop:bg-foreground/50"
+      className={`${frame} overflow-hidden rounded-card border border-border bg-surface p-0 text-foreground backdrop:bg-foreground/50`}
     >
-      <div className="flex max-h-[calc(100dvh_-_2rem)] flex-col">
+      <div
+        className={`flex flex-col ${clearBottomTabs ? "max-h-[calc(100dvh_-_8.5rem)]" : "max-h-[calc(100dvh_-_2rem)]"}`}
+      >
         <header className="shrink-0 border-b border-border p-4">
           <h2
             ref={titleRef}

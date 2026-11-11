@@ -90,6 +90,7 @@ const row = {
   image_alt: "설명",
   is_pinned: false,
   is_published: false,
+  is_popup: false,
   published_at: null,
   created_at: version,
   updated_at: version,
@@ -106,6 +107,7 @@ function form(extra = {}) {
     image_alt: "설명",
     is_pinned: "false",
     is_published: "true",
+    is_popup: "false",
     ...extra,
   }))
     f.set(k, v);
@@ -122,7 +124,8 @@ function harness({
   infoError = null,
 } = {}) {
   const calls = [],
-    paths = [];
+    paths = [],
+    uses = { public: 0, server: 0 };
   const db = {
     from(table) {
       const q = { kind: "read", steps: [["from", table]] };
@@ -132,6 +135,7 @@ function harness({
         "eq",
         "order",
         "range",
+        "limit",
         "insert",
         "update",
         "delete",
@@ -168,12 +172,18 @@ function harness({
       },
     },
   };
+  const server = {
+    createClient: async () => {
+      uses.server++;
+      return db;
+    },
+  };
   const cleanup = load("../lib/notices/cleanup.ts", {
     "server-only": {},
     "@/lib/admin/auth": {
       requireAdmin: async () => (admin ? { userId: id } : null),
     },
-    "@/lib/supabase/server": { createClient: async () => db },
+    "@/lib/supabase/server": server,
     "./rules": rules,
   });
   const actions = load("../lib/notices/actions.ts", {
@@ -182,7 +192,7 @@ function harness({
     "@/lib/admin/auth": {
       requireAdmin: async () => (admin ? { userId: id } : null),
     },
-    "@/lib/supabase/server": { createClient: async () => db },
+    "@/lib/supabase/server": server,
     "next/cache": { revalidatePath: (p) => paths.push(p) },
     "node:crypto": crypto,
     "./rules": rules,
@@ -190,9 +200,15 @@ function harness({
   });
   const data = load("../lib/notices/data.ts", {
     "server-only": {},
+    "next/server": { connection: async () => {} },
     "@/lib/admin/auth": { requireAdmin: async () => (admin ? {} : null) },
-    "@/lib/supabase/server": { createClient: async () => db },
-    "@/lib/supabase/public": { createPublicClient: () => db },
+    "@/lib/supabase/server": server,
+    "@/lib/supabase/public": {
+      createPublicClient: () => {
+        uses.public++;
+        return db;
+      },
+    },
     "./rules": rules,
   });
   return {
@@ -200,6 +216,7 @@ function harness({
     ...data,
     calls,
     paths,
+    uses,
     setCurrent(value, error = null) {
       current = value;
       readError = error;
@@ -311,7 +328,13 @@ test("notice scalar validation and safe URLs", () => {
     assert.ok(
       Object.keys(rules.parseNotice(form({ [key]: val })).errors).length,
     );
-  for (const key of ["title", "body", "image_path", "is_published"]) {
+  for (const key of [
+    "title",
+    "body",
+    "image_path",
+    "is_published",
+    "is_popup",
+  ]) {
     for (const type of ["duplicate", "file", "missing"]) {
       const f = form();
       if (type === "duplicate") f.append(key, "x");
@@ -403,6 +426,7 @@ test("save allowlist, precise CAS and first publication server time", async () =
       "image_alt",
       "is_pinned",
       "is_published",
+      "is_popup",
       "published_at",
     ].sort(),
   );
@@ -414,6 +438,7 @@ test("save allowlist, precise CAS and first publication server time", async () =
     ),
   );
   await h.refreshNotices(id);
+  assert.ok(h.paths.includes("/"));
   assert.ok(h.paths.includes("/notices"));
 });
 test("private and republish retain first publication timestamp", async () => {
@@ -445,6 +470,7 @@ test("new draft ID remains stable; repeated create cannot upsert an existing not
   assert.equal(insert.id, id);
   assert.equal(insert.published_at, null);
   assert.equal(insert.is_pinned, false);
+  assert.equal(insert.is_popup, false);
   const repeat = harness();
   assert.equal(
     (await repeat.saveNotice(form({ mode: "create" }))).state,
@@ -574,4 +600,181 @@ test("browser orchestration preserves binary boundary and files on lost response
   );
   assert.equal(r.result.state, "unknown");
   assert.equal(r.uploaded, fresh);
+});
+const popup = load("../lib/notices/popup.ts");
+function memoryStore(initial = {}) {
+  const data = { ...initial };
+  return {
+    data,
+    getItem: (key) => (key in data ? data[key] : null),
+    setItem: (key, value) => {
+      data[key] = String(value);
+    },
+    removeItem: (key) => {
+      delete data[key];
+    },
+  };
+}
+test("popup setting rejects non-boolean strings and keeps publication time", async () => {
+  for (const value of ["TRUE", "1", "on", "yes", " true "])
+    assert.equal(
+      rules.parseNotice(form({ is_popup: value })).errors.is_popup,
+      "팝업 여부를 확인해 주세요.",
+    );
+  assert.equal(
+    rules.noticeMatches(
+      { ...row, is_published: true },
+      form({ is_popup: "false" }),
+    ),
+    true,
+  );
+  assert.equal(
+    rules.noticeMatches({ ...row, is_published: true, is_popup: true }, form()),
+    false,
+  );
+  const kept = harness({
+    current: { ...row, published_at: version, is_popup: false },
+  });
+  const saved = await kept.saveNotice(
+    form({ is_popup: "true", is_published: "false" }),
+  );
+  assert.equal(saved.state, "saved");
+  const payload = kept.calls
+    .find((q) => q.kind === "update")
+    .steps.find((s) => s[0] === "update")[1];
+  assert.equal(payload.is_popup, true);
+  assert.equal(payload.is_published, false);
+  assert.equal(payload.is_pinned, false);
+  assert.equal(payload.published_at, version);
+  assert.equal(kept.calls.filter((q) => q.kind === "update").length, 1);
+  const draft = harness({ current: null });
+  assert.equal(
+    (
+      await draft.saveNotice(
+        form({
+          mode: "create",
+          is_published: "false",
+          is_popup: "true",
+          image_path: "",
+          image_alt: "",
+        }),
+      )
+    ).state,
+    "saved",
+  );
+  const insert = draft.calls
+    .find((q) => q.kind === "insert")
+    .steps.find((s) => s[0] === "insert")[1];
+  assert.equal(insert.is_popup, true);
+  assert.equal(insert.is_published, false);
+  assert.equal(insert.published_at, null);
+});
+test("home popup reads one public candidate and drops failed results", async () => {
+  const h = harness({
+    admin: true,
+    current: {
+      ...row,
+      title: "비공개 후보",
+      is_popup: true,
+      is_published: false,
+    },
+  });
+  await h.homePopupNotice();
+  const steps = h.calls[0].steps;
+  assert.equal(h.uses.public, 1);
+  assert.equal(h.uses.server, 0);
+  assert.equal(steps.find((s) => s[0] === "select")[1], rules.popupColumns);
+  assert.ok(
+    steps.some(
+      (s) => s[0] === "eq" && s[1] === "is_published" && s[2] === true,
+    ),
+  );
+  assert.ok(
+    steps.some((s) => s[0] === "eq" && s[1] === "is_popup" && s[2] === true),
+  );
+  assert.equal(
+    steps.some((s) => s[0] === "order" && s[1] === "is_pinned"),
+    false,
+  );
+  assert.deepEqual(
+    steps.filter((s) => s[0] === "order").map((s) => [s[1], s[2].ascending]),
+    [
+      ["published_at", false],
+      ["id", false],
+    ],
+  );
+  assert.deepEqual(
+    steps.find((s) => s[0] === "limit"),
+    ["limit", 1],
+  );
+  const failed = harness({
+    readError: { code: "XX" },
+    current: {
+      ...row,
+      title: "오래된 공지",
+      is_popup: true,
+      is_published: true,
+    },
+  });
+  assert.equal(await failed.loadHomePopup(), null);
+  await assert.rejects(() => failed.homePopupNotice());
+});
+test("popup dismissal follows the notice id and Seoul date without extra storage", () => {
+  const beforeMidnight = new Date("2026-11-10T14:30:00Z");
+  const afterMidnight = new Date("2026-11-10T15:30:00Z");
+  const usEvening = new Date("2026-11-09T15:30:00Z");
+  assert.equal(popup.seoulDate(beforeMidnight), "2026-11-10");
+  assert.equal(popup.seoulDate(afterMidnight), "2026-11-11");
+  assert.equal(popup.seoulDate(usEvening), "2026-11-10");
+  assert.equal(popup.summarizeNoticeBody("가".repeat(300)), "가".repeat(300));
+  assert.equal(
+    popup.summarizeNoticeBody("가".repeat(301)),
+    `${"가".repeat(300)}…`,
+  );
+  assert.equal(popup.summarizeNoticeBody("첫 줄\n둘째 줄"), "첫 줄\n둘째 줄");
+  const session = memoryStore();
+  const local = memoryStore({ "other-site": "keep" });
+  assert.equal(popup.popupDismissed(session, local, id, beforeMidnight), false);
+  popup.rememberSession(session, id);
+  assert.equal(popup.popupDismissed(session, local, id, beforeMidnight), true);
+  assert.equal(
+    popup.popupDismissed(session, local, fresh, beforeMidnight),
+    false,
+  );
+  assert.equal(session.data[popup.popupTodayKey], undefined);
+  popup.rememberToday(local, session, id, beforeMidnight);
+  assert.deepEqual(JSON.parse(local.data[popup.popupTodayKey]), {
+    id,
+    date: "2026-11-10",
+  });
+  assert.equal(session.data[popup.popupSessionKey], undefined);
+  assert.equal(local.data["other-site"], "keep");
+  assert.equal(popup.popupDismissed(session, local, id, beforeMidnight), true);
+  assert.equal(
+    popup.popupDismissed(memoryStore(), local, id, afterMidnight),
+    false,
+  );
+  assert.equal(
+    popup.popupDismissed(session, local, fresh, beforeMidnight),
+    false,
+  );
+  local.setItem(popup.popupTodayKey, "{");
+  session.setItem(popup.popupSessionKey, id);
+  assert.equal(popup.popupDismissed(session, local, id), true);
+  session.removeItem(popup.popupSessionKey);
+  assert.equal(popup.popupDismissed(session, local, id), false);
+  const denied = {
+    getItem() {
+      throw Error("denied");
+    },
+    setItem() {
+      throw Error("denied");
+    },
+    removeItem() {
+      throw Error("denied");
+    },
+  };
+  assert.equal(popup.popupDismissed(denied, denied, id), false);
+  assert.throws(() => popup.rememberSession(denied, id));
+  assert.throws(() => popup.rememberToday(denied, denied, id));
 });

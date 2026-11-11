@@ -37,7 +37,8 @@ export function NoticeEditor({
     [alt, setAlt] = useState(initial?.image_alt || ""),
     [path, setPath] = useState(initial?.image_path || ""),
     [pin, setPin] = useState(initial?.is_pinned || false),
-    [pub, setPub] = useState(initial?.is_published || false);
+    [pub, setPub] = useState(initial?.is_published || false),
+    [popup, setPopup] = useState(initial?.is_popup || false);
   const [file, setFile] = useState<File | null>(null),
     [preview, setPreview] = useState(""),
     [busy, setBusy] = useState(false),
@@ -97,6 +98,7 @@ export function NoticeEditor({
       image_path: p,
       is_pinned: String(pin),
       is_published: String(pub),
+      is_popup: String(popup),
     }))
       f.set(k, v);
     return f;
@@ -124,6 +126,7 @@ export function NoticeEditor({
         setAlt(res.row.image_alt || "");
         setPin(res.row.is_pinned);
         setPub(res.row.is_published);
+        setPopup(res.row.is_popup);
       }
       if (!res.cleanup) {
         if (!initial) {
@@ -134,6 +137,7 @@ export function NoticeEditor({
           setPath("");
           setPin(false);
           setPub(false);
+          setPopup(false);
           setDraftId(crypto.randomUUID());
         }
         router.replace(`${back}${back.includes("?") ? "&" : "?"}notice=saved`);
@@ -170,6 +174,7 @@ export function NoticeEditor({
           setAlt(r.row.image_alt || "");
           setPin(r.row.is_pinned);
           setPub(r.row.is_published);
+          setPopup(r.row.is_popup);
           setFile(null);
           setConflict(false);
           setUncertain(false);
@@ -508,6 +513,18 @@ export function NoticeEditor({
               />
               공개
             </label>
+            <label className="flex min-h-11 cursor-pointer items-center gap-2">
+              <input
+                type="checkbox"
+                checked={popup}
+                onChange={(e) => setPopup(e.target.checked)}
+                aria-describedby={`${prefix}-popup-help`}
+              />
+              홈 팝업으로 표시
+            </label>
+            <p id={`${prefix}-popup-help`} className="text-sm text-muted">
+              공개된 팝업 대상 중 가장 최근에 공개한 공지 1건이 홈에 표시됩니다.
+            </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button type="submit">저장 전 확인</Button>

@@ -90,6 +90,7 @@ export async function NoticeListPage({
             {n.title}
           </Link>
           {n.is_pinned && <Badge>고정</Badge>}
+          {admin && n.is_popup && <Badge>팝업 대상</Badge>}
           {admin && <Badge>{n.is_published ? "공개" : "비공개"}</Badge>}
           <p className="text-sm text-muted">
             {n.published_at ? formatTime(n.published_at) : "공개 전"}
