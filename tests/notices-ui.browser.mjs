@@ -67,7 +67,9 @@ async function handle(req, res) {
     return;
   }
   const chunks = [];
-  for await (const c of req) chunks.push(c);
+  if (!["GET", "HEAD", "OPTIONS"].includes(req.method || "")) {
+    for await (const c of req) chunks.push(c);
+  } else req.resume();
   const rawBuffer = Buffer.concat(chunks);
   const raw = rawBuffer.toString();
   if (u.pathname.startsWith("/storage/v1/")) {
@@ -782,6 +784,28 @@ try {
     if (open) await until(popupOpen, "popup dialog");
     else assert.equal(await popupOpen(), false);
   };
+  const sessionHas = (page, noticeId) =>
+    page.evaluate(`(()=>{
+      const raw=sessionStorage.getItem('jjokjipge:notice-popup:session');
+      if(raw===${JSON.stringify(noticeId)}) return true;
+      try { return !!JSON.parse(raw).items[${JSON.stringify(noticeId)}]; }
+      catch { return false; }
+    })()`);
+  const expectPopup = async (page, open) => {
+    await until(
+      () =>
+        page.evaluate(
+          "document.querySelector('[data-notice-popup-ready=\"yes\"]')!==null",
+        ),
+      "tab popup ready",
+    );
+    const visible = () =>
+      page.evaluate(
+        "!!document.querySelector('dialog[open]')&&document.body.innerText.includes('공지 자세히 보기')",
+      );
+    if (open) await until(visible, "tab popup dialog");
+    else assert.equal(await visible(), false);
+  };
   const seoulToday = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Seoul",
     year: "numeric",
@@ -985,6 +1009,25 @@ try {
   assert.equal(frame.buttonOk, true);
   assert.ok(frame.dialogBottom <= frame.tabTop);
   assert.equal(frame.overflow, false);
+  for (const width of [360, 768, 1024]) {
+    await b.call("Emulation.setDeviceMetricsOverride", {
+      width,
+      height: 900,
+      deviceScaleFactor: 1,
+      mobile: false,
+    });
+    frame = await popupFrame();
+    assert.equal(frame.title, "공지사항");
+    assert.equal(frame.buttonOk, true);
+    assert.equal(frame.overflow, false);
+    assert.ok(frame.dialogBottom <= frame.tabTop);
+  }
+  await b.call("Emulation.setDeviceMetricsOverride", {
+    width: 360,
+    height: 900,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
   assert.equal(
     await b.evaluate(
       "document.activeElement?.closest('dialog')===document.querySelector('dialog[open]')",
@@ -1052,12 +1095,7 @@ try {
   });
   await until(async () => !(await popupOpen()), "escape closed popup");
   assert.equal(await b.evaluate("document.activeElement?.id"), "home-start");
-  assert.equal(
-    await b.evaluate(
-      "sessionStorage.getItem('jjokjipge:notice-popup:session')",
-    ),
-    tieHigh,
-  );
+  assert.equal(await sessionHas(b, tieHigh), true);
   assert.equal(
     await b.evaluate("localStorage.getItem('jjokjipge:notice-popup:today')"),
     null,
@@ -1085,7 +1123,9 @@ try {
   const todayRecord = JSON.parse(
     await b.evaluate("localStorage.getItem('jjokjipge:notice-popup:today')"),
   );
-  assert.deepEqual(todayRecord, { id: tieHigh, date: seoulToday });
+  assert.equal(todayRecord.v, 1);
+  assert.equal(todayRecord.items[tieHigh].date, seoulToday);
+  assert.equal(typeof todayRecord.items[tieHigh].at, "number");
   assert.equal(
     await b.evaluate(
       "sessionStorage.getItem('jjokjipge:notice-popup:session')",
@@ -1108,12 +1148,7 @@ try {
   await expectHomePopup(true);
   await b.button("공지 자세히 보기");
   await text("동률 최신 아이디");
-  assert.equal(
-    await b.evaluate(
-      "sessionStorage.getItem('jjokjipge:notice-popup:session')",
-    ),
-    tieHigh,
-  );
+  assert.equal(await sessionHas(b, tieHigh), true);
   await go("/");
   await expectHomePopup(false);
   await b.evaluate(
@@ -1166,6 +1201,119 @@ try {
   await go("/admin/notices");
   await delay(300);
   assert.equal(await popupOpen(), false);
+  await b.evaluate(
+    "sessionStorage.removeItem('jjokjipge:notice-popup:session')",
+  );
+  await go("/");
+  await expectHomePopup(true);
+  await b.button("닫기");
+  await until(async () => !(await popupOpen()), "close first notice");
+  const follow = addNotice({
+    id: "88888888-8888-4888-8888-888888888888",
+    title: "이어서 닫을 공지",
+    is_published: true,
+    is_popup: true,
+    published_at: "2026-11-13T00:00:00.000000+00:00",
+    body: "이어서 본문",
+  });
+  await go("/");
+  await expectHomePopup(true);
+  await text("이어서 닫을 공지");
+  await b.button("닫기");
+  await until(async () => !(await popupOpen()), "close second notice");
+  assert.equal(await sessionHas(b, tieHigh), true);
+  assert.equal(await sessionHas(b, follow.id), true);
+  follow.is_published = false;
+  await go("/");
+  await expectHomePopup(false);
+  await text("추천 상담사");
+  assert.equal(
+    await b.evaluate("document.body.innerText.includes('동률 낮은 아이디')"),
+    false,
+  );
+  assert.equal(
+    await b.evaluate("document.body.innerText.includes('동률 최신 아이디')"),
+    false,
+  );
+  await b.evaluate(
+    "sessionStorage.removeItem('jjokjipge:notice-popup:session');localStorage.removeItem('jjokjipge:notice-popup:today')",
+  );
+  await go("/");
+  await expectHomePopup(true);
+  await b.button("닫기");
+  const second = await b.openTab(base + "/");
+  await second.call("Emulation.setDeviceMetricsOverride", {
+    width: 360,
+    height: 900,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+  await expectPopup(second, true);
+  await until(
+    () =>
+      second.evaluate("document.body.innerText.includes('동률 최신 아이디')"),
+    "second tab notice",
+  );
+  await second.button("오늘 하루 보지 않기");
+  await until(
+    async () =>
+      !(await second.evaluate(
+        "!!document.querySelector('dialog[open]')&&document.body.innerText.includes('공지 자세히 보기')",
+      )),
+    "second tab today hide",
+  );
+  await b.evaluate("localStorage.removeItem('jjokjipge:notice-popup:today')");
+  await go("/category");
+  await second.go(base + "/");
+  await expectPopup(second, true);
+  await second.button("오늘 하루 보지 않기");
+  await go("/");
+  await expectHomePopup(false);
+  const [year, month, date] = seoulToday.split("-").map(Number);
+  const seoulTomorrow = new Date(Date.UTC(year, month - 1, date + 1))
+    .toISOString()
+    .slice(0, 10);
+  const tomorrowClock = `${seoulTomorrow}T00:30:00+09:00`;
+  const installed = await b.call("Page.addScriptToEvaluateOnNewDocument", {
+    source: `globalThis.__noticePopupNow=${JSON.stringify(tomorrowClock)};`,
+  });
+  await go("/");
+  await expectHomePopup(true);
+  await text("동률 최신 아이디");
+  await b.button("닫기");
+  await go("/");
+  await expectHomePopup(false);
+  assert.equal(await sessionHas(b, tieHigh), true);
+  await b.call("Page.removeScriptToEvaluateOnNewDocument", {
+    identifier: installed.identifier,
+  });
+  await b.evaluate("delete globalThis.__noticePopupNow");
+  await b.evaluate(
+    "sessionStorage.removeItem('jjokjipge:notice-popup:session');localStorage.removeItem('jjokjipge:notice-popup:today')",
+  );
+  await go("/");
+  await expectHomePopup(true);
+  await b.button("오늘 하루 보지 않기");
+  await until(async () => !(await popupOpen()), "today hide before return");
+  await b.evaluate(
+    `globalThis.__noticePopupNow=${JSON.stringify(tomorrowClock)}`,
+  );
+  await b.evaluate(
+    'document.querySelector(\'nav[aria-label="하단 메뉴"] a[href="/category"]\').click()',
+  );
+  await until(
+    () => b.evaluate("location.pathname==='/category'"),
+    "client category",
+  );
+  await b.evaluate(
+    'document.querySelector(\'nav[aria-label="하단 메뉴"] a[href="/"]\').click()',
+  );
+  await until(() => b.evaluate("location.pathname==='/'"), "client home");
+  await expectHomePopup(true);
+  await b.evaluate("delete globalThis.__noticePopupNow");
+  await b.evaluate(
+    "sessionStorage.clear();localStorage.removeItem('jjokjipge:notice-popup:today')",
+  );
   await go("/");
   await expectHomePopup(true);
   await b.evaluate(`(()=>{

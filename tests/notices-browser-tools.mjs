@@ -75,113 +75,139 @@ export async function browser(visible = false) {
       stdio: "ignore",
     },
   );
-  let ws;
+  const sockets = [];
   try {
-    await until(
-      () => existsSync(join(profile, "DevToolsActivePort")),
-      "Chromium start",
-    );
-    const port = readFileSync(
-      join(profile, "DevToolsActivePort"),
-      "utf8",
-    ).split("\n")[0];
+    let port = "";
+    await until(() => {
+      try {
+        port = readFileSync(join(profile, "DevToolsActivePort"), "utf8").split(
+          "\n",
+        )[0];
+        return Boolean(port);
+      } catch {
+        return false;
+      }
+    }, "Chromium start");
+    const attach = async (wsUrl) => {
+      const socket = new WebSocket(wsUrl);
+      sockets.push(socket);
+      await new Promise((r, j) => {
+        socket.onopen = r;
+        socket.onerror = j;
+      });
+      let serial = 0;
+      const pending = new Map();
+      socket.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+        if (msg.id && pending.has(msg.id)) {
+          const item = pending.get(msg.id);
+          pending.delete(msg.id);
+          clearTimeout(item.timer);
+          if (msg.error) item.reject(Error(msg.error.message));
+          else item.resolve(msg.result);
+        }
+      };
+      const call = (method, params = {}) =>
+        new Promise((resolve, reject) => {
+          const id = ++serial;
+          const timer = setTimeout(() => {
+            pending.delete(id);
+            reject(Error(`CDP timeout ${method}`));
+          }, 30000);
+          pending.set(id, { resolve, reject, timer });
+          socket.send(JSON.stringify({ id, method, params }));
+        });
+      const evaluate = async (expression) => {
+        const r = await call("Runtime.evaluate", {
+          expression,
+          awaitPromise: true,
+          returnByValue: true,
+        });
+        if (r.exceptionDetails)
+          throw Error(
+            r.exceptionDetails.exception?.description ||
+              r.exceptionDetails.text ||
+              "Browser evaluation failed",
+          );
+        return r.result.value;
+      };
+      const go = async (url) => {
+        await call("Page.bringToFront");
+        await call("Page.stopLoading");
+        const navigation = await call("Page.navigate", { url });
+        if (navigation.errorText) throw Error(navigation.errorText);
+        await until(
+          () =>
+            evaluate(
+              `location.href===${JSON.stringify(url)}&&document.readyState==='complete'`,
+            ),
+          "page load",
+        );
+        await delay(600);
+      };
+      const button = async (text) => {
+        await call("Page.bringToFront");
+        await until(
+          () =>
+            evaluate(
+              `Array.from(document.querySelectorAll('button')).some(e=>e.checkVisibility()&&!e.disabled&&e.textContent.trim()===${JSON.stringify(text)})`,
+            ),
+          text,
+        );
+        await evaluate(
+          `Array.from(document.querySelectorAll('button')).find(e=>e.checkVisibility()&&!e.disabled&&e.textContent.trim()===${JSON.stringify(text)}).click()`,
+        );
+        await delay(150);
+      };
+      const fill = async (name, value) => {
+        await until(
+          () =>
+            evaluate(
+              `Array.from(document.querySelectorAll('[name=${name}]')).some(e=>e.checkVisibility()&&!e.matches(':disabled'))`,
+            ),
+          name,
+        );
+        await evaluate(
+          `(()=>{const e=Array.from(document.querySelectorAll('[name=${name}]')).find(e=>e.checkVisibility());e.focus();e.select();})()`,
+        );
+        for (const type of ["keyDown", "keyUp"])
+          await call("Input.dispatchKeyEvent", {
+            type,
+            key: "a",
+            code: "KeyA",
+            windowsVirtualKeyCode: 65,
+            modifiers: 2,
+          });
+        await call("Input.insertText", { text: value });
+      };
+      await call("Page.enable");
+      await call("Runtime.enable");
+      return { call, evaluate, go, button, fill };
+    };
     const pages = await (
       await fetch(`http://127.0.0.1:${port}/json/list`)
     ).json();
-    ws = new WebSocket(
-      pages.find((p) => p.type === "page").webSocketDebuggerUrl,
+    const page = await attach(
+      pages.find((item) => item.type === "page").webSocketDebuggerUrl,
     );
-    await new Promise((r, j) => {
-      ws.onopen = r;
-      ws.onerror = j;
-    });
-    let serial = 0;
-    const pending = new Map();
-    ws.onmessage = (e) => {
-      const msg = JSON.parse(e.data);
-      if (msg.id && pending.has(msg.id)) {
-        const p = pending.get(msg.id);
-        pending.delete(msg.id);
-        clearTimeout(p.timer);
-        if (msg.error) p.reject(Error(msg.error.message));
-        else p.resolve(msg.result);
-      }
-    };
-    const call = (method, params = {}) =>
-      new Promise((resolve, reject) => {
-        const id = ++serial;
-        const timer = setTimeout(() => {
-          pending.delete(id);
-          reject(Error(`CDP timeout ${method}`));
-        }, 30000);
-        pending.set(id, { resolve, reject, timer });
-        ws.send(JSON.stringify({ id, method, params }));
+    const openTab = async (url) => {
+      const response = await fetch(`http://127.0.0.1:${port}/json/new?${url}`, {
+        method: "PUT",
       });
-    const evaluate = async (expression) => {
-      const r = await call("Runtime.evaluate", {
-        expression,
-        awaitPromise: true,
-        returnByValue: true,
-      });
-      if (r.exceptionDetails) throw Error("Browser evaluation failed");
-      return r.result.value;
+      if (!response.ok) throw Error("new tab");
+      const created = await response.json();
+      const tab = await attach(created.webSocketDebuggerUrl);
+      await tab.go(url);
+      return tab;
     };
-    const go = async (url) => {
-      await call("Page.stopLoading");
-      await call("Page.navigate", { url });
-      await delay(600);
-      await until(
-        () => evaluate("document.readyState!=='loading'"),
-        "page load",
-      );
-    };
-    const button = async (text) => {
-      await until(
-        () =>
-          evaluate(
-            `Array.from(document.querySelectorAll('button')).some(e=>e.checkVisibility()&&!e.disabled&&e.textContent.trim()===${JSON.stringify(text)})`,
-          ),
-        text,
-      );
-      await evaluate(
-        `Array.from(document.querySelectorAll('button')).find(e=>e.checkVisibility()&&!e.disabled&&e.textContent.trim()===${JSON.stringify(text)}).click()`,
-      );
-      await delay(150);
-    };
-    const fill = async (name, value) => {
-      await until(
-        () =>
-          evaluate(
-            `Array.from(document.querySelectorAll('[name=${name}]')).some(e=>e.checkVisibility()&&!e.matches(':disabled'))`,
-          ),
-        name,
-      );
-      await evaluate(
-        `(()=>{const e=Array.from(document.querySelectorAll('[name=${name}]')).find(e=>e.checkVisibility());e.focus();e.select();})()`,
-      );
-      for (const type of ["keyDown", "keyUp"])
-        await call("Input.dispatchKeyEvent", {
-          type,
-          key: "a",
-          code: "KeyA",
-          windowsVirtualKeyCode: 65,
-          modifiers: 2,
-        });
-      await call("Input.insertText", { text: value });
-    };
-    await call("Page.enable");
-    await call("Runtime.enable");
     return {
-      call,
-      evaluate,
-      go,
-      button,
-      fill,
+      ...page,
+      openTab,
       close: async () => {
         try {
-          await call("Browser.close");
+          await page.call("Browser.close");
         } catch {}
-        ws.close();
+        for (const socket of sockets) socket.close();
         stop(child);
         if (
           resolve(profile).startsWith(
@@ -197,7 +223,7 @@ export async function browser(visible = false) {
       },
     };
   } catch (e) {
-    ws?.close();
+    for (const socket of sockets) socket.close();
     stop(child);
     throw e;
   }

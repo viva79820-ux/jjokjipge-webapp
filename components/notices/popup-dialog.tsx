@@ -6,11 +6,16 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { publicImageUrl, type NoticePopup } from "@/lib/notices/rules";
 import {
+  noticePopupHidden,
+  popupChangeEvent,
   popupDismissed,
+  popupNow,
   popupTodayKey,
   rememberSession,
   rememberToday,
+  seoulDate,
   summarizeNoticeBody,
+  type PopupMemory,
 } from "@/lib/notices/popup";
 function store(kind: "sessionStorage" | "localStorage") {
   try {
@@ -21,16 +26,28 @@ function store(kind: "sessionStorage" | "localStorage") {
 }
 function subscribePopupStorage(notify: () => void) {
   const onStorage = (event: StorageEvent) => {
-    if (event.key === popupTodayKey) notify();
+    if (event.key === popupTodayKey || event.key === null) notify();
   };
   window.addEventListener("storage", onStorage);
-  return () => window.removeEventListener("storage", onStorage);
+  window.addEventListener(popupChangeEvent, notify);
+  return () => {
+    window.removeEventListener("storage", onStorage);
+    window.removeEventListener(popupChangeEvent, notify);
+  };
 }
 function popupStorageSnapshot(id: string | null) {
   if (!id) return "empty";
-  return popupDismissed(store("sessionStorage"), store("localStorage"), id)
+  return popupDismissed(
+    store("sessionStorage"),
+    store("localStorage"),
+    id,
+    popupNow(),
+  )
     ? "hidden"
     : "visible";
+}
+function notifyPopupChange() {
+  window.dispatchEvent(new Event(popupChangeEvent));
 }
 export function NoticePopupDialog({ notice }: { notice: NoticePopup | null }) {
   const stored = useSyncExternalStore(
@@ -38,21 +55,40 @@ export function NoticePopupDialog({ notice }: { notice: NoticePopup | null }) {
     () => popupStorageSnapshot(notice?.id ?? null),
     () => "pending",
   );
-  const [memoryHiddenId, setMemoryHiddenId] = useState<string | null>(null);
+  const [memorySession, setMemorySession] = useState<
+    NonNullable<PopupMemory["session"]>
+  >({});
+  const [memoryToday, setMemoryToday] = useState<
+    NonNullable<PopupMemory["today"]>
+  >({});
   const [failed, setFailed] = useState(false);
   const router = useRouter();
   const ready = stored !== "pending";
-  const open = stored === "visible" && !!notice && memoryHiddenId !== notice.id;
+  const open =
+    ready &&
+    !!notice &&
+    !noticePopupHidden(
+      store("sessionStorage"),
+      store("localStorage"),
+      notice.id,
+      popupNow(),
+      { session: memorySession, today: memoryToday },
+    );
   const src = notice ? publicImageUrl(notice.image_path) : null;
   const closeForSession = () => {
     if (!notice) return;
+    const now = popupNow();
     try {
       const session = store("sessionStorage");
-      if (session) rememberSession(session, notice.id);
+      if (!session) throw Error("session");
+      rememberSession(session, notice.id, now);
+      notifyPopupChange();
     } catch {
-      /* 저장이 불가능하면 이 화면의 메모리 닫기만 유지한다. */
+      setMemorySession((current) => ({
+        ...current,
+        [notice.id]: { at: now.getTime() },
+      }));
     }
-    setMemoryHiddenId(notice.id);
   };
   return (
     <>
@@ -80,14 +116,23 @@ export function NoticePopupDialog({ notice }: { notice: NoticePopup | null }) {
                 variant="secondary"
                 onClick={() => {
                   if (!notice) return;
+                  const now = popupNow();
                   try {
                     const local = store("localStorage");
-                    if (local)
-                      rememberToday(local, store("sessionStorage"), notice.id);
+                    if (!local) throw Error("local");
+                    rememberToday(
+                      local,
+                      store("sessionStorage"),
+                      notice.id,
+                      now,
+                    );
+                    notifyPopupChange();
                   } catch {
-                    /* 저장이 불가능하면 이 화면의 메모리 닫기만 유지한다. */
+                    setMemoryToday((current) => ({
+                      ...current,
+                      [notice.id]: { date: seoulDate(now), at: now.getTime() },
+                    }));
                   }
-                  setMemoryHiddenId(notice.id);
                 }}
               >
                 오늘 하루 보지 않기

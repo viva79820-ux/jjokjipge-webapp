@@ -601,7 +601,7 @@ test("browser orchestration preserves binary boundary and files on lost response
   assert.equal(r.result.state, "unknown");
   assert.equal(r.uploaded, fresh);
 });
-const popup = load("../lib/notices/popup.ts");
+const popup = load("../lib/notices/popup.ts", { "./rules": rules });
 function memoryStore(initial = {}) {
   const data = { ...initial };
   return {
@@ -735,21 +735,26 @@ test("popup dismissal follows the notice id and Seoul date without extra storage
   const session = memoryStore();
   const local = memoryStore({ "other-site": "keep" });
   assert.equal(popup.popupDismissed(session, local, id, beforeMidnight), false);
-  popup.rememberSession(session, id);
+  popup.rememberSession(session, id, beforeMidnight);
   assert.equal(popup.popupDismissed(session, local, id, beforeMidnight), true);
   assert.equal(
     popup.popupDismissed(session, local, fresh, beforeMidnight),
     false,
   );
   assert.equal(session.data[popup.popupTodayKey], undefined);
-  popup.rememberToday(local, session, id, beforeMidnight);
-  assert.deepEqual(JSON.parse(local.data[popup.popupTodayKey]), {
+  popup.rememberToday(
+    local,
+    session,
     id,
-    date: "2026-11-10",
-  });
-  assert.equal(session.data[popup.popupSessionKey], undefined);
+    new Date(beforeMidnight.getTime() + 1000),
+  );
+  const todayFile = JSON.parse(local.data[popup.popupTodayKey]);
+  assert.equal(todayFile.v, 1);
+  assert.equal(todayFile.items[id].date, "2026-11-10");
+  assert.equal(typeof todayFile.items[id].at, "number");
   assert.equal(local.data["other-site"], "keep");
   assert.equal(popup.popupDismissed(session, local, id, beforeMidnight), true);
+  assert.equal(popup.popupDismissed(session, local, id, afterMidnight), false);
   assert.equal(
     popup.popupDismissed(memoryStore(), local, id, afterMidnight),
     false,
@@ -777,4 +782,130 @@ test("popup dismissal follows the notice id and Seoul date without extra storage
   assert.equal(popup.popupDismissed(denied, denied, id), false);
   assert.throws(() => popup.rememberSession(denied, id));
   assert.throws(() => popup.rememberToday(denied, denied, id));
+});
+test("popup dismissal keeps each notice and expires only the earlier session close", () => {
+  const day = new Date("2026-11-10T14:30:00Z");
+  const later = new Date("2026-11-10T14:30:05Z");
+  const afterHide = new Date("2026-11-10T14:30:10Z");
+  const next = new Date("2026-11-10T15:30:00Z");
+  const noticeA = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const noticeB = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const session = memoryStore({ "other-site": "keep" });
+  const local = memoryStore({ "other-site": "keep" });
+  popup.rememberSession(session, noticeA, day);
+  popup.rememberSession(session, noticeB, later);
+  assert.equal(popup.popupDismissed(session, local, noticeA, day), true);
+  assert.equal(popup.popupDismissed(session, local, noticeB, day), true);
+  assert.equal(popup.popupDismissed(session, local, fresh, day), false);
+  const tabSession = memoryStore();
+  popup.rememberSession(tabSession, noticeA, day);
+  popup.rememberSession(tabSession, noticeB, later);
+  popup.rememberToday(local, memoryStore(), noticeA, later);
+  popup.rememberToday(local, memoryStore(), noticeB, afterHide);
+  assert.equal(popup.popupDismissed(memoryStore(), local, noticeA, day), true);
+  assert.equal(popup.popupDismissed(memoryStore(), local, noticeB, day), true);
+  assert.equal(
+    popup.popupDismissed(memoryStore(), local, noticeA, next),
+    false,
+  );
+  assert.equal(
+    popup.popupDismissed(memoryStore(), local, noticeB, next),
+    false,
+  );
+  assert.equal(popup.popupDismissed(tabSession, local, noticeA, next), false);
+  assert.equal(popup.popupDismissed(tabSession, local, noticeB, next), false);
+  popup.rememberSession(tabSession, noticeA, afterHide);
+  assert.equal(popup.popupDismissed(tabSession, local, noticeA, next), true);
+  assert.equal(popup.popupDismissed(tabSession, local, noticeB, next), false);
+  assert.equal(session.data["other-site"], "keep");
+  assert.equal(local.data["other-site"], "keep");
+  const legacy = memoryStore();
+  legacy.setItem(popup.popupSessionKey, noticeA);
+  local.setItem(
+    popup.popupTodayKey,
+    JSON.stringify({ id: noticeA, date: "2026-11-10" }),
+  );
+  assert.equal(popup.popupDismissed(legacy, local, noticeA, day), true);
+  assert.equal(popup.popupDismissed(legacy, local, noticeA, next), false);
+  assert.equal(popup.popupDismissed(legacy, local, noticeB, next), false);
+  let writes = 0;
+  const watching = {
+    getItem: (key) => local.getItem(key),
+    setItem() {
+      writes += 1;
+    },
+    removeItem() {
+      writes += 1;
+    },
+  };
+  popup.popupDismissed(watching, watching, noticeA, next);
+  assert.equal(writes, 0);
+  popup.rememberToday(local, null, noticeB, day);
+  assert.equal(popup.popupDismissed(memoryStore(), local, noticeA, day), true);
+  assert.equal(popup.popupDismissed(memoryStore(), local, noticeB, day), true);
+  const carried = memoryStore();
+  carried.setItem(popup.popupSessionKey, noticeA);
+  popup.rememberSession(carried, noticeB, day);
+  popup.rememberSession(carried, "not-an-id", day);
+  assert.equal(
+    popup.popupDismissed(carried, memoryStore(), noticeA, day),
+    true,
+  );
+  assert.equal(
+    popup.popupDismissed(carried, memoryStore(), noticeB, day),
+    true,
+  );
+  assert.equal(
+    popup.noticePopupHidden(memoryStore(), memoryStore(), noticeA, day, {
+      today: { [noticeA]: { date: "2026-11-10", at: day.getTime() } },
+    }),
+    true,
+  );
+  assert.equal(
+    popup.noticePopupHidden(memoryStore(), memoryStore(), noticeA, next, {
+      today: { [noticeA]: { date: "2026-11-10", at: day.getTime() } },
+      session: { [noticeA]: { at: day.getTime() - 1000 } },
+    }),
+    false,
+  );
+  assert.equal(
+    popup.noticePopupHidden(memoryStore(), memoryStore(), noticeA, next, {
+      today: { [noticeA]: { date: "2026-11-10", at: later.getTime() } },
+      session: { [noticeA]: { at: afterHide.getTime() } },
+    }),
+    true,
+  );
+  const storedToday = memoryStore();
+  popup.rememberToday(storedToday, null, noticeA, afterHide);
+  assert.equal(
+    popup.noticePopupHidden(memoryStore(), storedToday, noticeA, next, {
+      session: { [noticeA]: { at: day.getTime() } },
+    }),
+    false,
+  );
+});
+test("expired today markers keep the newest invalidation times", () => {
+  const day = new Date("2026-11-10T01:00:00Z");
+  const next = new Date("2026-11-11T01:00:00Z");
+  const local = memoryStore({ "other-site": "keep" });
+  const session = memoryStore();
+  const ids = Array.from(
+    { length: popup.popupExpiredTodayLimit + 1 },
+    (_, index) =>
+      `cccccccc-cccc-4ccc-8ccc-${index.toString(16).padStart(12, "0")}`,
+  );
+  ids.forEach((noticeId, index) => {
+    const at = new Date(day.getTime() + index * 1000);
+    popup.rememberSession(session, noticeId, new Date(at.getTime() - 500));
+    popup.rememberToday(local, null, noticeId, at);
+  });
+  assert.equal(popup.popupDismissed(session, local, ids[0], day), true);
+  assert.equal(popup.popupDismissed(session, local, ids.at(-1), day), true);
+  const keeper = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+  popup.rememberToday(local, null, keeper, next);
+  assert.equal(local.data["other-site"], "keep");
+  assert.equal(popup.popupDismissed(memoryStore(), local, keeper, next), true);
+  assert.equal(popup.popupDismissed(session, local, ids[0], next), true);
+  assert.equal(popup.popupDismissed(session, local, ids[1], next), false);
+  assert.equal(popup.popupDismissed(session, local, ids.at(-1), next), false);
 });
