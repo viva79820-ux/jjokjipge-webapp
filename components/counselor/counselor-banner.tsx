@@ -29,7 +29,7 @@ export function CounselorBanner({ counselors }: { counselors: Counselor[] }) {
     };
   }, [embla, update]);
   return (
-    <section aria-label="추천 상담사 배너">
+    <section aria-label="추천 상담사 배너" className="min-w-0 max-w-full">
       <div className="relative">
         <div
           ref={viewport}
@@ -57,10 +57,10 @@ export function CounselorBanner({ counselors }: { counselors: Counselor[] }) {
                   <p className="text-sm text-gold-light md:text-base">
                     추천 상담사
                   </p>
-                  <p className="mt-2 text-xl font-bold md:text-2xl">
+                  <p className="mt-2 wrap-anywhere text-xl font-bold md:text-2xl">
                     <CounselorName name={counselor.name} suffix="same" />
                   </p>
-                  <div className="mt-3 flex flex-wrap gap-1">
+                  <div className="mt-3 flex min-w-0 max-w-full flex-wrap gap-1">
                     {displayChips(counselor).map((tag, index) => (
                       <Chip key={tag} primary={index === 0}>
                         {tag}

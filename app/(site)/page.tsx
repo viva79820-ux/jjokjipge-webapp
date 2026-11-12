@@ -32,7 +32,7 @@ async function HomeContent() {
   const counselors = await getCounselors();
   const recommended = counselors.filter((c) => c.isRecommended);
   return (
-    <div className="space-y-7 px-4 pt-4 md:space-y-9 md:px-6">
+    <div className="min-w-0 space-y-7 px-4 pt-4 md:space-y-9 md:px-6">
       <CounselorBanner counselors={recommended} />
       <section aria-label="상담 카테고리" className="grid grid-cols-4 gap-2">
         {categories.map(({ label, href, icon: Icon }, index) => (

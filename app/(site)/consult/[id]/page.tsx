@@ -34,7 +34,7 @@ async function CounselorContent({ params }: Props) {
   const bookingHref = `/consult/${counselor.id}/book`;
   const chips = displayChips(counselor);
   return (
-    <div className="px-4 pt-3 md:px-6">
+    <div className="min-w-0 px-4 pt-3 md:px-6">
       <Link
         href="/consult"
         className="inline-flex min-h-11 items-center text-sm text-muted"
@@ -43,18 +43,18 @@ async function CounselorContent({ params }: Props) {
         상담사 목록
       </Link>
       <div className="space-y-7 md:space-y-9">
-        <section className="grid gap-4 md:grid-cols-[280px_minmax(0,1fr)] md:items-start md:gap-6">
+        <section className="grid min-w-0 gap-4 md:grid-cols-[280px_minmax(0,1fr)] md:items-start md:gap-6">
           <CounselorPhoto
             src={counselor.imageUrl}
             alt={`${counselorHeading(counselor.name)} 사진`}
             sizes="(min-width: 768px) 280px, 100vw"
             className="aspect-square w-full rounded-card"
           />
-          <div>
-            <h1 className="text-xl font-bold md:text-2xl">
+          <div className="min-w-0 max-w-full">
+            <h1 className="wrap-anywhere text-xl font-bold md:text-2xl">
               <CounselorName name={counselor.name} />
             </h1>
-            <div className="mt-3 flex flex-wrap gap-1">
+            <div className="mt-3 flex min-w-0 max-w-full flex-wrap gap-1">
               {chips.map((tag, index) => (
                 <Chip key={tag} primary={index === 0}>
                   {tag}
@@ -72,18 +72,21 @@ async function CounselorContent({ params }: Props) {
             </Button>
           </div>
         </section>
-        <section>
+        <section className="min-w-0">
           <SectionTitle title="상담사 소개" />
-          <p className="leading-relaxed whitespace-pre-wrap">
+          <p className="wrap-anywhere leading-relaxed whitespace-pre-wrap">
             {counselor.description}
           </p>
         </section>
         {counselor.careers.length > 0 && (
-          <section>
+          <section className="min-w-0">
             <SectionTitle title="경력·교육·자격" />
-            <ul className="list-disc space-y-2 pl-5">
+            <ul className="min-w-0 list-disc space-y-2 pl-5">
               {counselor.careers.map((career, index) => (
-                <li key={`${index}-${career}`} className="whitespace-pre-wrap">
+                <li
+                  key={`${index}-${career}`}
+                  className="wrap-anywhere whitespace-pre-wrap"
+                >
                   {career}
                 </li>
               ))}

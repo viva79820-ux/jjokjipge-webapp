@@ -82,8 +82,8 @@ async function BookingContent({ params, searchParams }: Props) {
       </p>
     );
   return (
-    <div className="space-y-7 px-4 pt-3 md:space-y-9 md:px-6">
-      <header>
+    <div className="min-w-0 space-y-7 px-4 pt-3 md:space-y-9 md:px-6">
+      <header className="min-w-0">
         <Link
           href={`/consult/${counselor.id}`}
           className="inline-flex min-h-11 items-center text-sm text-muted"
@@ -92,7 +92,7 @@ async function BookingContent({ params, searchParams }: Props) {
           상담사 정보
         </Link>
         <h1 className="mt-2 text-xl font-bold md:text-2xl">전화상담 예약</h1>
-        <p className="mt-3 text-base font-bold md:text-lg">
+        <p className="mt-3 wrap-anywhere text-base font-bold md:text-lg">
           {counselorHeading(counselor.name)}
         </p>
         {counselor.storeName.trim() && (

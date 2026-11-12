@@ -32,7 +32,7 @@ export function CounselorList({ counselors }: { counselors: Counselor[] }) {
           </button>
         ))}
       </div>
-      <ul className="mt-3 grid gap-2 md:grid-cols-2 md:gap-3">
+      <ul className="mt-3 grid min-w-0 gap-2 md:grid-cols-2 md:gap-3">
         {filtered.map((c) => (
           <CounselorListItem key={c.id} counselor={c} />
         ))}

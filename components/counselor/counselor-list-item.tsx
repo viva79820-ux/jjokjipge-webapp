@@ -24,10 +24,13 @@ export function CounselorListItem({ counselor }: { counselor: Counselor }) {
         />
       </Link>
       <div className="min-w-0 flex-1">
-        <Link href={href} className="text-base font-bold md:text-lg">
+        <Link
+          href={href}
+          className="block max-w-full wrap-anywhere text-base font-bold md:text-lg"
+        >
           <CounselorName name={counselor.name} />
         </Link>
-        <div className="mt-1 flex flex-wrap gap-1">
+        <div className="mt-1 flex min-w-0 max-w-full flex-wrap gap-1">
           {chips.map((tag, index) => (
             <Chip key={tag} primary={index === 0}>
               {tag}

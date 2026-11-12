@@ -45,7 +45,9 @@ export function BookingComplete({
         <dl className="mt-4 space-y-2">
           <div>
             <dt className="text-caption text-muted">상담사</dt>
-            <dd>{counselorHeading(reservation.counselorName)}</dd>
+            <dd className="wrap-anywhere">
+              {counselorHeading(reservation.counselorName)}
+            </dd>
           </div>
           <div>
             <dt className="text-caption text-muted">상담 상품</dt>

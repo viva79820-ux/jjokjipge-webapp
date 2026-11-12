@@ -12,6 +12,11 @@ const storeId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const hiddenStoreId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const sharedPhoto = "counselors/cccccccc-cccc-4ccc-8ccc-cccccccccccc.png";
 const brokenPhoto = "counselors/eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee.png";
+const longName = "W".repeat(30);
+const longCareer = "W".repeat(200);
+const mixedCareer = `https://example.invalid/${"W".repeat(40)}한글경력`;
+const longTag = "T".repeat(20);
+const longDescription = `${"W".repeat(120)}\n둘째 줄 ${"가".repeat(40)}`;
 const stores = [
   {
     id: storeId,
@@ -45,6 +50,15 @@ const products = [
     is_active: true,
   },
 ];
+products.push({
+  id: "ffffffff-ffff-4fff-8fff-fffffffffffe",
+  counselor_id: "dddddddd-dddd-4ddd-8ddd-ddddddddddd6",
+  name: "더미 30분",
+  minutes: 30,
+  price: 10000,
+  sort_order: 1,
+  is_active: true,
+});
 const baseRow = {
   tags: [],
   careers: [],
@@ -124,6 +138,24 @@ const counselors = [
     image_path: sharedPhoto,
     sort_order: 5,
     updated_at: "2026-11-11T00:00:00.555555+00:00",
+  },
+  {
+    ...baseRow,
+    id: "dddddddd-dddd-4ddd-8ddd-ddddddddddd6",
+    slug: "long",
+    store_id: storeId,
+    name: longName,
+    field: "tarot",
+    fields: ["tarot"],
+    tags: [longTag],
+    careers: [longCareer, mixedCareer],
+    intro: "짧은 소개",
+    description: longDescription,
+    image_path: sharedPhoto,
+    is_recommended: true,
+    is_active: true,
+    sort_order: 6,
+    updated_at: "2026-11-11T00:00:00.666666+00:00",
   },
 ];
 for (let index = 0; index < 25; index += 1) {
@@ -334,6 +366,18 @@ async function handle(req, res) {
     res.end(JSON.stringify(selected));
     return;
   }
+  if (table === "consult_products" || table === "reservations") {
+    const selected =
+      table === "reservations"
+        ? []
+        : products.filter((row) => matches(row, url.searchParams));
+    res.setHeader(
+      "Content-Range",
+      `0-${Math.max(0, selected.length - 1)}/${selected.length}`,
+    );
+    res.end(JSON.stringify(selected));
+    return;
+  }
   if (table !== "counselors") {
     res.setHeader("Content-Range", "*/0");
     res.end("[]");
@@ -421,6 +465,7 @@ const env = {
   NEXT_TELEMETRY_DISABLED: "1",
   NEXT_PUBLIC_SUPABASE_URL: `http://127.0.0.1:${fixture.address().port}`,
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "fixture-public",
+  SUPABASE_SECRET_KEY: "fixture-secret",
   COUNSELORS_SCREENSHOT_DIR: join(process.cwd(), "tmp", "counselors-admin"),
 };
 let app;
@@ -849,6 +894,95 @@ try {
     assert.equal(await overflow(), true, String(width));
     await go("/consult/a");
     assert.equal(await overflow(), true, String(width));
+  }
+  const measured = async () =>
+    page.evaluate(
+      "(()=>{const root=document.documentElement;return {scrollWidth:root.scrollWidth,clientWidth:root.clientWidth}})()",
+    );
+  const assertFits = async (label) => {
+    const size = await measured();
+    assert.ok(
+      size.scrollWidth <= size.clientWidth,
+      `${label} ${JSON.stringify(size)}`,
+    );
+  };
+  const assertInside = async (snippet) => {
+    const placed = await page.evaluate(`(() => {
+      const snippet = ${JSON.stringify(snippet)};
+      const nodes = Array.from(document.querySelectorAll("body *")).filter((node) => {
+        const text = node.textContent || "";
+        if (!text.includes(snippet)) return false;
+        return !Array.from(node.children).some((child) => (child.textContent || "").includes(snippet));
+      });
+      return nodes.map((node) => {
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        const text = range.getBoundingClientRect();
+        const card = node.closest("li, a, section, header, dd, p") || node;
+        const box = card.getBoundingClientRect();
+        return text.right > box.right + 1 || text.left < box.left - 1;
+      });
+    })()`);
+    assert.ok(placed.length > 0, snippet.slice(0, 24));
+    assert.ok(
+      placed.every((outside) => !outside),
+      snippet.slice(0, 24),
+    );
+  };
+  for (const width of [360, 768, 1024]) {
+    await page.call("Emulation.setDeviceMetricsOverride", {
+      width,
+      height: 900,
+      deviceScaleFactor: 1,
+      mobile: false,
+    });
+    await go("/consult/long");
+    await text(longName);
+    await text(longCareer);
+    await text(mixedCareer);
+    await text(longTag);
+    await text("둘째 줄");
+    await text("선생님");
+    await assertFits(`detail ${width}`);
+    await assertInside(longName);
+    await assertInside(longCareer);
+    await assertInside(mixedCareer);
+    await assertInside(longDescription.split("\n")[0]);
+    const separated = await page.evaluate(`(() => {
+      const name = Array.from(document.querySelectorAll("h1")).find((node) => node.textContent.includes(${JSON.stringify(longName)}));
+      const button = Array.from(document.querySelectorAll("a")).find((node) => node.textContent.includes("전화 상담 예약하기"));
+      const photo = document.querySelector("[data-counselor-photo-frame]");
+      const rect = (node) => {
+        const box = node.getBoundingClientRect();
+        return { left: box.left, right: box.right, top: box.top, bottom: box.bottom };
+      };
+      const hits = (a, b) => a.left < b.right - 1 && a.right > b.left + 1 && a.top < b.bottom - 1 && a.bottom > b.top + 1;
+      const nameBox = rect(name);
+      return hits(nameBox, rect(button)) || hits(nameBox, rect(photo));
+    })()`);
+    assert.equal(separated, false, `overlap ${width}`);
+    if (width === 360) await screenshot("customer-counselor-long-360.png");
+    await go("/consult");
+    await text(longName);
+    await text(longTag);
+    await assertFits(`list ${width}`);
+    await assertInside(longName);
+    await go("/");
+    await text(longName);
+    await text("상담사 A");
+    await assertFits(`home ${width}`);
+    await assertInside(longName);
+    await go("/consult/long/book");
+    await text(longName);
+    await text("전화상담 예약");
+    await assertFits(`book ${width}`);
+    await assertInside(longName);
+    await go("/consult/gayeon");
+    assert.equal(
+      await page.evaluate("document.body.innerText.includes('가연샘 선생님')"),
+      false,
+    );
+    await text("가연샘");
   }
   admin = false;
   await go("/admin/counselors");
