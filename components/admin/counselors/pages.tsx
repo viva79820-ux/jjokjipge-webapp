@@ -21,6 +21,7 @@ import {
   returnUrl,
   type Query,
 } from "@/lib/counselors/rules";
+import { productListUrl } from "@/lib/counselor-products/rules";
 import { CounselorEditor } from "./editor";
 import { CounselorRefresh } from "./refresh";
 
@@ -128,13 +129,22 @@ export async function CounselorAdminListPage({
                   )}
                 </div>
               </div>
-              <Button
-                href={`/admin/counselors/${counselor.id}?returnTo=${encodeURIComponent(back)}`}
-                variant="secondary"
-                className="shrink-0"
-              >
-                편집
-              </Button>
+              <div className="flex shrink-0 flex-col gap-2">
+                <Button
+                  href={`/admin/counselors/${counselor.id}?returnTo=${encodeURIComponent(back)}`}
+                  variant="secondary"
+                  className="shrink-0"
+                >
+                  편집
+                </Button>
+                <Button
+                  href={productListUrl(counselor.id, 1, "", back)}
+                  variant="secondary"
+                  className="shrink-0"
+                >
+                  상품 관리
+                </Button>
+              </div>
             </li>
           );
         })}

@@ -172,9 +172,9 @@ export function BookingForm({
               disabled={pending}
               onClick={() => selectProduct(item.id)}
               aria-pressed={item.id === product.id}
-              className={`block min-h-11 rounded-card border bg-surface p-3 text-left md:p-4 ${item.id === product.id ? "border-brand" : "border-border"}`}
+              className={`block min-h-11 min-w-0 rounded-card border bg-surface p-3 text-left md:p-4 ${item.id === product.id ? "border-brand" : "border-border"}`}
             >
-              <span className="block font-bold">{item.name}</span>
+              <span className="block wrap-anywhere font-bold">{item.name}</span>
               <span className="mt-2 block">
                 {item.price.toLocaleString("ko-KR")}원 <Badge>예시 가격</Badge>
               </span>

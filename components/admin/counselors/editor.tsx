@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
@@ -24,6 +25,7 @@ import {
 } from "@/lib/counselors/rules";
 import { submitCounselorAttempt } from "@/lib/counselors/submit";
 import { inspectImage, uploadImage } from "@/lib/counselors/upload";
+import { productListUrl } from "@/lib/counselor-products/rules";
 
 type StoreOption = { id: string; name: string; is_active: boolean };
 
@@ -60,7 +62,9 @@ export function CounselorEditor({
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState("");
   const [busy, setBusy] = useState(false);
-  const [modal, setModal] = useState<"save" | "reload" | null>(null);
+  const [modal, setModal] = useState<"save" | "reload" | "products" | null>(
+    null,
+  );
   const [message, setMessage] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [conflict, setConflict] = useState(false);
@@ -81,6 +85,29 @@ export function CounselorEditor({
   const prefix = useId();
   const router = useRouter();
   const back = returnUrl(returnTo);
+  const productsHref = original ? productListUrl(original.id, 1, "", back) : "";
+  function draftChanged() {
+    if (!original) return false;
+    if (file) return true;
+    return (
+      name !== original.name ||
+      representative !== original.field ||
+      fields.length !== original.fields.length ||
+      fields.some((item, index) => item !== original.fields[index]) ||
+      storeId !== (original.store_id || "") ||
+      intro !== (original.intro || "") ||
+      description !== (original.description || "") ||
+      tags.length !== original.tags.length ||
+      tags.some((item, index) => item !== original.tags[index]) ||
+      careers.length !== original.careers.length ||
+      careers.some((item, index) => item !== original.careers[index]) ||
+      path !== (original.image_path || "") ||
+      recommended !== original.is_recommended ||
+      isNew !== original.is_new ||
+      active !== original.is_active ||
+      sortOrder !== String(original.sort_order)
+    );
+  }
   const imageSrc = file ? preview : publicImageUrl(path);
   const knownStore = stores.some((store) => store.id === storeId);
   useLayoutEffect(() => {
@@ -220,7 +247,7 @@ export function CounselorEditor({
     setList(copy);
   }
   async function run() {
-    if (lock.current) return;
+    if (lock.current || modal === "products") return;
     lock.current = true;
     setBusy(true);
     setMessage("");
@@ -403,9 +430,28 @@ export function CounselorEditor({
   const approval = original?.approval_status;
   return (
     <div className="space-y-4 wrap-anywhere">
-      <Button href={back} variant="secondary">
-        목록으로 돌아가기
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button href={back} variant="secondary">
+          목록으로 돌아가기
+        </Button>
+        {original && (
+          <Link
+            href={productsHref}
+            className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-button border border-brand bg-surface px-3 text-sm font-semibold text-brand"
+            onClick={(event) => {
+              if (busy || uncertain || done) {
+                event.preventDefault();
+                return;
+              }
+              if (!draftChanged()) return;
+              event.preventDefault();
+              setModal("products");
+            }}
+          >
+            상품 관리
+          </Link>
+        )}
+      </div>
       <h1 className="text-xl font-bold">
         {initial ? "상담사 편집" : "상담사 등록"}
       </h1>
@@ -802,16 +848,33 @@ export function CounselorEditor({
       )}
       {modal && (
         <Modal
-          title={modal === "reload" ? "최신 내용 불러오기" : "상담사 저장 확인"}
+          title={
+            modal === "reload"
+              ? "최신 내용 불러오기"
+              : modal === "products"
+                ? "저장하지 않은 입력"
+                : "상담사 저장 확인"
+          }
           busy={busy}
           onClose={() => {
             if (!busy) setModal(null);
           }}
           footer={
             <>
-              <Button disabled={busy} onClick={run}>
-                확인 후 처리
-              </Button>
+              {modal === "products" ? (
+                <Button
+                  disabled={busy}
+                  onClick={() => {
+                    router.push(productsHref);
+                  }}
+                >
+                  상품 관리로 이동
+                </Button>
+              ) : (
+                <Button disabled={busy} onClick={run}>
+                  확인 후 처리
+                </Button>
+              )}
               <Button
                 disabled={busy}
                 variant="secondary"
@@ -825,6 +888,11 @@ export function CounselorEditor({
           {modal === "reload" ? (
             <p>
               작성 중인 입력과 선택한 사진이 사라지고 최신 내용으로 바뀝니다.
+            </p>
+          ) : modal === "products" ? (
+            <p>
+              저장하지 않은 입력이 있습니다. 상품 관리로 이동하면 작성 중인
+              내용이 사라집니다.
             </p>
           ) : (
             <>

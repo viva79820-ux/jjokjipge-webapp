@@ -9,13 +9,13 @@ export function ProductCard({
   bookingHref: string;
 }) {
   return (
-    <li>
+    <li className="min-w-0">
       <Link
         href={bookingHref}
-        className="flex min-h-11 flex-wrap items-center justify-between gap-3 rounded-card border border-border bg-surface p-3 md:p-4"
+        className="flex min-h-11 min-w-0 flex-wrap items-center justify-between gap-3 rounded-card border border-border bg-surface p-3 md:p-4"
       >
-        <div>
-          <h3 className="font-bold">{product.name}</h3>
+        <div className="min-w-0">
+          <h3 className="wrap-anywhere font-bold">{product.name}</h3>
         </div>
         <div className="flex items-center gap-2">
           <span className="font-bold">
