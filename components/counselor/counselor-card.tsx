@@ -1,22 +1,30 @@
 import Link from "next/link";
 import type { Counselor } from "@/lib/data/counselors";
+import { counselorHeading, displayChips } from "@/lib/counselors/rules";
 import { Chip } from "@/components/ui/chip";
-import { PhotoPlaceholder } from "./photo-placeholder";
+import { CounselorName } from "./name";
+import { CounselorPhoto } from "./photo";
 export function CounselorCard({ counselor }: { counselor: Counselor }) {
+  const chips = displayChips(counselor);
   return (
     <Link
       href={`/consult/${counselor.id}`}
       draggable={false}
       className="block h-full cursor-grab overflow-hidden rounded-card border border-gold bg-surface text-center select-none active:cursor-grabbing"
     >
-      <PhotoPlaceholder className="h-32 w-full !rounded-none md:h-48" />
+      <CounselorPhoto
+        src={counselor.imageUrl}
+        alt={`${counselorHeading(counselor.name)} 사진`}
+        sizes="(min-width: 768px) 180px, 42vw"
+        className="h-32 w-full rounded-none md:h-48"
+      />
       <div className="p-3 md:p-4">
         <p className="text-base font-bold md:text-lg">
-          {counselor.name} <span className="text-sm font-medium">선생님</span>
+          <CounselorName name={counselor.name} />
         </p>
         <div className="mt-2 flex flex-wrap justify-center gap-1">
-          {counselor.tags.map((tag, i) => (
-            <Chip key={tag} primary={i === 0}>
+          {chips.map((tag, index) => (
+            <Chip key={tag} primary={index === 0}>
               {tag}
             </Chip>
           ))}

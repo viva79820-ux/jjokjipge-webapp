@@ -5,8 +5,10 @@ import useEmblaCarousel from "embla-carousel-react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { Counselor } from "@/lib/data/counselors";
+import { counselorHeading, displayChips } from "@/lib/counselors/rules";
 import { Chip } from "@/components/ui/chip";
-import { PhotoPlaceholder } from "./photo-placeholder";
+import { CounselorName } from "./name";
+import { CounselorPhoto } from "./photo";
 
 export function CounselorBanner({ counselors }: { counselors: Counselor[] }) {
   const [viewport, embla] = useEmblaCarousel({ loop: false });
@@ -45,17 +47,22 @@ export function CounselorBanner({ counselors }: { counselors: Counselor[] }) {
                   aria-hidden="true"
                   className="pointer-events-none absolute inset-2 rounded-card border border-gold"
                 />
-                <PhotoPlaceholder className="h-32 w-24 shrink-0 md:h-48 md:w-36" />
+                <CounselorPhoto
+                  src={counselor.imageUrl}
+                  alt={`${counselorHeading(counselor.name)} 사진`}
+                  sizes="(min-width: 768px) 144px, 96px"
+                  className="h-32 w-24 shrink-0 rounded-card md:h-48 md:w-36"
+                />
                 <div className="relative min-w-0">
                   <p className="text-sm text-gold-light md:text-base">
                     추천 상담사
                   </p>
                   <p className="mt-2 text-xl font-bold md:text-2xl">
-                    {counselor.name} 선생님
+                    <CounselorName name={counselor.name} suffix="same" />
                   </p>
                   <div className="mt-3 flex flex-wrap gap-1">
-                    {counselor.tags.map((tag, i) => (
-                      <Chip key={tag} primary={i === 0}>
+                    {displayChips(counselor).map((tag, index) => (
+                      <Chip key={tag} primary={index === 0}>
                         {tag}
                       </Chip>
                     ))}

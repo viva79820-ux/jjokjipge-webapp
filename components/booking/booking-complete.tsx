@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { bookingConfig } from "@/lib/booking-config";
 import { reservationTimeLabel } from "@/lib/booking-time";
+import { counselorHeading } from "@/lib/counselors/rules";
 import { siteConfig } from "@/lib/site-config";
 import type { BookingSuccess } from "@/lib/reservations/types";
 
@@ -44,7 +45,7 @@ export function BookingComplete({
         <dl className="mt-4 space-y-2">
           <div>
             <dt className="text-caption text-muted">상담사</dt>
-            <dd>{reservation.counselorName} 선생님</dd>
+            <dd>{counselorHeading(reservation.counselorName)}</dd>
           </div>
           <div>
             <dt className="text-caption text-muted">상담 상품</dt>

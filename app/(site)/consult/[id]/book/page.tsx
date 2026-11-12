@@ -5,6 +5,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft, Store } from "lucide-react";
 import { getCounselor } from "@/lib/data/counselors";
+import { counselorHeading } from "@/lib/counselors/rules";
 import { getAvailabilityCalendar } from "@/lib/reservations/availability";
 import { BookingForm } from "@/components/booking/booking-form";
 import { Badge } from "@/components/ui/badge";
@@ -20,7 +21,9 @@ type Props = {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const counselor = await getCounselor((await params).id);
   if (!counselor) notFound();
-  return { title: `${counselor.name} 선생님 예약 | ${siteConfig.name}` };
+  return {
+    title: `${counselorHeading(counselor.name)} 예약 | ${siteConfig.name}`,
+  };
 }
 
 export default function BookingPage(props: Props) {
@@ -90,11 +93,13 @@ async function BookingContent({ params, searchParams }: Props) {
         </Link>
         <h1 className="mt-2 text-xl font-bold md:text-2xl">전화상담 예약</h1>
         <p className="mt-3 text-base font-bold md:text-lg">
-          {counselor.name} 선생님
+          {counselorHeading(counselor.name)}
         </p>
-        <Badge icon={Store} className="mt-2 px-3">
-          {counselor.storeName} 상담사
-        </Badge>
+        {counselor.storeName.trim() && (
+          <Badge icon={Store} className="mt-2 px-3">
+            {counselor.storeName} 상담사
+          </Badge>
+        )}
       </header>
       <BookingForm
         counselorSlug={counselor.id}
