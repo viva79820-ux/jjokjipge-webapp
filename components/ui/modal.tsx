@@ -9,6 +9,7 @@ export function Modal({
   children,
   footer,
   restoreFocusId,
+  initialFocusId,
   clearBottomTabs = false,
 }: {
   title: string;
@@ -17,6 +18,7 @@ export function Modal({
   children: ReactNode;
   footer: ReactNode;
   restoreFocusId?: string;
+  initialFocusId?: string;
   clearBottomTabs?: boolean;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -30,7 +32,11 @@ export function Modal({
     document.body.style.overflow = "hidden";
     document.documentElement.style.overflow = "hidden";
     dialog.showModal();
-    titleRef.current?.focus();
+    const initial = initialFocusId
+      ? document.getElementById(initialFocusId)
+      : null;
+    if (initial instanceof HTMLElement) initial.focus();
+    else titleRef.current?.focus();
     return () => {
       dialog.close();
       document.body.style.overflow = originalOverflow;
@@ -42,7 +48,7 @@ export function Modal({
       else if (trigger instanceof HTMLElement && trigger.isConnected)
         trigger.focus();
     };
-  }, [restoreFocusId]);
+  }, [initialFocusId, restoreFocusId]);
   const frame = clearBottomTabs
     ? "fixed top-4 left-1/2 max-h-[calc(100dvh_-_8.5rem)] w-[calc(100%_-_2rem)] max-w-lg -translate-x-1/2"
     : "fixed inset-0 m-auto max-h-[calc(100dvh_-_2rem)] w-[calc(100%_-_2rem)] max-w-lg";

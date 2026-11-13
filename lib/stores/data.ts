@@ -49,14 +49,21 @@ export async function storeAdminList(page: number, status = "") {
 export async function storeAdminDetail(id: string) {
   if (!(await requireAdmin())) return null;
   if (!uuid(id)) return { missing: true as const };
-  const { data, error } = await (
-    await createClient()
-  )
+  const db = await createClient();
+  const { data, error } = await db
     .from("stores")
     .select(columns)
     .eq("id", id)
     .maybeSingle();
   if (error) return { error: true as const };
   if (!data) return { missing: true as const };
-  return { row: data as StoreRecord };
+  const linked = await db
+    .from("counselors")
+    .select("id", { head: true, count: "exact" })
+    .eq("store_id", id);
+  return {
+    row: data as StoreRecord,
+    linkedCounselors:
+      linked.error || linked.count === null ? null : linked.count,
+  };
 }

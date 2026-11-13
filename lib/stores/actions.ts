@@ -321,7 +321,7 @@ export async function refreshStoreViews(id: string) {
       .maybeSingle();
     if (error) return false;
     if (data) invalidate(data.id, await linkedSlugs(db, data.id));
-    else revalidatePath("/admin/stores");
+    else invalidate(id, []);
     return true;
   } catch {
     return false;

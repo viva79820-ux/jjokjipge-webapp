@@ -207,6 +207,185 @@ function harness({
   };
 }
 
+function deleteHarness({
+  isAdmin = true,
+  current = { ...row, is_active: false },
+  counselors = [],
+  otherStores = [],
+  storeReadError = null,
+  counselorReadError = null,
+  refsError = null,
+  deleteError = null,
+  removeError = null,
+  zeroDelete = false,
+  throwAfterDelete = false,
+  beforeDelete = null,
+} = {}) {
+  let admin = isAdmin;
+  let saved = current ? { ...current } : null;
+  let cleanupError = removeError;
+  const linked = [...counselors];
+  const removed = [];
+  const paths = [];
+  const events = [];
+  const queries = [];
+  let deleteCount = 0;
+  const db = {
+    from(table) {
+      const query = {
+        table,
+        filters: [],
+        kind: "read",
+        fields: "",
+        options: {},
+      };
+      queries.push(query);
+      const api = {
+        select(fields, options = {}) {
+          query.fields = fields;
+          query.options = options;
+          return api;
+        },
+        eq(column, value) {
+          query.filters.push([column, value]);
+          return api;
+        },
+        delete() {
+          query.kind = "delete";
+          return api;
+        },
+        maybeSingle: async () => answer(query, true),
+        then(resolve, reject) {
+          return Promise.resolve(answer(query, false)).then(resolve, reject);
+        },
+      };
+      return api;
+    },
+    storage: {
+      from(name) {
+        assert.equal(name, "public-images");
+        return {
+          remove: async (items) => {
+            events.push("remove");
+            removed.push(items);
+            return { error: cleanupError };
+          },
+        };
+      },
+    },
+  };
+  function matches(item, filters) {
+    return filters.every(([key, value]) => item?.[key] === value);
+  }
+  function answer(query, single) {
+    if (query.table === "counselors") {
+      const selected = linked.filter((item) => matches(item, query.filters));
+      return counselorReadError
+        ? { data: null, count: null, error: counselorReadError }
+        : {
+            data: query.options.head ? null : selected,
+            count: query.options.count ? selected.length : null,
+            error: null,
+          };
+    }
+    if (query.table !== "stores")
+      return { data: single ? null : [], count: 0, error: null };
+    if (query.kind === "delete") {
+      deleteCount += 1;
+      events.push("delete");
+      if (beforeDelete) beforeDelete({ linked, saved });
+      if (deleteError) return { data: null, error: deleteError };
+      if (
+        linked.some((item) => item.store_id === saved?.id) &&
+        matches(saved, query.filters)
+      )
+        return { data: null, error: { code: "23503" } };
+      if (zeroDelete || !saved || !matches(saved, query.filters))
+        return { data: null, error: null };
+      const deleted = saved;
+      saved = null;
+      if (throwAfterDelete) throw Error("response lost");
+      return { data: deleted, error: null };
+    }
+    const imageFilter = query.filters.find(([key]) => key === "image_path");
+    if (imageFilter) {
+      if (refsError) return { data: null, count: null, error: refsError };
+      const all = [...otherStores, ...(saved ? [saved] : [])];
+      const selected = all.filter((item) => matches(item, query.filters));
+      return {
+        data: query.options.head ? null : selected,
+        count: query.options.count ? selected.length : null,
+        error: null,
+      };
+    }
+    if (storeReadError)
+      return {
+        data: null,
+        count: null,
+        error: storeReadError,
+      };
+    const selected = saved && matches(saved, query.filters) ? saved : null;
+    return {
+      data: single ? selected : selected ? [selected] : [],
+      count: query.options.count ? (selected ? 1 : 0) : null,
+      error: null,
+    };
+  }
+  const adapters = {
+    "server-only": {},
+    "next/cache": { revalidatePath: (path) => paths.push(path) },
+    "@/lib/admin/auth": {
+      requireAdmin: async () =>
+        admin ? { userId: id, email: "admin@example.invalid" } : null,
+    },
+    "@/lib/admin/support-rules": {
+      versionValid: (value) => value === version || value === nextVersion,
+    },
+    "@/lib/supabase/server": {
+      createClient: async () => db,
+    },
+    "./rules": rules,
+  };
+  return {
+    ...load("../lib/stores/delete-actions.ts", adapters),
+    linked,
+    removed,
+    paths,
+    events,
+    queries,
+    getCurrent: () => saved,
+    setCurrent: (value) => {
+      saved = value;
+    },
+    setAdmin: (value) => {
+      admin = value;
+    },
+    setRemoveError: (value) => {
+      cleanupError = value;
+    },
+    deleteCount: () => deleteCount,
+  };
+}
+
+function deleteRequest(extra = {}) {
+  const data = new FormData();
+  for (const [key, value] of Object.entries({
+    id,
+    version,
+    confirmed_name: "매장 A",
+    ...extra,
+  }))
+    data.set(key, value);
+  return data;
+}
+
+function deletePrepare(extra = {}) {
+  const data = new FormData();
+  for (const [key, value] of Object.entries({ id, version, ...extra }))
+    data.set(key, value);
+  return data;
+}
+
 test("store input keeps newlines and rejects partial values", () => {
   const parsed = rules.parseStore(form());
   assert.deepEqual(parsed.errors, {});
@@ -599,6 +778,197 @@ test("lost save keeps the upload and cleanup compares every saved field", async 
   assert.equal(referenced.removed.length, 0);
 });
 
+test("store deletion checks admin, scalar fields, saved privacy, name and version", async () => {
+  const denied = deleteHarness({ isAdmin: false });
+  assert.equal(
+    (await denied.prepareStoreDelete(deletePrepare())).state,
+    "denied",
+  );
+  assert.equal(denied.deleteCount(), 0);
+
+  const invalid = deleteHarness();
+  const duplicateId = deletePrepare();
+  duplicateId.append("id", id);
+  assert.equal(
+    (await invalid.prepareStoreDelete(duplicateId)).state,
+    "blocked",
+  );
+  const fileVersion = deletePrepare();
+  fileVersion.set("version", new File([version], "version.txt"));
+  assert.equal(
+    (await invalid.prepareStoreDelete(fileVersion)).state,
+    "blocked",
+  );
+  assert.equal(
+    (
+      await invalid.prepareStoreDelete(
+        deletePrepare({ id: "not-a-uuid", version: "bad" }),
+      )
+    ).state,
+    "blocked",
+  );
+
+  const published = deleteHarness({ current: { ...row, is_active: true } });
+  const publicResult = await published.prepareStoreDelete(deletePrepare());
+  assert.equal(publicResult.state, "blocked");
+  assert.match(publicResult.message, /먼저 비공개로 저장/);
+  assert.equal(published.deleteCount(), 0);
+
+  const ready = deleteHarness();
+  const plan = await ready.prepareStoreDelete(deletePrepare());
+  assert.equal(plan.state, "ready");
+  assert.equal(ready.deleteCount(), 0);
+  assert.equal(ready.removed.length, 0);
+  const duplicateName = deleteRequest();
+  duplicateName.append("confirmed_name", "매장 A");
+  assert.equal((await plan.execute(duplicateName)).state, "blocked");
+  const fileName = deleteRequest();
+  fileName.set("confirmed_name", new File(["매장 A"], "name.txt"));
+  assert.equal((await plan.execute(fileName)).state, "blocked");
+  assert.equal(
+    (await plan.execute(deleteRequest({ confirmed_name: "다른 매장" }))).state,
+    "blocked",
+  );
+  assert.equal(
+    (await plan.execute(deleteRequest({ version: nextVersion }))).state,
+    "blocked",
+  );
+  assert.equal(ready.getCurrent().id, id);
+  assert.equal(ready.deleteCount(), 0);
+});
+
+test("every linked counselor blocks deletion and a new race is left to the FK", async () => {
+  const statuses = [
+    { store_id: id, is_active: true, approval_status: "approved" },
+    { store_id: id, is_active: false, approval_status: "approved" },
+    { store_id: id, is_active: false, approval_status: "pending" },
+  ];
+  const linked = deleteHarness({ counselors: statuses });
+  const result = await linked.prepareStoreDelete(deletePrepare());
+  assert.equal(result.state, "blocked");
+  assert.equal(result.linkedCount, 3);
+  assert.equal(linked.deleteCount(), 0);
+
+  const raced = deleteHarness({
+    beforeDelete: ({ linked: rows }) =>
+      rows.push({
+        store_id: id,
+        is_active: false,
+        approval_status: "rejected",
+      }),
+  });
+  const plan = await raced.prepareStoreDelete(deletePrepare());
+  const blocked = await plan.execute(deleteRequest());
+  assert.equal(blocked.state, "blocked");
+  assert.match(blocked.message, /연결된 상담사/);
+  assert.equal(raced.deleteCount(), 1);
+  assert.equal(raced.getCurrent().id, id);
+  assert.equal(raced.removed.length, 0);
+});
+
+test("conditional deletion confirms one row before cleaning its server photo", async () => {
+  const ready = deleteHarness();
+  const plan = await ready.prepareStoreDelete(deletePrepare());
+  const result = await plan.execute(deleteRequest());
+  assert.equal(result.state, "deleted");
+  assert.equal(ready.getCurrent(), null);
+  assert.equal(ready.deleteCount(), 1);
+  assert.deepEqual(ready.events, ["delete", "remove"]);
+  assert.deepEqual(ready.removed, [[oldPath]]);
+  const deletion = ready.queries.find((query) => query.kind === "delete");
+  assert.deepEqual(deletion.filters, [
+    ["id", id],
+    ["updated_at", version],
+    ["is_active", false],
+  ]);
+  assert.deepEqual(ready.paths, []);
+});
+
+test("delete conflicts, zero rows and database failures never remove photos", async () => {
+  for (const [name, options, expected] of [
+    ["외래 키 23001", { deleteError: { code: "23001" } }, "blocked"],
+    ["외래 키 23503", { deleteError: { code: "23503" } }, "blocked"],
+    ["권한", { deleteError: { code: "42501" } }, "denied"],
+    ["일반 오류", { deleteError: { code: "XX000" } }, "blocked"],
+    ["0행 응답", { deleteError: { code: "PGRST116" } }, "unknown"],
+    ["0행", { zeroDelete: true }, "unknown"],
+  ]) {
+    const instance = deleteHarness(options);
+    const plan = await instance.prepareStoreDelete(deletePrepare());
+    const result = await plan.execute(deleteRequest());
+    assert.equal(result.state, expected, name);
+    assert.equal(instance.getCurrent().id, id, name);
+    assert.equal(instance.removed.length, 0, name);
+  }
+
+  const changed = deleteHarness();
+  const changedPlan = await changed.prepareStoreDelete(deletePrepare());
+  changed.setCurrent({ ...changed.getCurrent(), updated_at: nextVersion });
+  const conflictResult = await changedPlan.execute(deleteRequest());
+  assert.equal(conflictResult.state, "conflict");
+  assert.equal(changed.deleteCount(), 0);
+  assert.equal(changed.removed.length, 0);
+
+  const republished = deleteHarness();
+  const publicPlan = await republished.prepareStoreDelete(deletePrepare());
+  republished.setCurrent({ ...republished.getCurrent(), is_active: true });
+  const publicResult = await publicPlan.execute(deleteRequest());
+  assert.equal(publicResult.state, "blocked");
+  assert.equal(republished.deleteCount(), 0);
+  assert.equal(republished.removed.length, 0);
+});
+
+test("shared photos stay, cleanup retries do not repeat DELETE, and lost responses reconcile", async () => {
+  const shared = deleteHarness({
+    otherStores: [{ ...row, id: "22222222-2222-4222-8222-222222222222" }],
+  });
+  const sharedPlan = await shared.prepareStoreDelete(deletePrepare());
+  const sharedResult = await sharedPlan.execute(deleteRequest());
+  assert.equal(sharedResult.state, "deleted");
+  assert.equal(shared.removed.length, 0);
+
+  const pending = deleteHarness({ removeError: { message: "storage" } });
+  const pendingPlan = await pending.prepareStoreDelete(deletePrepare());
+  const pendingResult = await pendingPlan.execute(deleteRequest());
+  assert.equal(pendingResult.state, "cleanup_pending");
+  assert.equal(pending.deleteCount(), 1);
+  assert.equal(pending.removed.length, 1);
+  pending.setRemoveError(null);
+  const retried = await pendingResult.retryCleanup();
+  assert.equal(retried.state, "deleted");
+  assert.equal(pending.deleteCount(), 1);
+  assert.equal(pending.removed.length, 2);
+
+  const lost = deleteHarness({ throwAfterDelete: true });
+  const lostPlan = await lost.prepareStoreDelete(deletePrepare());
+  const uncertain = await lostPlan.execute(deleteRequest());
+  assert.equal(uncertain.state, "unknown");
+  assert.equal(lost.getCurrent(), null);
+  assert.equal(lost.removed.length, 0);
+  const reconciled = await lostPlan.reconcile();
+  assert.equal(reconciled.state, "deleted");
+  assert.equal(lost.deleteCount(), 1);
+  assert.deepEqual(lost.removed, [[oldPath]]);
+});
+
+test("delete reconciliation and cleanup stop safely when authority or reads fail", async () => {
+  const instance = deleteHarness({ removeError: { message: "storage" } });
+  const plan = await instance.prepareStoreDelete(deletePrepare());
+  const result = await plan.execute(deleteRequest());
+  assert.equal(result.state, "cleanup_pending");
+  instance.setAdmin(false);
+  assert.equal((await result.retryCleanup()).state, "denied");
+  assert.equal(instance.deleteCount(), 1);
+
+  const unreadable = deleteHarness({
+    current: null,
+    storeReadError: { code: "XX000" },
+  });
+  const unreadableResult = await unreadable.prepareStoreDelete(deletePrepare());
+  assert.equal(unreadableResult.state, "unknown");
+  assert.equal(unreadable.removed.length, 0);
+});
+
 test("customer and admin store sources stay inside the existing schema", () => {
   const customer = readFileSync(
     new URL("../lib/data/stores.ts", import.meta.url),
@@ -661,7 +1031,23 @@ test("customer and admin store sources stay inside the existing schema", () => {
   assert.equal(data.includes("requireAdmin"), true);
   assert.equal(data.includes('.order("sort_order"'), true);
   assert.equal(data.includes('.order("id"'), true);
-  assert.equal(data.includes(".delete("), false);
+  assert.equal(data.includes('from("counselors")'), true);
+  assert.equal(data.includes('count: "exact"'), true);
+  const deletion = readFileSync(
+    new URL("../lib/stores/delete-actions.ts", import.meta.url),
+    "utf8",
+  );
+  assert.equal(deletion.includes("SUPABASE_SECRET_KEY"), false);
+  assert.equal(deletion.includes("storage.objects"), false);
+  assert.equal(deletion.includes(".delete()"), true);
+  assert.equal(deletion.includes('.eq("updated_at", source.version)'), true);
+  assert.equal(deletion.includes('.eq("is_active", false)'), true);
+  assert.equal(deletion.includes('error.code === "23001"'), true);
+  assert.equal(deletion.includes('error.code === "23503"'), true);
+  assert.match(
+    deletion,
+    /export async function prepareStoreDelete\([\s\S]*?const admin = await requireAdmin\(\)/,
+  );
   const adminPages = readFileSync(
     new URL("../components/admin/stores/pages.tsx", import.meta.url),
     "utf8",

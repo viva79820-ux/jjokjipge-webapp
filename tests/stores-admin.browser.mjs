@@ -10,6 +10,8 @@ import { browser, server, stop, until } from "./notices-browser-tools.mjs";
 const uid = "11111111-1111-4111-8111-111111111111";
 const sharedPhoto = "stores/cccccccc-cccc-4ccc-8ccc-cccccccccccc.png";
 const brokenPhoto = "stores/eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee.png";
+const cleanupPhoto = "stores/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.png";
+const lostPhoto = "stores/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.png";
 const longName = "가".repeat(80);
 const longAddress = "주".repeat(80);
 const stores = [
@@ -81,6 +83,14 @@ for (let index = 1; index <= 18; index += 1) {
     updated_at: `2026-11-13T00:00:01.${String(index).padStart(6, "0")}+00:00`,
   });
 }
+stores[4].image_path = cleanupPhoto;
+stores[5].image_path = lostPhoto;
+stores[6].image_path = sharedPhoto;
+stores[7].image_path = sharedPhoto;
+const cleanupStoreId = stores[4].id;
+const lostStoreId = stores[5].id;
+const sharedStoreId = stores[6].id;
+const raceStoreId = stores[7].id;
 const counselors = [
   {
     id: "dddddddd-dddd-4ddd-8ddd-ddddddddddd1",
@@ -118,15 +128,74 @@ const counselors = [
     approval_status: "approved",
     sort_order: 2,
   },
+  {
+    id: "dddddddd-dddd-4ddd-8ddd-ddddddddddd3",
+    slug: "hidden-public",
+    store_id: stores[2].id,
+    name: "숨김 매장 공개 상담사",
+    field: "tarot",
+    fields: ["tarot"],
+    tags: [],
+    careers: [],
+    intro: "",
+    description: "",
+    image_path: null,
+    is_recommended: false,
+    is_new: false,
+    is_active: true,
+    approval_status: "approved",
+    sort_order: 3,
+  },
+  {
+    id: "dddddddd-dddd-4ddd-8ddd-ddddddddddd4",
+    slug: "hidden-private",
+    store_id: stores[2].id,
+    name: "숨김 매장 비공개 상담사",
+    field: "tarot",
+    fields: ["tarot"],
+    tags: [],
+    careers: [],
+    intro: "",
+    description: "",
+    image_path: null,
+    is_recommended: false,
+    is_new: false,
+    is_active: false,
+    approval_status: "approved",
+    sort_order: 4,
+  },
+  {
+    id: "dddddddd-dddd-4ddd-8ddd-ddddddddddd5",
+    slug: "hidden-pending",
+    store_id: stores[2].id,
+    name: "숨김 매장 미승인 상담사",
+    field: "saju",
+    fields: ["saju"],
+    tags: [],
+    careers: [],
+    intro: "",
+    description: "",
+    image_path: null,
+    is_recommended: false,
+    is_new: false,
+    is_active: false,
+    approval_status: "pending",
+    sort_order: 5,
+  },
 ];
 const files = new Map();
 files.set(sharedPhoto, Buffer.from("shared-store"));
+files.set(cleanupPhoto, Buffer.from("cleanup-store"));
+files.set(lostPhoto, Buffer.from("lost-store"));
 const imageDimensions = new Map([[sharedPhoto, { width: 160, height: 90 }]]);
 let admin = true;
 let seq = 0;
 let cleanupFail = false;
 let loseResponse = false;
+let loseDeleteResponse = false;
+let linkBeforeDelete = false;
 const deletes = [];
+const deleteTrace = [];
 const saveTrace = [];
 const stamp = () =>
   `2026-11-13T03:00:00.${String(++seq).padStart(6, "0")}+00:00`;
@@ -363,6 +432,63 @@ async function handle(req, res) {
   }
   let selected = stores.filter((row) => privileged || row.is_active);
   selected = selected.filter((row) => matches(row, url.searchParams));
+  if (req.method === "DELETE") {
+    if (!privileged) {
+      res.writeHead(401);
+      res.end(JSON.stringify({ code: "42501", message: "permission denied" }));
+      return;
+    }
+    const target = selected[0] || null;
+    deleteTrace.push({
+      id: url.searchParams.get("id")?.slice(3) || null,
+      version: url.searchParams.get("updated_at")?.slice(3) || null,
+      active: url.searchParams.get("is_active")?.slice(3) || null,
+    });
+    if (linkBeforeDelete && target) {
+      linkBeforeDelete = false;
+      counselors.push({
+        id: `dddddddd-dddd-4ddd-8ddd-${String(counselors.length + 1).padStart(12, "0")}`,
+        slug: `race-${counselors.length + 1}`,
+        store_id: target.id,
+        name: "경합 상담사",
+        field: "tarot",
+        fields: ["tarot"],
+        tags: [],
+        careers: [],
+        intro: "",
+        description: "",
+        image_path: null,
+        is_recommended: false,
+        is_new: false,
+        is_active: false,
+        approval_status: "pending",
+        sort_order: 99,
+      });
+    }
+    if (
+      target &&
+      counselors.some((counselor) => counselor.store_id === target.id)
+    ) {
+      res.writeHead(409);
+      res.end(
+        JSON.stringify({ code: "23503", message: "foreign key violation" }),
+      );
+      return;
+    }
+    if (target) stores.splice(stores.indexOf(target), 1);
+    if (loseDeleteResponse && target) {
+      loseDeleteResponse = false;
+      req.socket.destroy();
+      return;
+    }
+    writeRows(
+      res,
+      target ? [projectStore(target, url.searchParams.get("select"))] : [],
+      0,
+      target ? 1 : 0,
+    );
+    return;
+  }
   if (["POST", "PATCH"].includes(req.method || "")) {
     if (!privileged) {
       res.writeHead(401);
@@ -773,7 +899,7 @@ try {
   await confirm();
   await text("매장을 저장했습니다.");
   assert.equal(stores[2].image_path, null);
-  assert.equal(files.has(sharedPhoto), false);
+  assert.equal(files.has(sharedPhoto), true);
   await go("/stores");
   await text("매장상담");
   await text("상담사 하나");
@@ -871,6 +997,188 @@ try {
   assert.equal(
     await page.evaluate(
       `document.querySelector('[data-store-slug="store-b"]').innerText.includes("상담사 둘")`,
+    ),
+    true,
+  );
+
+  await go(
+    `/admin/stores/${stores[1].id}?returnTo=${encodeURIComponent("/admin/stores")}`,
+  );
+  await text("매장 편집");
+  await text("공개 매장은 먼저 비공개로 저장해야 삭제할 수 있습니다.");
+  assert.equal(
+    await page.evaluate(
+      `Array.from(document.querySelectorAll("button")).find((item)=>item.checkVisibility()&&item.textContent.trim()==="매장 삭제").disabled`,
+    ),
+    true,
+  );
+  await page.evaluate(
+    `(()=>{const label=Array.from(document.querySelectorAll("label")).find((item)=>item.checkVisibility()&&item.textContent.trim()==="공개");label.querySelector("input").click()})()`,
+  );
+  await text(
+    "공개 체크를 끈 것만으로는 삭제할 수 없습니다. 먼저 비공개로 저장해 주세요.",
+  );
+
+  await go(
+    `/admin/stores/${stores[2].id}?returnTo=${encodeURIComponent("/admin/stores?status=private")}`,
+  );
+  await text("현재 확인된 연결 상담사: 3명");
+  await text(
+    "연결된 상담사가 있습니다. 상담사 관리에서 소속을 변경하거나 해제한 뒤 다시 시도해 주세요.",
+  );
+  assert.equal(
+    await page.evaluate(
+      `Array.from(document.querySelectorAll("button")).find((item)=>item.checkVisibility()&&item.textContent.trim()==="매장 삭제").disabled`,
+    ),
+    true,
+  );
+  const linkedDeletes = deleteTrace.length;
+  await page.button("삭제 조건 다시 확인");
+  await text("현재 확인된 연결 상담사: 3명");
+  assert.equal(deleteTrace.length, linkedDeletes);
+
+  const cleanupBefore = deleteTrace.length;
+  cleanupFail = true;
+  await go(
+    `/admin/stores/${cleanupStoreId}?returnTo=${encodeURIComponent("/admin/stores?page=2&status=private")}`,
+  );
+  await page.button("매장 삭제");
+  await until(
+    () =>
+      page.evaluate(
+        `document.activeElement?.getAttribute("name")==="confirmed_name"`,
+      ),
+    "delete confirmation focus",
+  );
+  for (const width of [360, 768, 1024]) {
+    await setWidth(width);
+    assert.equal(await overflow(), true, `delete modal ${width}`);
+    assert.equal(await touchOk(), true, `delete modal touch ${width}`);
+  }
+  await setWidth(360);
+  await page.call("Input.dispatchKeyEvent", {
+    type: "keyDown",
+    key: "Escape",
+    code: "Escape",
+    windowsVirtualKeyCode: 27,
+  });
+  await page.call("Input.dispatchKeyEvent", {
+    type: "keyUp",
+    key: "Escape",
+    code: "Escape",
+    windowsVirtualKeyCode: 27,
+  });
+  await until(
+    () => page.evaluate("!document.querySelector('dialog[open]')"),
+    "delete modal escape",
+  );
+  assert.equal(
+    await page.evaluate(
+      `document.activeElement?.textContent.trim()==="매장 삭제"`,
+    ),
+    true,
+  );
+  await page.button("매장 삭제");
+  await page.fill("confirmed_name", "채움 1");
+  await page.button("매장 영구 삭제");
+  await text("매장 DB 삭제가 끝났습니다.");
+  await text("사진 파일 정리만 남았습니다.");
+  assert.equal(deleteTrace.length, cleanupBefore + 1);
+  assert.equal(files.has(cleanupPhoto), true);
+  cleanupFail = false;
+  await page.button("사진 정리만 재시도");
+  await text("매장을 삭제했습니다.");
+  assert.equal(deleteTrace.length, cleanupBefore + 1);
+  assert.equal(files.has(cleanupPhoto), false);
+  assert.equal(
+    await page.evaluate(
+      `location.pathname==="/admin/stores"&&!new URLSearchParams(location.search).has("page")&&new URLSearchParams(location.search).get("status")==="private"`,
+    ),
+    true,
+  );
+
+  await go(
+    `/admin/stores/${lostStoreId}?returnTo=${encodeURIComponent("/admin/stores?status=private")}`,
+  );
+  await page.button("매장 삭제");
+  await page.fill("confirmed_name", "채움 2");
+  loseDeleteResponse = true;
+  await page.button("매장 영구 삭제");
+  await text("삭제 결과 다시 확인");
+  assert.equal(
+    stores.some((item) => item.id === lostStoreId),
+    false,
+  );
+  assert.equal(files.has(lostPhoto), true);
+  const lostDeleteCount = deleteTrace.length;
+  await page.button("삭제 결과 다시 확인");
+  await text("매장을 삭제했습니다.");
+  assert.equal(deleteTrace.length, lostDeleteCount);
+  assert.equal(files.has(lostPhoto), false);
+
+  await go(
+    `/admin/stores/${sharedStoreId}?returnTo=${encodeURIComponent("/admin/stores?status=private")}`,
+  );
+  await page.button("매장 삭제");
+  await page.fill("confirmed_name", "채움 3");
+  await page.button("매장 영구 삭제");
+  await text("매장을 삭제했습니다.");
+  assert.equal(files.has(sharedPhoto), true);
+
+  await go("/admin/stores?status=private");
+  await text("매장 관리");
+  await page.evaluate(
+    `document.querySelector('[data-store-id="${raceStoreId}"] a').click()`,
+  );
+  await text("매장 편집");
+  await selectImage();
+  await text("선택 중인 새 사진이 있습니다.");
+  assert.equal(
+    await page.evaluate(
+      `Array.from(document.querySelectorAll("button")).find((item)=>item.checkVisibility()&&item.textContent.trim()==="매장 삭제").disabled`,
+    ),
+    true,
+  );
+  await page.button("선택한 파일 취소");
+  await page.button("매장 삭제");
+  await until(
+    () => page.evaluate("!!document.querySelector('dialog[open]')"),
+    "delete modal before activity",
+  );
+  await page.evaluate("history.back()");
+  await until(
+    () => page.evaluate("location.pathname==='/admin/stores'"),
+    "delete activity back",
+  );
+  await page.evaluate("history.forward()");
+  await until(
+    () => page.evaluate(`location.pathname==='/admin/stores/${raceStoreId}'`),
+    "delete activity forward",
+  );
+  await text("매장 편집");
+  assert.equal(
+    await page.evaluate("!!document.querySelector('dialog[open]')"),
+    false,
+  );
+  assert.equal(await fieldValue("name"), "채움 4");
+  await page.button("매장 삭제");
+  await page.fill("confirmed_name", "채움 4");
+  linkBeforeDelete = true;
+  const raceDeletes = deleteTrace.length;
+  await page.button("매장 영구 삭제");
+  await text(
+    "연결된 상담사가 있습니다. 상담사 관리에서 소속을 변경하거나 해제한 뒤 다시 시도해 주세요.",
+  );
+  assert.equal(deleteTrace.length, raceDeletes + 1);
+  assert.equal(
+    stores.some((item) => item.id === raceStoreId),
+    true,
+  );
+
+  await go("/stores");
+  assert.equal(
+    await page.evaluate(
+      `!document.body.innerText.includes("채움 1")&&!document.body.innerText.includes("채움 2")&&!document.body.innerText.includes("채움 3")`,
     ),
     true,
   );

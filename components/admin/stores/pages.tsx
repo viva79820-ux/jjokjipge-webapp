@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { StorePhoto } from "@/components/store/photo";
 import { cleanupAction } from "@/lib/stores/cleanup";
 import { storeAdminDetail, storeAdminList } from "@/lib/stores/data";
+import { prepareStoreDelete } from "@/lib/stores/delete-actions";
 import {
   filters,
   listUrl,
@@ -52,7 +53,8 @@ export async function StoreAdminListPage({
       </div>
     );
   const pages = Math.max(1, Math.ceil(result.count / pageSize));
-  if (parsed.page > pages) redirect(listUrl(pages, parsed.status));
+  const notice = parsed.deleted ? "deleted" : parsed.saved ? "saved" : "";
+  if (parsed.page > pages) redirect(listUrl(pages, parsed.status, notice));
   const back = listUrl(parsed.page, parsed.status);
   return (
     <div className="space-y-4 wrap-anywhere">
@@ -61,6 +63,11 @@ export async function StoreAdminListPage({
       {parsed.saved && (
         <p role="status" className="text-brand">
           매장을 저장했습니다.
+        </p>
+      )}
+      {parsed.deleted && (
+        <p role="status" className="text-brand">
+          매장을 삭제했습니다.
         </p>
       )}
       <Button
@@ -181,7 +188,14 @@ export async function StoreEditorPage({
   const admin = await requireAdmin();
   if (!admin) return <AdminAccessDenied />;
   const back = returnUrl((await searchParams).returnTo);
-  if (!params) return <StoreEditor initial={null} returnTo={back} />;
+  if (!params)
+    return (
+      <StoreEditor
+        initial={null}
+        returnTo={back}
+        prepareDeleteAction={prepareStoreDelete}
+      />
+    );
   const id = (await params).id;
   if (!uuid(id)) notFound();
   const result = await storeAdminDetail(id);
@@ -202,6 +216,8 @@ export async function StoreEditorPage({
       key={row.id}
       initial={row}
       returnTo={back}
+      initialLinkedCounselors={result.linkedCounselors}
+      prepareDeleteAction={prepareStoreDelete}
       initialCleanup={
         row.image_path
           ? cleanupAction(row.image_path, admin.userId, undefined, row)

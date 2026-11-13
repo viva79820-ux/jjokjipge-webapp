@@ -75,21 +75,28 @@ export function filters(query: Query) {
     typeof page !== "string" ||
     !/^[1-9]\d{0,6}$/.test(page) ||
     !["", "public", "private"].includes(String(status)) ||
-    (query.store !== undefined && query.store !== "saved")
+    (query.store !== undefined &&
+      query.store !== "saved" &&
+      query.store !== "deleted")
   )
     return null;
   return {
     page: Number(page),
     status: String(status),
     saved: query.store === "saved",
+    deleted: query.store === "deleted",
   };
 }
 
-export function listUrl(page = 1, status = "", saved = false) {
+export function listUrl(
+  page = 1,
+  status = "",
+  notice: "" | "saved" | "deleted" = "",
+) {
   const params = new URLSearchParams();
   if (page > 1) params.set("page", String(page));
   if (status) params.set("status", status);
-  if (saved) params.set("store", "saved");
+  if (notice) params.set("store", notice);
   const query = params.toString();
   return `/admin/stores${query ? `?${query}` : ""}`;
 }
@@ -119,8 +126,16 @@ export function returnUrl(value: unknown) {
 }
 
 export function savedListUrl(back: string) {
+  return noticeListUrl(back, "saved");
+}
+
+export function deletedListUrl(back: string) {
+  return noticeListUrl(back, "deleted");
+}
+
+function noticeListUrl(back: string, notice: "saved" | "deleted") {
   const safe = returnUrl(back);
-  return `${safe}${safe.includes("?") ? "&" : "?"}store=saved`;
+  return `${safe}${safe.includes("?") ? "&" : "?"}store=${notice}`;
 }
 
 export function scalar(form: FormData, key: string) {
