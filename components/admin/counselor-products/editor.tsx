@@ -49,6 +49,8 @@ export function ProductEditor({
   const [conflict, setConflict] = useState(false);
   const [uncertain, setUncertain] = useState(false);
   const lock = useRef(false);
+  const baseline = useRef(initial);
+  const leaving = useRef(false);
   const reloadRef = useRef<HTMLDivElement>(null);
   const prefix = useId();
   const router = useRouter();
@@ -56,6 +58,12 @@ export function ProductEditor({
   const control =
     "mt-1 w-full min-w-0 min-h-11 rounded-button border border-border bg-surface p-3";
   useLayoutEffect(() => {
+    if (leaving.current) {
+      leaving.current = false;
+      lock.current = false;
+      setBusy(false);
+      setMessage("");
+    }
     return () => setModal(null);
   }, []);
   useEffect(() => {
@@ -91,6 +99,7 @@ export function ProductEditor({
     );
   }
   function applyRow(row: ProductRecord) {
+    baseline.current = row;
     setOriginal(row);
     setName(row.name);
     setMinutes(String(row.minutes));
@@ -99,11 +108,12 @@ export function ProductEditor({
     setActive(row.is_active);
   }
   function form() {
+    const source = baseline.current;
     const data = new FormData();
     for (const [key, value] of Object.entries({
-      id: original?.id || draftId,
-      mode: original ? "update" : "create",
-      version: original?.updated_at || "",
+      id: source?.id || draftId,
+      mode: source ? "update" : "create",
+      version: source?.updated_at || "",
       counselor_id: counselor.id,
       name,
       minutes,
@@ -120,6 +130,8 @@ export function ProductEditor({
     setErrors(result.errors || {});
     if (result.resetAttempt && !original) setDraftId(crypto.randomUUID());
     if (result.state === "saved" && result.row) {
+      if (original) applyRow(result.row);
+      leaving.current = true;
       setConflict(false);
       setUncertain(false);
       router.replace(
@@ -131,7 +143,7 @@ export function ProductEditor({
     setUncertain(result.state === "unknown");
   }
   async function run() {
-    if (lock.current || modal === "leave") return;
+    if (lock.current || leaving.current || modal === "leave") return;
     lock.current = true;
     setBusy(true);
     setMessage("");
@@ -159,12 +171,14 @@ export function ProductEditor({
         "결과를 확인하지 못했습니다. 저장 결과를 확인한 뒤 진행해 주세요.",
       );
     } finally {
-      lock.current = false;
-      setBusy(false);
+      if (!leaving.current) {
+        lock.current = false;
+        setBusy(false);
+      }
     }
   }
   async function reconcile() {
-    if (lock.current) return;
+    if (lock.current || leaving.current) return;
     lock.current = true;
     setBusy(true);
     try {
@@ -196,8 +210,10 @@ export function ProductEditor({
         "저장 결과를 확인하지 못했습니다. 입력은 유지하고 다시 확인해 주세요.",
       );
     } finally {
-      lock.current = false;
-      setBusy(false);
+      if (!leaving.current) {
+        lock.current = false;
+        setBusy(false);
+      }
     }
   }
   const visible =

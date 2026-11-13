@@ -180,6 +180,7 @@ let listFail = false;
 let loseResponse = false;
 let writes = 0;
 let seq = 0;
+const saveTrace = [];
 const stamp = () =>
   `2026-11-12T03:00:00.${String(++seq).padStart(6, "0")}+00:00`;
 const uid = "99999999-9999-4999-8999-999999999999";
@@ -360,6 +361,18 @@ async function handle(req, res) {
       );
       const created = { ...body, updated_at: stamp() };
       products.push(created);
+      saveTrace.push({
+        method: "POST",
+        id: created.id,
+        sent: "",
+        before: "",
+        after: created.updated_at,
+        matched: 1,
+        active: created.is_active,
+        name: created.name,
+        minutes: created.minutes,
+        price: created.price,
+      });
       if (loseResponse) {
         loseResponse = false;
         req.socket.destroy();
@@ -369,8 +382,23 @@ async function handle(req, res) {
       return;
     }
     let selected = products.filter((row) => matches(row, url.searchParams));
+    const sentRaw = url.searchParams.get("updated_at") || "";
+    const sent = sentRaw.startsWith("eq.") ? sentRaw.slice(3) : sentRaw;
+    const before = selected[0]?.updated_at || "";
     for (const row of selected)
       Object.assign(row, body, { updated_at: stamp() });
+    saveTrace.push({
+      method: "PATCH",
+      id: selected[0]?.id || "",
+      sent,
+      before,
+      after: selected[0]?.updated_at || "",
+      matched: selected.length,
+      active: selected[0]?.is_active ?? null,
+      name: selected[0]?.name || "",
+      minutes: selected[0]?.minutes ?? null,
+      price: selected[0]?.price ?? null,
+    });
     if (loseResponse) {
       loseResponse = false;
       req.socket.destroy();
@@ -739,6 +767,313 @@ try {
     assert.equal(await aboveTabs(), true, String(width));
     if (width === 1024) await screenshot("customer-book-1024.png");
   }
+  await setWidth(390);
+  const trackedId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1";
+  const privateProductId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4";
+  const snap = (id) => {
+    const row = products.find((item) => item.id === id);
+    return {
+      updated_at: row.updated_at,
+      name: row.name,
+      minutes: row.minutes,
+      price: row.price,
+      is_active: row.is_active,
+    };
+  };
+  const editorState = async () =>
+    page.evaluate(`(() => {
+      const field = (name) => {
+        const el = Array.from(document.querySelectorAll("[name='" + name + "']")).find((item) => item.checkVisibility());
+        return el ? el.value : "";
+      };
+      const box = Array.from(document.querySelectorAll("input[type=checkbox]")).find((item) => item.checkVisibility());
+      const fieldset = Array.from(document.querySelectorAll("fieldset")).find((item) => item.checkVisibility());
+      const textBody = document.body.innerText;
+      return {
+        href: location.pathname + location.search,
+        saved: textBody.includes("상담 상품을 저장했습니다."),
+        conflict: textBody.includes("변경됐습니다"),
+        name: field("name"),
+        minutes: field("minutes"),
+        price: field("price"),
+        active: box ? box.checked : null,
+        disabled: fieldset ? fieldset.disabled : null,
+        dialog: !!document.querySelector("dialog[open]"),
+      };
+    })()`);
+  const clientEdit = async (id) => {
+    await until(
+      () =>
+        page.evaluate(
+          `Array.from(document.querySelectorAll("a")).some((item)=>item.checkVisibility()&&(item.getAttribute("href")||"").includes(${JSON.stringify(id)}))`,
+        ),
+      "편집 링크",
+    );
+    const before = await page.evaluate("location.href");
+    await page.evaluate(
+      `Array.from(document.querySelectorAll("a")).find((item)=>item.checkVisibility()&&(item.getAttribute("href")||"").includes(${JSON.stringify(id)})).click()`,
+    );
+    await until(
+      () =>
+        page.evaluate(
+          `location.href!==${JSON.stringify(before)}&&location.pathname.includes(${JSON.stringify(id)})`,
+        ),
+      "편집 화면",
+    );
+    await text("상담 상품 편집");
+  };
+  const toggleActive = async () => {
+    await page.evaluate(
+      `(()=>{const label=Array.from(document.querySelectorAll("label")).find((item)=>item.checkVisibility()&&item.textContent.trim()==="공개");const input=label.querySelector("input");input.click()})()`,
+    );
+  };
+  const readGap = async () =>
+    page.evaluate(
+      "(() => { const hits = window.__gapHits || 0; window.__gapArmed = false; window.__gapHits = 0; return hits; })()",
+    );
+  const saveFromEditor = async () => {
+    const traceAt = saveTrace.length;
+    const clientAt = await page.evaluate(
+      "(window.__productSaves || []).length",
+    );
+    await page.button("저장 전 확인");
+    await until(
+      () => page.evaluate("!!document.querySelector('dialog[open]')"),
+      "modal",
+    );
+    const started = await page.evaluate("location.href");
+    await page.evaluate("window.__gapHits = 0; window.__gapArmed = true;");
+    await page.button("확인 후 처리");
+    await until(
+      () => page.evaluate("!document.querySelector('dialog[open]')"),
+      "modal closed",
+    );
+    await until(
+      () =>
+        page.evaluate(`(() => {
+          const textBody = document.body.innerText;
+          const moved =
+            location.href !== ${JSON.stringify(started)} &&
+            location.search.includes("product=saved") &&
+            textBody.includes("상담 상품을 저장했습니다.");
+          return (
+            moved ||
+            textBody.includes("변경됐습니다") ||
+            textBody.includes("거부됐습니다") ||
+            textBody.includes("관리자 권한이 필요합니다.")
+          );
+        })()`),
+      "save settled",
+    );
+    return {
+      view: await editorState(),
+      gap: await readGap(),
+      trace: saveTrace.slice(traceAt),
+      client: await page.evaluate(
+        `(window.__productSaves || []).slice(${clientAt})`,
+      ),
+    };
+  };
+  await go(`/admin/counselors/${publicId}/products/${trackedId}`);
+  await text("상담 상품 편집");
+  await page.evaluate(`(() => {
+    window.__productSaves = [];
+    window.__gapHits = 0;
+    window.__gapArmed = false;
+    const orig = window.fetch.bind(window);
+    window.fetch = async (...args) => {
+      let sample = "";
+      try {
+        const body = args[1] && args[1].body;
+        if (typeof body === "string") sample = body.slice(0, 4000);
+        else if (typeof URLSearchParams !== "undefined" && body instanceof URLSearchParams)
+          sample = body.toString().slice(0, 4000);
+        else if (typeof FormData !== "undefined" && body instanceof FormData)
+          sample = [...body.entries()].map(([key, value]) => key + "=" + String(value)).join("&").slice(0, 4000);
+        else if (body instanceof Uint8Array)
+          sample = new TextDecoder().decode(body.subarray(0, 4000));
+      } catch {}
+      if (sample.includes("is_active") || sample.includes("sort_order")) {
+        window.__productSaves.push({
+          versions: sample.match(/20\\d{2}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})/g) || [],
+          active: (sample.match(/is_active[\\s\\S]{0,24}(true|false)/) || [])[1] || "",
+        });
+      }
+      return orig(...args);
+    };
+    new MutationObserver(() => {
+      if (!window.__gapArmed) return;
+      const dialog = document.querySelector("dialog[open]");
+      const fieldset = Array.from(document.querySelectorAll("fieldset")).find((item) => item.checkVisibility());
+      if (/\\/products\\/[0-9a-f-]{36}/.test(location.pathname) && !dialog && fieldset && !fieldset.disabled)
+        window.__gapHits += 1;
+    }).observe(document.documentElement, { attributes: true, childList: true, subtree: true });
+  })()`);
+  const entered = snap(trackedId);
+  await toggleActive();
+  const turnedPrivate = await saveFromEditor();
+  const savedPrivate = snap(trackedId);
+  console.log(
+    "CONSECUTIVE_PRIVATE",
+    JSON.stringify({
+      entered,
+      saved: savedPrivate,
+      href: turnedPrivate.view.href,
+      savedMessage: turnedPrivate.view.saved,
+      conflict: turnedPrivate.view.conflict,
+      gap: turnedPrivate.gap,
+      trace: turnedPrivate.trace,
+      client: turnedPrivate.client,
+    }),
+  );
+  assert.equal(turnedPrivate.view.saved, true, "비공개 저장 후 목록으로 이동");
+  assert.equal(savedPrivate.is_active, false);
+  assert.notEqual(savedPrivate.updated_at, entered.updated_at);
+  assert.equal(turnedPrivate.trace[0].sent, entered.updated_at);
+  assert.equal(turnedPrivate.trace[0].before, entered.updated_at);
+  assert.equal(turnedPrivate.trace[0].after, savedPrivate.updated_at);
+  await clientEdit(trackedId);
+  const returned = await editorState();
+  console.log("CONSECUTIVE_RETURN", JSON.stringify(returned));
+  await page.fill("name", "테스트 연속공개");
+  if (returned.active === false) await toggleActive();
+  const turnedPublic = await saveFromEditor();
+  const savedPublic = snap(trackedId);
+  console.log(
+    "CONSECUTIVE_PUBLIC",
+    JSON.stringify({
+      before: savedPrivate,
+      saved: savedPublic,
+      href: turnedPublic.view.href,
+      savedMessage: turnedPublic.view.saved,
+      conflict: turnedPublic.view.conflict,
+      input: {
+        name: turnedPublic.view.name,
+        active: turnedPublic.view.active,
+      },
+      gap: turnedPublic.gap,
+      trace: turnedPublic.trace,
+      client: turnedPublic.client,
+    }),
+  );
+  assert.equal(
+    turnedPublic.view.conflict,
+    false,
+    "공개로 이어 저장할 때 거짓 충돌",
+  );
+  assert.equal(turnedPublic.view.saved, true, "이어 저장 후 목록으로 이동");
+  assert.equal(savedPublic.is_active, true);
+  assert.equal(savedPublic.name, "테스트 연속공개");
+  assert.equal(turnedPublic.trace[0].sent, turnedPublic.trace[0].before);
+  assert.equal(turnedPublic.trace[0].sent, savedPrivate.updated_at);
+  assert.equal(turnedPrivate.gap, 0, "첫 저장 직후 폼이 다시 열림");
+  assert.equal(turnedPublic.gap, 0, "이어 저장 직후 폼이 다시 열림");
+  await clientEdit(trackedId);
+  await page.fill("minutes", "41");
+  const minutesSave = await saveFromEditor();
+  assert.equal(minutesSave.view.conflict, false, "시간 이어 저장 충돌");
+  assert.equal(minutesSave.view.saved, true);
+  assert.equal(snap(trackedId).minutes, 41);
+  assert.equal(minutesSave.trace[0].sent, minutesSave.trace[0].before);
+  assert.equal(minutesSave.gap, 0);
+  await clientEdit(trackedId);
+  await page.fill("price", "16000");
+  const priceSave = await saveFromEditor();
+  assert.equal(priceSave.view.conflict, false, "가격 이어 저장 충돌");
+  assert.equal(priceSave.view.saved, true);
+  assert.equal(snap(trackedId).price, 16000);
+  assert.equal(priceSave.trace[0].sent, priceSave.trace[0].before);
+  assert.equal(priceSave.gap, 0);
+  await clientEdit(trackedId);
+  await page.fill("name", "테스트 임시보관");
+  await page.evaluate("history.back()");
+  await until(
+    () =>
+      page.evaluate(
+        `location.pathname.endsWith("/products") && !location.pathname.includes(${JSON.stringify(trackedId)})`,
+      ),
+    "뒤로 목록",
+  );
+  await page.evaluate("history.forward()");
+  await until(
+    () =>
+      page.evaluate(`location.pathname.includes(${JSON.stringify(trackedId)})`),
+    "앞으로 편집",
+  );
+  await text("상담 상품 편집");
+  const drafted = await editorState();
+  console.log("CONSECUTIVE_DRAFT", JSON.stringify(drafted));
+  assert.equal(drafted.name, "테스트 임시보관", "뒤로가기 뒤 작성 중 입력");
+  await page.fill("name", "테스트 연속공개");
+  const draftSave = await saveFromEditor();
+  assert.equal(draftSave.view.conflict, false, "앞으로가기 뒤 저장 충돌");
+  assert.equal(draftSave.view.saved, true);
+  assert.equal(draftSave.trace[0].sent, draftSave.trace[0].before);
+  assert.equal(snap(trackedId).name, "테스트 연속공개");
+  const keptRow = snap(trackedId);
+  const tracked = products.find((item) => item.id === trackedId);
+  tracked.updated_at = stamp();
+  await clientEdit(trackedId);
+  await page.fill("name", "테스트 연속충돌");
+  const conflicted = await saveFromEditor();
+  console.log(
+    "CONSECUTIVE_CONFLICT",
+    JSON.stringify({
+      kept: keptRow,
+      now: snap(trackedId),
+      view: conflicted.view,
+      trace: conflicted.trace,
+      client: conflicted.client,
+    }),
+  );
+  assert.equal(conflicted.view.conflict, true, "실제 충돌은 유지");
+  assert.equal(conflicted.view.saved, false);
+  assert.equal(conflicted.view.name, "테스트 연속충돌");
+  assert.equal(tracked.name, keptRow.name);
+  assert.equal(conflicted.trace.length, 0);
+  await page.button("최신 내용 다시 불러오기");
+  await until(
+    () => page.evaluate("!!document.querySelector('dialog[open]')"),
+    "reload modal",
+  );
+  await page.button("확인 후 처리");
+  await text("최신 내용을 불러왔습니다.");
+  assert.equal(
+    await page.evaluate(
+      `Array.from(document.querySelectorAll("[name=name]")).find((item)=>item.checkVisibility()).value`,
+    ),
+    keptRow.name,
+  );
+  await page.fill("name", "테스트 충돌후저장");
+  const recovered = await saveFromEditor();
+  assert.equal(recovered.view.conflict, false, "다시 불러온 뒤 저장");
+  assert.equal(recovered.view.saved, true);
+  assert.equal(snap(trackedId).name, "테스트 충돌후저장");
+  assert.equal(recovered.trace[0].sent, recovered.trace[0].before);
+  await clientEdit(privateProductId);
+  assert.equal((await editorState()).active, false);
+  await toggleActive();
+  const turnedOn = await saveFromEditor();
+  assert.equal(turnedOn.view.saved, true, "비공개 상품을 공개로 저장");
+  assert.equal(snap(privateProductId).is_active, true);
+  await clientEdit(privateProductId);
+  await toggleActive();
+  const turnedOff = await saveFromEditor();
+  console.log(
+    "CONSECUTIVE_REVERSE",
+    JSON.stringify({
+      on: turnedOn.trace,
+      off: turnedOff.trace,
+      db: snap(privateProductId),
+      conflict: turnedOff.view.conflict,
+      gap: turnedOff.gap,
+    }),
+  );
+  assert.equal(turnedOff.view.conflict, false, "공개 뒤 비공개로 이어 저장");
+  assert.equal(turnedOff.view.saved, true);
+  assert.equal(snap(privateProductId).is_active, false);
+  assert.equal(turnedOff.trace[0].sent, turnedOff.trace[0].before);
+  assert.equal(turnedOff.gap, 0);
   await page.call("Network.enable");
   await page.call("Network.clearBrowserCookies");
   await page.call("Page.navigate", {
