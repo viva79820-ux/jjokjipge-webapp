@@ -240,14 +240,15 @@ function project(row, select, privileged) {
   if (current) parts.push(current);
   const result = {};
   for (const part of parts) {
-    if (part.startsWith("stores("))
+    if (part.startsWith("stores(")) {
+      const fields = part
+        .slice("stores(".length, -1)
+        .split(",")
+        .map((item) => item.trim());
       result.stores = store
-        ? {
-            name: store.name,
-            is_active: store.is_active,
-          }
+        ? Object.fromEntries(fields.map((field) => [field, store[field]]))
         : null;
-    else if (part.startsWith("consult_products("))
+    } else if (part.startsWith("consult_products("))
       result.consult_products = owned;
     else result[part] = row[part];
   }

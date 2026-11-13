@@ -18,6 +18,7 @@ export type Counselor = {
   isRecommended: boolean;
   isNew: boolean;
   storeName: string;
+  storeSlug: string;
   products: { id: string; name: string; minutes: number; price: number }[];
 };
 
@@ -33,7 +34,7 @@ type CounselorRow = {
   image_path: string | null;
   is_recommended: boolean;
   is_new: boolean;
-  stores: { name: string } | null;
+  stores: { name: string; slug: string } | null;
   consult_products: Counselor["products"];
 };
 
@@ -52,12 +53,13 @@ function mapCounselor(row: CounselorRow): Counselor {
     isRecommended: row.is_recommended,
     isNew: row.is_new,
     storeName: row.stores?.name ?? "",
+    storeSlug: row.stores?.slug ?? "",
     products: row.consult_products,
   };
 }
 
 const columns =
-  "slug,name,field,fields,tags,careers,intro,description,image_path,is_recommended,is_new,stores(name),consult_products(id,name,minutes,price)";
+  "slug,name,field,fields,tags,careers,intro,description,image_path,is_recommended,is_new,stores(name,slug),consult_products(id,name,minutes,price)";
 
 function publicCounselors() {
   return createPublicClient()
