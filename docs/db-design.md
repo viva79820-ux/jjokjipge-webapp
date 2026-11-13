@@ -60,7 +60,7 @@
 | ---------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------ |
 | id                     | uuid PK                                                            |                                                                    |
 | slug                   | text unique not null                                               | 주소 `/consult/[slug]`. 지금 더미 주소(`/consult/a`)와 맞추려고 둠 |
-| store_id               | uuid FK → stores, null 허용                                        | 근무 매장                                                          |
+| store_id               | uuid FK → stores on delete restrict, null 허용                     | 근무 매장                                                          |
 | name                   | text not null                                                      | 활동명                                                             |
 | field                  | text not null check in ('tarot','saju')                            | 대표 분야. 반드시 fields에 포함. 9장                               |
 | fields                 | text[] not null, 기본값 없음                                       | 전체 분야. tarot·saju 1~2개. 9장                                   |
@@ -75,6 +75,13 @@
 | expert_url             | text null                                                          | 네이버 엑스퍼트 연결 대비                                          |
 | sort_order             | int not null default 0                                             |                                                                    |
 | is_active              | boolean not null default false                                     | 신규 기본 비공개. 기존 행 값은 유지. 9장                           |
+
+#### 매장 삭제 보호
+
+- 화면에서는 비공개 매장만 삭제 대상으로 삼지만, 공개 여부·상담사 공개 여부·승인 상태와 관계없이 연결 상담사가 한 명이라도 있으면 `counselors.store_id` FK가 매장 삭제를 거부한다.
+- `store_id`의 NULL 허용과 상담사 소속 해제·다른 매장으로 변경하는 기존 동작은 유지한다. 매장 삭제 과정에서 소속을 자동 해제하거나 기존 데이터를 변경하지 않는다.
+- DB 마이그레이션을 먼저 적용하고 확인한 뒤 별도 UI 단계에서 삭제 버튼과 서버 액션을 구현한다.
+- 매장 사진은 SQL로 지우지 않는다. 매장 DB 삭제가 확인된 뒤 다른 참조를 확인하고 Storage API로 정리한다.
 
 ### 2.4 consult_products (상담 상품)
 
