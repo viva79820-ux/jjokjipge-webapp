@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { SiteHeader } from "@/components/site-header";
-import { BottomTabs } from "@/components/bottom-tabs";
+import { BottomTabsFallback } from "@/components/bottom-tabs";
+import { SiteBottomNav } from "@/components/member-auth/site-bottom-nav";
 
 export default function SiteLayout({
   children,
@@ -13,8 +14,8 @@ export default function SiteLayout({
         <SiteHeader />
       </Suspense>
       <main className="pb-28">{children}</main>
-      <Suspense fallback={null}>
-        <BottomTabs />
+      <Suspense fallback={<BottomTabsFallback />}>
+        <SiteBottomNav />
       </Suspense>
     </div>
   );
