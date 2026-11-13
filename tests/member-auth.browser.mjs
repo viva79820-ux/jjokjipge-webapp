@@ -67,6 +67,7 @@ const app = spawn(
       CI: "1",
     },
     stdio: ["ignore", "pipe", "pipe"],
+    detached: process.platform !== "win32",
   },
 );
 app.stdout.on("data", (data) => {
@@ -86,10 +87,14 @@ function redact(value) {
 function stop(child) {
   if (!child?.pid) return;
   try {
-    execFileSync("taskkill", ["/pid", String(child.pid), "/t", "/f"], {
-      windowsHide: true,
-      stdio: "ignore",
-    });
+    if (process.platform === "win32") {
+      execFileSync("taskkill", ["/pid", String(child.pid), "/t", "/f"], {
+        windowsHide: true,
+        stdio: "ignore",
+      });
+    } else {
+      process.kill(-child.pid, "SIGTERM");
+    }
   } catch {}
 }
 async function until(check, label, timeout = 30000) {
@@ -129,7 +134,11 @@ try {
       `--user-data-dir=${profile}`,
       "about:blank",
     ],
-    { windowsHide: true, stdio: "ignore" },
+    {
+      windowsHide: true,
+      stdio: "ignore",
+      detached: process.platform !== "win32",
+    },
   );
   await until(
     () => existsSync(join(profile, "DevToolsActivePort")),
@@ -443,6 +452,161 @@ try {
   const switched = await textOf();
   assert.match(switched, new RegExp(nameB));
   assert.equal(switched.includes(nameA), false);
+
+  async function logoutRequests() {
+    const report = await (await fetch(`${mock.url}/__test/requests`)).json();
+    return report.requests.filter((item) => item.kind === "logout").length;
+  }
+  async function loginAs(email, secret, expectedName) {
+    await goto("/login");
+    await fill("email", email);
+    await fill("password", secret);
+    await click("button", "로그인");
+    await waitText(expectedName);
+  }
+  function storageBlock(method) {
+    if (method === "access") {
+      return `Object.defineProperty(window, "sessionStorage", { configurable: true, get() { throw new DOMException("blocked", "SecurityError"); } });`;
+    }
+    return `Object.defineProperty(window.sessionStorage, ${JSON.stringify(method)}, { configurable: true, value() { throw new DOMException("blocked", "SecurityError"); } });`;
+  }
+  function storageProbe(method) {
+    if (method === "access") return "void window.sessionStorage;";
+    if (method === "getItem") return `window.sessionStorage.getItem("x");`;
+    if (method === "removeItem")
+      return `window.sessionStorage.removeItem("x");`;
+    return `window.sessionStorage.setItem("x", "1");`;
+  }
+  async function patchStorage(method) {
+    const applied = await evaluate(`(() => {
+      ${storageBlock(method)}
+      try { ${storageProbe(method)} return false; }
+      catch (error) { return error.name === "SecurityError"; }
+    })()`);
+    if (applied !== true)
+      throw new Error(`저장소 ${method} 실패를 만들지 못했습니다.`);
+  }
+  let documentScript = null;
+  async function failStorageOnNextPages(method) {
+    const source = storageBlock(method);
+    const added = await cdp("Page.addScriptToEvaluateOnNewDocument", {
+      source,
+    });
+    documentScript = added.identifier;
+  }
+  async function clearDocumentScript() {
+    if (!documentScript) return;
+    await cdp("Page.removeScriptToEvaluateOnNewDocument", {
+      identifier: documentScript,
+    });
+    documentScript = null;
+  }
+  async function leaveProtectedPage() {
+    await evaluate("history.back()");
+    await delay(800);
+    await until(
+      async () =>
+        !(await textOf()).includes(nameB) && !(await textOf()).includes(nameA),
+      "저장소 실패 후 뒤로가기",
+      8000,
+    );
+  }
+
+  const beforeBlockedSet = await logoutRequests();
+  await patchStorage("setItem");
+  await click("button", "로그아웃");
+  await waitText("비밀번호 재설정");
+  assert.ok((await logoutRequests()) > beforeBlockedSet);
+  assert.equal((await textOf()).includes(nameB), false);
+  await leaveProtectedPage();
+  await loginAs(emailA, nextPassword, nameA);
+  assert.equal((await textOf()).includes(nameB), false);
+  await click("button", "로그아웃");
+  await waitText("비밀번호 재설정");
+
+  await failStorageOnNextPages("getItem");
+  await goto("/login");
+  assert.equal(
+    await evaluate(
+      `(() => { try { ${storageProbe("getItem")} return false; } catch (error) { return error.name === "SecurityError"; } })()`,
+    ),
+    true,
+  );
+  await waitText("비밀번호 재설정");
+  assert.equal(
+    browserErrors.some((item) => String(item).includes("SecurityError")),
+    false,
+  );
+  await clearDocumentScript();
+  await goto("/login");
+
+  await loginAs(emailB, password, nameB);
+  await failStorageOnNextPages("removeItem");
+  await click("button", "로그아웃");
+  await waitText("비밀번호 재설정");
+  assert.equal(
+    await evaluate(
+      `(() => { try { ${storageProbe("removeItem")} return false; } catch (error) { return error.name === "SecurityError"; } })()`,
+    ),
+    true,
+  );
+  await until(async () => {
+    const href = await evaluate("location.href");
+    await delay(400);
+    const next = await evaluate("location.href");
+    return href === next && String(href).includes("/login");
+  }, "removeItem 실패 후 로그인 화면 유지");
+  assert.equal(
+    await evaluate("document.querySelector('button[type=submit]').disabled"),
+    false,
+  );
+  await clearDocumentScript();
+
+  await loginAs(emailB, password, nameB);
+  const beforeAccess = await logoutRequests();
+  await patchStorage("access");
+  await click("button", "로그아웃");
+  await waitText("비밀번호 재설정");
+  assert.ok((await logoutRequests()) > beforeAccess);
+  await leaveProtectedPage();
+
+  await loginAs(emailB, password, nameB);
+  const beforeNetwork = await logoutRequests();
+  await evaluate(`(() => {
+    const original = window.fetch.bind(window);
+    window.fetch = (input, init = {}) => {
+      const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
+      if (headers.has("next-action")) {
+        window.fetch = original;
+        return Promise.reject(new TypeError("network down"));
+      }
+      return original(input, init);
+    };
+  })()`);
+  await click("button", "로그아웃");
+  await waitText("로그아웃하지 못했어요");
+  assert.equal(await logoutRequests(), beforeNetwork);
+  assert.equal(
+    await evaluate("document.querySelector('button[type=submit]').disabled"),
+    false,
+  );
+  await until(
+    async () =>
+      (await evaluate("document.activeElement?.getAttribute('role')")) ===
+      "alert",
+    "로그아웃 오류 포커스",
+  );
+  const alertText = await evaluate(
+    "document.querySelector('[role=alert]')?.textContent ?? ''",
+  );
+  assert.equal(alertText.includes("network down"), false);
+  assert.equal(alertText.includes(emailB), false);
+  assert.equal(alertText.includes(password), false);
+  await click("button", "로그아웃");
+  await waitText("비밀번호 재설정");
+  assert.equal((await textOf()).includes(nameB), false);
+  await loginAs(emailA, nextPassword, nameA);
+  assert.equal((await textOf()).includes(nameB), false);
 
   await goto("/admin");
   await waitText("관리자 권한이 없어요.");

@@ -1,27 +1,51 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { logout } from "@/lib/member-auth/actions";
-import { memberHardNavKey } from "./styles";
+import { messages } from "@/lib/member-auth/errors";
+import {
+  forgetHardNavigation,
+  rememberHardNavigation,
+} from "./navigation-reset";
+
+function isRedirectError(error: unknown) {
+  if (!error || typeof error !== "object" || !("digest" in error)) return false;
+  const digest = (error as { digest?: unknown }).digest;
+  return typeof digest === "string" && digest.startsWith("NEXT_REDIRECT");
+}
 
 export function LogoutForm() {
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const feedbackRef = useRef<HTMLParagraphElement>(null);
 
+  useEffect(() => {
+    if (message) feedbackRef.current?.focus();
+  }, [message]);
+
   return (
     <form
       action={async () => {
         setPending(true);
-        sessionStorage.setItem(memberHardNavKey, "1");
-        const result = await logout();
-        sessionStorage.removeItem(memberHardNavKey);
-        setMessage(
-          result.message ?? "로그아웃하지 못했어요. 다시 시도해 주세요.",
-        );
-        setPending(false);
-        feedbackRef.current?.focus();
+        setMessage(null);
+        const marked = rememberHardNavigation();
+        try {
+          const result = await logout();
+          forgetHardNavigation();
+          setMessage(result.message ?? messages.logout);
+          setPending(false);
+        } catch (error) {
+          if (isRedirectError(error)) {
+            // 저장소를 못 쓰면 로그인 화면을 통째로 다시 읽어 이전 회원 정보를 남기지 않는다.
+            if (!marked) window.location.replace("/login");
+            else throw error;
+            return;
+          }
+          forgetHardNavigation();
+          setMessage(messages.logout);
+          setPending(false);
+        }
       }}
     >
       {message && (
