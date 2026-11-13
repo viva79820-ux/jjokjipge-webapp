@@ -230,6 +230,11 @@ async function runSuccessScenario(hasUser) {
     assert.equal(baseline.state.target_fk.store_id_nullable, true);
     assert.equal(baseline.test_ids.length, 10);
     assert.ok(success.message.includes(expectedDescription));
+    assert.ok(
+      success.message.includes(
+        "대상 RESTRICT 제약의 삭제 거부 SQLSTATE는 23001·23503만 허용",
+      ),
+    );
     assert.ok(success.message.includes("실제 다중 연결 경쟁 재현은 아님"));
     assert.doesNotMatch(
       JSON.stringify(baseline),
@@ -245,6 +250,9 @@ async function runSuccessScenario(hasUser) {
     console.log(success.message);
     console.log(
       `STORES_DELETE_ROLLBACK_OK: ${expectedMode} 계정·profile·매장·상담사·SET NULL FK 원본 일치`,
+    );
+    console.log(
+      "STORES_DELETE_COMPATIBILITY_BRANCHES_OK: 23001·23503 허용과 다른 제약·권한·기타 오류 거부는 합성 진단값으로 검사",
     );
     return {
       count: Number(success.message.match(/검사 (\d+)개/)[1]),
@@ -303,11 +311,14 @@ try {
     delete from public.stores
     where id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeee0001';
   `);
-  await expectError(
+  const restrictError = await expectError(
     existingUser.run,
     "delete from public.stores where id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeee0002'",
     "23001",
     /violates RESTRICT setting of foreign key constraint/,
+  );
+  console.log(
+    `STORES_DELETE_PGLITE_RESTRICT_SQLSTATE: ${restrictError.code} (격리 엔진의 실제 DELETE 결과)`,
   );
   assert.equal(
     (

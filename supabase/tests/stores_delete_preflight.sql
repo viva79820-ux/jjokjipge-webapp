@@ -522,6 +522,99 @@ begin
 end;
 $$;
 
+create function pg_temp.stores_delete_restrict_error_allowed(
+  actual_state text,
+  actual_constraint text,
+  expected_constraint text
+)
+returns boolean
+language sql
+immutable
+security invoker
+set search_path = ''
+as $$
+  select coalesce(
+    actual_state = any (array['23001', '23503']::text[])
+    and actual_constraint = expected_constraint,
+    false
+  );
+$$;
+
+create function pg_temp.stores_delete_expected_restrict(
+  target_store_id uuid,
+  expected_constraint text,
+  label text
+)
+returns void
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  actual_state text;
+  actual_constraint text;
+  target record;
+begin
+  select
+    c.conname,
+    c.confdeltype,
+    pg_catalog.pg_get_constraintdef(c.oid, true) as definition
+  into target
+  from pg_catalog.pg_constraint c
+  join pg_catalog.pg_attribute a
+    on a.attrelid = c.conrelid
+    and a.attnum = c.conkey[1]
+  where c.conrelid = 'public.counselors'::regclass
+    and c.contype = 'f'
+    and pg_catalog.cardinality(c.conkey) = 1
+    and a.attname = 'store_id'
+    and c.confrelid = 'public.stores'::regclass;
+
+  if target.conname is distinct from expected_constraint
+    or target.confdeltype is distinct from 'r'
+    or target.definition not like '%ON DELETE RESTRICT%'
+  then
+    raise exception using
+      errcode = 'P0001',
+      message = 'STORES_DELETE_EXPECTED_RESTRICT_INVALID_FK: ' || label;
+  end if;
+
+  if not exists (
+    select 1
+    from public.stores
+    where id = target_store_id
+  ) then
+    raise exception using
+      errcode = 'P0001',
+      message = 'STORES_DELETE_EXPECTED_RESTRICT_STORE_MISSING: ' || label;
+  end if;
+
+  begin
+    delete from public.stores
+    where id = target_store_id;
+  exception when others then
+    get stacked diagnostics
+      actual_state = returned_sqlstate,
+      actual_constraint = constraint_name;
+
+    if not pg_temp.stores_delete_restrict_error_allowed(
+      actual_state,
+      actual_constraint,
+      expected_constraint
+    ) then
+      raise;
+    end if;
+
+    insert into pg_temp.stores_delete_results values (label);
+    return;
+  end;
+
+  raise exception using
+    errcode = 'P0001',
+    message = 'STORES_DELETE_EXPECTED_RESTRICT_MISSING: ' || label;
+end;
+$$;
+
 create function pg_temp.stores_delete_expected_error(
   command text,
   expected_state text,
@@ -609,8 +702,51 @@ end;
 $$;
 
 grant execute on function pg_temp.stores_delete_assert(boolean, text) to anon, authenticated;
+grant execute on function pg_temp.stores_delete_restrict_error_allowed(text, text, text) to anon, authenticated;
+grant execute on function pg_temp.stores_delete_expected_restrict(uuid, text, text) to authenticated;
 grant execute on function pg_temp.stores_delete_expected_error(text, text, text) to anon, authenticated;
 grant execute on function pg_temp.stores_delete_no_rows(text, text) to anon, authenticated;
+
+select pg_temp.stores_delete_assert(
+  pg_temp.stores_delete_restrict_error_allowed(
+    '23001',
+    'counselors_store_id_fkey',
+    'counselors_store_id_fkey'
+  ),
+  'RESTRICT 삭제 거부 호환 분기 23001'
+);
+select pg_temp.stores_delete_assert(
+  pg_temp.stores_delete_restrict_error_allowed(
+    '23503',
+    'counselors_store_id_fkey',
+    'counselors_store_id_fkey'
+  ),
+  'RESTRICT 삭제 거부 호환 분기 23503'
+);
+select pg_temp.stores_delete_assert(
+  not pg_temp.stores_delete_restrict_error_allowed(
+    '23503',
+    'other_constraint',
+    'counselors_store_id_fkey'
+  ),
+  '다른 제약의 FK 오류 거부'
+);
+select pg_temp.stores_delete_assert(
+  not pg_temp.stores_delete_restrict_error_allowed(
+    '42501',
+    'counselors_store_id_fkey',
+    'counselors_store_id_fkey'
+  ),
+  '권한 오류를 RESTRICT 성공으로 처리하지 않음'
+);
+select pg_temp.stores_delete_assert(
+  not pg_temp.stores_delete_restrict_error_allowed(
+    'P0001',
+    'counselors_store_id_fkey',
+    'counselors_store_id_fkey'
+  ),
+  '기타 오류를 RESTRICT 성공으로 처리하지 않음'
+);
 
 -- BEGIN EXACT MIGRATION
 -- 연결 상담사가 있는 매장은 삭제하지 못하게 하고, 상담사 소속은 명시적으로 변경하게 한다.
@@ -950,10 +1086,18 @@ select pg_temp.stores_delete_assert(
 
 select pg_temp.stores_delete_expected_error(
   format(
-    'delete from public.stores where id = %L',
-    (select id from stores_delete_test_ids where kind = 'linked_store')
+    'select pg_temp.stores_delete_expected_restrict(%L, %L, %L)',
+    (select id from stores_delete_test_ids where kind = 'denied_store'),
+    'counselors_store_id_fkey',
+    '연결이 없는 매장을 삭제하면 전용 헬퍼가 거부해야 함'
   ),
-  '23001',
+  'P0001',
+  '오류 없이 삭제되는 잘못된 RESTRICT 동작 거부'
+);
+
+select pg_temp.stores_delete_expected_restrict(
+  (select id from stores_delete_test_ids where kind = 'linked_store'),
+  'counselors_store_id_fkey',
   '연결 상담사가 있는 매장 삭제 FK 거부'
 );
 select pg_temp.stores_delete_assert(
@@ -972,12 +1116,9 @@ select pg_temp.stores_delete_assert(
   '삭제 거부 후 매장·상담사·store_id 유지'
 );
 
-select pg_temp.stores_delete_expected_error(
-  format(
-    'delete from public.stores where id = %L',
-    (select id from stores_delete_test_ids where kind = 'private_linked_store')
-  ),
-  '23001',
+select pg_temp.stores_delete_expected_restrict(
+  (select id from stores_delete_test_ids where kind = 'private_linked_store'),
+  'counselors_store_id_fkey',
   '비공개·승인대기 상담사가 연결된 매장 삭제 FK 거부'
 );
 select pg_temp.stores_delete_assert(
@@ -1128,7 +1269,7 @@ begin
   raise exception using
     errcode = 'P0001',
     message = format(
-      'STORES_DELETE_PREFLIGHT_OK: 검사 %s개 통과. %s. 한 연결의 역할·RLS·FK 검사이며 실제 다중 연결 경쟁 재현은 아님. RESTRICT FK 정의와 PostgreSQL 무결성 검사가 삭제 직전 연결도 최종 보호함. 실제 Supabase·Storage API·실제 로그인 미검증. 의도된 전체 롤백.',
+      'STORES_DELETE_PREFLIGHT_OK: 검사 %s개 통과. %s. 대상 RESTRICT 제약의 삭제 거부 SQLSTATE는 23001·23503만 허용. 한 연결의 역할·RLS·FK 검사이며 실제 다중 연결 경쟁 재현은 아님. RESTRICT FK 정의와 PostgreSQL 무결성 검사가 삭제 직전 연결도 최종 보호함. 실제 Supabase·Storage API·실제 로그인 미검증. 의도된 전체 롤백.',
       total,
       non_admin_description
     ),
