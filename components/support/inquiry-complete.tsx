@@ -37,12 +37,12 @@ export function InquiryComplete({
     }
   }
   return (
-    <section className="space-y-4 rounded-card border border-border bg-surface p-3 md:p-4">
+    <section className="space-y-4 rounded-card border border-border bg-surface p-3 @3xl/app:p-4">
       <Badge>접수 완료</Badge>
       <h1
         ref={titleRef}
         tabIndex={-1}
-        className="scroll-mt-4 text-lg font-bold focus:outline-none md:text-xl"
+        className="scroll-mt-4 text-lg font-bold focus:outline-none"
       >
         문의가 접수되었습니다.
       </h1>
@@ -63,7 +63,7 @@ export function InquiryComplete({
           {supportDate(receipt.createdAt)}
         </time>
       </p>
-      <p className="text-body md:text-base">
+      <p className="text-body">
         문의번호와 작성한 이메일로 답변을 확인할 수 있습니다.
       </p>
       <div className="flex flex-wrap gap-2">

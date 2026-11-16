@@ -96,7 +96,7 @@ export function StoreEditor({
   const router = useRouter();
   const back = returnUrl(returnTo);
   const control =
-    "mt-1 w-full min-w-0 min-h-11 rounded-button border border-border bg-surface p-3";
+    "mt-1 w-full min-w-0 min-h-11 rounded-input border border-border bg-surface p-3";
   useLayoutEffect(() => {
     if (deletePlan?.reconcile) deleteRecoveryRef.current = deletePlan.reconcile;
     else if (!deleteUnknown) deleteRecoveryRef.current = undefined;
@@ -677,7 +677,7 @@ export function StoreEditor({
     <div className="space-y-4 wrap-anywhere">
       <Link
         href={back}
-        className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-button border border-brand bg-surface px-3 text-sm font-semibold text-brand"
+        className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-full border border-brand bg-surface px-3 text-sm font-semibold text-brand"
         onClick={(event) => {
           if (deleted) {
             event.preventDefault();
@@ -831,7 +831,7 @@ export function StoreEditor({
           </div>
           <section
             aria-labelledby={`${prefix}-image-heading`}
-            className="space-y-3 rounded-card border border-border bg-surface p-3 md:p-4"
+            className="space-y-3 rounded-card border border-border bg-surface p-3 @3xl/app:p-4"
           >
             <h2 id={`${prefix}-image-heading`} className="text-lg font-bold">
               사진
@@ -975,7 +975,7 @@ export function StoreEditor({
       {initial && (
         <section
           aria-labelledby={`${prefix}-delete-heading`}
-          className="space-y-3 rounded-card border border-error bg-surface p-3 md:p-4"
+          className="space-y-3 rounded-card border border-error bg-surface p-3 @3xl/app:p-4"
         >
           <h2 id={`${prefix}-delete-heading`} className="text-lg font-bold">
             매장 삭제

@@ -19,11 +19,11 @@ export function ReservationCards({
       </p>
     );
   return (
-    <ul className="grid gap-2 md:gap-3">
+    <ul className="grid gap-2 @3xl/app:gap-3">
       {rows.map((row) => (
         <li
           key={row.id}
-          className="min-w-0 rounded-card border border-border bg-surface p-3 md:p-4"
+          className="min-w-0 rounded-card border border-border bg-surface p-3 @3xl/app:p-4"
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="break-all font-bold">{row.reservation_no}</p>

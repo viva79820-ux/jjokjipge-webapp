@@ -34,7 +34,7 @@ async function CounselorContent({ params }: Props) {
   const bookingHref = `/consult/${counselor.id}/book`;
   const chips = displayChips(counselor);
   return (
-    <div className="min-w-0 px-4 pt-3 md:px-6">
+    <div className="min-w-0 px-4 pt-3 @3xl/app:px-6">
       <Link
         href="/consult"
         className="inline-flex min-h-11 items-center text-sm text-muted"
@@ -42,16 +42,16 @@ async function CounselorContent({ params }: Props) {
         <ChevronLeft size={18} aria-hidden="true" />
         상담사 목록
       </Link>
-      <div className="space-y-7 md:space-y-9">
-        <section className="grid min-w-0 gap-4 md:grid-cols-[280px_minmax(0,1fr)] md:items-start md:gap-6">
+      <div className="space-y-7 @3xl/app:space-y-9">
+        <section className="grid min-w-0 gap-4 @3xl/app:grid-cols-[280px_minmax(0,1fr)] @3xl/app:items-start @3xl/app:gap-6">
           <CounselorPhoto
             src={counselor.imageUrl}
             alt={`${counselorHeading(counselor.name)} 사진`}
-            sizes="(min-width: 768px) 280px, 100vw"
+            sizes="100vw"
             className="aspect-square w-full rounded-card"
           />
           <div className="min-w-0 max-w-full">
-            <h1 className="wrap-anywhere text-xl font-bold md:text-2xl">
+            <h1 className="wrap-anywhere text-xl font-bold">
               <CounselorName name={counselor.name} />
             </h1>
             <div className="mt-3 flex min-w-0 max-w-full flex-wrap gap-1">
@@ -96,7 +96,7 @@ async function CounselorContent({ params }: Props) {
         <section>
           <SectionTitle title="상담 상품" />
           {counselor.products.length ? (
-            <ul className="grid gap-2 md:grid-cols-2 md:gap-3">
+            <ul className="grid gap-2 @3xl/app:grid-cols-2 @3xl/app:gap-3">
               {counselor.products.map((product) => (
                 <ProductCard
                   key={product.id}

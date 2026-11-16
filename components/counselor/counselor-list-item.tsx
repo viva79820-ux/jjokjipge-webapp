@@ -10,7 +10,7 @@ export function CounselorListItem({ counselor }: { counselor: Counselor }) {
   const href = `/consult/${counselor.id}`;
   const chips = displayChips(counselor);
   return (
-    <li className="flex min-w-0 items-center gap-2 rounded-card border border-border bg-surface p-3 md:gap-3 md:p-4">
+    <li className="flex min-w-0 flex-wrap items-center gap-2 rounded-card border border-border bg-surface p-3 @3xl/app:gap-3 @3xl/app:p-4">
       <Link
         href={href}
         aria-label={`${counselorHeading(counselor.name)} 상세 보기`}
@@ -26,7 +26,7 @@ export function CounselorListItem({ counselor }: { counselor: Counselor }) {
       <div className="min-w-0 flex-1">
         <Link
           href={href}
-          className="block max-w-full wrap-anywhere text-base font-bold md:text-lg"
+          className="block max-w-full wrap-anywhere text-base font-bold"
         >
           <CounselorName name={counselor.name} />
         </Link>
@@ -37,11 +37,14 @@ export function CounselorListItem({ counselor }: { counselor: Counselor }) {
             </Chip>
           ))}
         </div>
-        <p className="mt-1 truncate text-caption text-muted md:text-sm">
+        <p className="mt-1 truncate text-caption text-muted">
           {counselor.intro}
         </p>
       </div>
-      <Button href={href} className="shrink-0 gap-1 whitespace-nowrap">
+      <Button
+        href={href}
+        className="ml-auto max-w-full shrink-0 gap-1 whitespace-nowrap"
+      >
         <Phone size={16} aria-hidden="true" />
         전화 상담 예약
       </Button>

@@ -13,14 +13,14 @@ export function SupportNav() {
   return (
     <nav
       aria-label="고객센터 메뉴"
-      className="mb-7 grid grid-cols-3 gap-1 md:mb-9 md:gap-2"
+      className="mb-7 grid grid-cols-3 gap-1 @3xl/app:mb-9 @3xl/app:gap-2"
     >
       {links.map(({ href, label }) => (
         <Link
           key={href}
           href={href}
           aria-current={pathname === href ? "page" : undefined}
-          className={`flex min-h-11 min-w-0 items-center justify-center rounded-button px-1 py-2 text-center text-sm font-semibold md:text-base ${pathname === href ? "bg-brand text-on-brand" : "bg-surface-muted text-muted"}`}
+          className={`flex min-h-11 min-w-0 items-center justify-center rounded-full px-1 py-2 text-center text-sm font-semibold ${pathname === href ? "bg-brand text-on-brand" : "bg-surface-muted text-muted"}`}
         >
           {label}
         </Link>

@@ -1,7 +1,7 @@
 import type { RefObject } from "react";
 
 export const inputClass =
-  "mt-1 min-h-11 min-w-0 w-full rounded-button border bg-surface px-3 py-2 text-body md:text-base disabled:opacity-60";
+  "mt-1 min-h-11 min-w-0 w-full rounded-input border bg-surface px-3 py-2 text-body disabled:opacity-60";
 
 export function FieldError({
   field,

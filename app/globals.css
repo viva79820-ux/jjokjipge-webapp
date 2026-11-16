@@ -1,39 +1,70 @@
 @import "tailwindcss";
+
+@custom-variant pc {
+  @media (hover: hover) and (pointer: fine) {
+    @slot;
+  }
+}
+
 @theme inline {
   --font-sans: var(--font-pretendard);
   --container-app: 1024px;
+  --container-pc: 560px;
+  --spacing-phone-fab: 54px;
+  --text-display: 26px;
+  --text-display--line-height: 34px;
+  --text-title: 20px;
+  --text-title--line-height: 28px;
+  --text-subtitle: 17px;
+  --text-subtitle--line-height: 24px;
   --text-body: 15px;
+  --text-body--line-height: 22px;
+  --text-label: 14px;
+  --text-label--line-height: 20px;
   --text-caption: 13px;
-  --color-background: #f6f1eb;
-  --color-surface: #fffcf7;
-  --color-surface-muted: #efe6e0;
-  --color-foreground: #2a2130;
-  --color-muted: #6f6570;
-  --color-border: #e7dcd6;
+  --text-caption--line-height: 18px;
+  --text-price: 18px;
+  --text-price--line-height: 24px;
+  --text-logo: 19px;
+  --text-logo--line-height: 22px;
+  --text-fine: 12px;
+  --text-fine--line-height: 16px;
+  --color-background: #f7f3fa;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f0e9f4;
+  --color-foreground: #2a1f33;
+  --color-muted: #6b6175;
+  --color-border: #e7e1ec;
   --color-error: #b42318;
-  --color-brand: #5e3363;
-  --color-brand-deep: #47294a;
-  --color-brand-soft: #eee1ea;
+  --color-brand: #7c429a;
+  --color-brand-deep: #5e2f78;
+  --color-brand-soft: #f3eaf8;
   --color-on-brand: #ffffff;
-  --color-on-brand-muted: #d9cbd9;
-  --color-gold: #c9a227;
-  --color-gold-light: #f2c775;
-  --color-gold-soft: #f5ead2;
-  --color-gold-deep: #7a5c14;
-  --radius-card: 12px;
-  --radius-button: 10px;
+  --color-on-brand-muted: #e4d3ec;
+  --color-halo: #ffe780;
+  --color-pink: #c2255c;
+  --radius-card: 16px;
+  --radius-input: 8px;
 }
+
+html,
 body {
-  background: var(--color-surface-muted);
+  background: var(--color-background);
   color: var(--color-foreground);
+}
+
+body {
   font-family: var(--font-sans), sans-serif;
   font-size: 15px;
+  line-height: 22px;
 }
+
 button:not(:disabled),
 [role="button"]:not(:disabled),
 [role="tab"]:not(:disabled) {
   cursor: pointer;
 }
+
 button:disabled {
   cursor: not-allowed;
 }

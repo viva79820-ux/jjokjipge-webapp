@@ -117,7 +117,7 @@ export async function ProductListPage({
           <select
             name="status"
             defaultValue={parsed.status}
-            className="mt-1 block min-h-11 rounded-button border border-border bg-surface p-2"
+            className="mt-1 block min-h-11 rounded-input border border-border bg-surface p-2"
           >
             <option value="">전체</option>
             <option value="public">공개</option>

@@ -41,23 +41,17 @@ export function CounselorBanner({ counselors }: { counselors: Counselor[] }) {
                 key={counselor.id}
                 href={`/consult/${counselor.id}`}
                 draggable={false}
-                className="relative flex min-h-48 min-w-0 flex-[0_0_100%] cursor-grab items-center gap-4 overflow-hidden rounded-card bg-brand-deep p-5 text-on-brand select-none active:cursor-grabbing md:min-h-64 md:gap-8 md:px-20"
+                className="relative flex min-h-48 min-w-0 flex-[0_0_100%] cursor-grab items-center gap-4 overflow-hidden rounded-card bg-brand-deep p-5 text-on-brand select-none active:cursor-grabbing @3xl/app:min-h-64 @3xl/app:gap-8 @3xl/app:px-20"
               >
-                <span
-                  aria-hidden="true"
-                  className="pointer-events-none absolute inset-2 rounded-card border border-gold"
-                />
                 <CounselorPhoto
                   src={counselor.imageUrl}
                   alt={`${counselorHeading(counselor.name)} 사진`}
-                  sizes="(min-width: 768px) 144px, 96px"
-                  className="h-32 w-24 shrink-0 rounded-card md:h-48 md:w-36"
+                  sizes="144px"
+                  className="h-32 w-24 shrink-0 rounded-card @3xl/app:h-48 @3xl/app:w-36"
                 />
                 <div className="relative min-w-0">
-                  <p className="text-sm text-gold-light md:text-base">
-                    추천 상담사
-                  </p>
-                  <p className="mt-2 wrap-anywhere text-xl font-bold md:text-2xl">
+                  <p className="text-sm text-brand-soft">추천 상담사</p>
+                  <p className="mt-2 wrap-anywhere text-xl font-bold">
                     <CounselorName name={counselor.name} suffix="same" />
                   </p>
                   <div className="mt-3 flex min-w-0 max-w-full flex-wrap gap-1">
@@ -77,7 +71,7 @@ export function CounselorBanner({ counselors }: { counselors: Counselor[] }) {
           aria-label="이전 상담사"
           disabled={!canPrev}
           onClick={() => embla?.scrollPrev()}
-          className="absolute top-1/2 left-3 hidden size-11 -translate-y-1/2 items-center justify-center rounded-full bg-brand-deep text-on-brand disabled:opacity-40 md:flex"
+          className="absolute top-1/2 left-3 hidden size-11 -translate-y-1/2 items-center justify-center rounded-full bg-brand-deep text-on-brand disabled:opacity-40 @3xl/app:flex"
         >
           <ChevronLeft />
         </button>
@@ -86,7 +80,7 @@ export function CounselorBanner({ counselors }: { counselors: Counselor[] }) {
           aria-label="다음 상담사"
           disabled={!canNext}
           onClick={() => embla?.scrollNext()}
-          className="absolute top-1/2 right-3 hidden size-11 -translate-y-1/2 items-center justify-center rounded-full bg-brand-deep text-on-brand disabled:opacity-40 md:flex"
+          className="absolute top-1/2 right-3 hidden size-11 -translate-y-1/2 items-center justify-center rounded-full bg-brand-deep text-on-brand disabled:opacity-40 @3xl/app:flex"
         >
           <ChevronRight />
         </button>

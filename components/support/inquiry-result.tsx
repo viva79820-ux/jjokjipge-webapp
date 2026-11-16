@@ -6,13 +6,13 @@ import { supportDate } from "./form-fields";
 
 export function InquiryResult({ result }: { result: Result }) {
   return (
-    <div className="mt-7 min-w-0 space-y-4 md:mt-9">
+    <div className="mt-7 min-w-0 space-y-4 @3xl/app:mt-9">
       <section
         aria-label="접수한 문의"
-        className="min-w-0 rounded-card border border-border bg-surface p-3 md:p-4"
+        className="min-w-0 rounded-card border border-border bg-surface p-3 @3xl/app:p-4"
       >
         <SectionTitle title="접수한 문의" />
-        <dl className="space-y-3 text-body md:text-base">
+        <dl className="space-y-3 text-body">
           <div>
             <dt className="text-caption text-muted">문의번호</dt>
             <dd className="font-semibold wrap-anywhere">{result.inquiryNo}</dd>
@@ -53,12 +53,12 @@ export function InquiryResult({ result }: { result: Result }) {
       </section>
       <section
         aria-label="문의 답변"
-        className="min-w-0 rounded-card border border-border bg-surface p-3 md:p-4"
+        className="min-w-0 rounded-card border border-border bg-surface p-3 @3xl/app:p-4"
       >
         <SectionTitle title="문의 답변" />
         {result.status === "answered" ? (
           <>
-            <p className="text-body leading-relaxed whitespace-pre-wrap wrap-anywhere md:text-base">
+            <p className="text-body leading-relaxed whitespace-pre-wrap wrap-anywhere">
               {result.answer}
             </p>
             {result.answeredAt && (
@@ -71,7 +71,7 @@ export function InquiryResult({ result }: { result: Result }) {
             )}
           </>
         ) : (
-          <p className="text-body text-muted md:text-base">
+          <p className="text-body text-muted">
             아직 답변이 등록되지 않았습니다.
           </p>
         )}

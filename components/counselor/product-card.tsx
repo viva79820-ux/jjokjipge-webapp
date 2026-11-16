@@ -12,7 +12,7 @@ export function ProductCard({
     <li className="min-w-0">
       <Link
         href={bookingHref}
-        className="flex min-h-11 min-w-0 flex-wrap items-center justify-between gap-3 rounded-card border border-border bg-surface p-3 md:p-4"
+        className="flex min-h-11 min-w-0 flex-wrap items-center justify-between gap-3 rounded-card border border-border bg-surface p-3 @3xl/app:p-4"
       >
         <div className="min-w-0">
           <h3 className="wrap-anywhere font-bold">{product.name}</h3>

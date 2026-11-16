@@ -37,10 +37,10 @@ async function StoresContent() {
     }
   }
   return (
-    <div className="space-y-7 px-4 pt-6 md:space-y-9 md:px-6">
+    <div className="space-y-7 px-4 pt-6 @3xl/app:space-y-9 @3xl/app:px-6">
       <header>
-        <h1 className="text-xl font-bold md:text-2xl">매장상담</h1>
-        <p className="mt-2 text-caption text-muted md:text-sm">
+        <h1 className="text-xl font-bold">매장상담</h1>
+        <p className="mt-2 text-caption text-muted">
           동성로 매장에서 직접 상담받을 수 있어요.
         </p>
       </header>
@@ -57,7 +57,7 @@ async function StoresContent() {
       )}
       {counselorError && <p role="alert">상담사 연결을 불러오지 못했습니다.</p>}
       {stores && stores.length > 0 && (
-        <ul className="grid gap-3 md:grid-cols-2">
+        <ul className="grid gap-3 @3xl/app:grid-cols-2">
           {stores.map((store) => {
             const staff = counselorError
               ? []
@@ -68,7 +68,7 @@ async function StoresContent() {
               <li
                 key={store.id}
                 data-store-slug={store.id}
-                className="min-w-0 rounded-card border border-border bg-surface p-3 md:p-4"
+                className="min-w-0 rounded-card border border-border bg-surface p-3 @3xl/app:p-4"
               >
                 <StorePhoto
                   src={store.imageUrl}
@@ -76,11 +76,11 @@ async function StoresContent() {
                   sizes="(max-width: 768px) 100vw, 480px"
                   className="w-full"
                 />
-                <h2 className="mt-4 text-lg font-bold wrap-anywhere md:text-xl">
+                <h2 className="mt-4 text-lg font-bold wrap-anywhere">
                   {store.name}
                 </h2>
                 {store.description && (
-                  <p className="mt-1 text-caption wrap-anywhere whitespace-pre-line text-muted md:text-sm">
+                  <p className="mt-1 text-caption wrap-anywhere whitespace-pre-line text-muted">
                     {store.description}
                   </p>
                 )}
@@ -128,7 +128,7 @@ async function StoresContent() {
                 )}
                 <a
                   href={storeTelHref(store.phone)}
-                  className="mt-4 flex min-h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-button bg-brand px-3 text-sm font-semibold text-on-brand"
+                  className="mt-4 flex min-h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-brand px-3 text-sm font-semibold text-on-brand"
                 >
                   <Phone size={18} aria-hidden="true" />
                   전화하기
@@ -138,7 +138,7 @@ async function StoresContent() {
           })}
         </ul>
       )}
-      <aside className="rounded-card bg-brand-soft p-3 md:p-4">
+      <aside className="rounded-card bg-brand-soft p-3 @3xl/app:p-4">
         <p className="font-semibold">
           전화상담은 매장에 오지 않아도 예약할 수 있어요.
         </p>

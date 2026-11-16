@@ -1,5 +1,6 @@
 import { siteConfig } from "@/lib/site-config";
 import type { Metadata } from "next";
+import { appShellClass } from "@/lib/app-frame";
 
 export const metadata: Metadata = {
   title: `${siteConfig.name} 관리자`,
@@ -12,7 +13,7 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="mx-auto min-h-screen max-w-app bg-background">
+    <div data-app-shell className={appShellClass}>
       {children}
     </div>
   );

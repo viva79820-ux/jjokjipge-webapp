@@ -548,9 +548,9 @@ try {
   for (const width of [360, 768, 1024]) await widthCheck(width);
   assert.equal(
     await evaluate(
-      "document.querySelector('header > div > a').textContent.trim()",
+      "document.querySelector('header > div > a').innerText.replace(/\\s+/g,' ').trim()",
     ),
-    "쪽집게천사 타로샵",
+    "쪽집게천사 운명나라 · 동성로 사주·타로·작명",
   );
   assert.equal(
     await evaluate(

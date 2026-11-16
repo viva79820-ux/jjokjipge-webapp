@@ -43,7 +43,7 @@ async function BookingContent({ params, searchParams }: Props) {
     counselor.products[0];
   if (!product)
     return (
-      <div className="px-4 pt-6 md:px-6">
+      <div className="px-4 pt-6 @3xl/app:px-6">
         <h1 className="text-xl font-bold">전화상담 예약</h1>
         <p className="mt-3 text-muted">
           지금은 예약 가능한 상담 상품이 없어요.
@@ -82,7 +82,7 @@ async function BookingContent({ params, searchParams }: Props) {
       </p>
     );
   return (
-    <div className="min-w-0 space-y-7 px-4 pt-3 md:space-y-9 md:px-6">
+    <div className="min-w-0 space-y-7 px-4 pt-3 @3xl/app:space-y-9 @3xl/app:px-6">
       <header className="min-w-0">
         <Link
           href={`/consult/${counselor.id}`}
@@ -91,8 +91,8 @@ async function BookingContent({ params, searchParams }: Props) {
           <ChevronLeft size={18} aria-hidden="true" />
           상담사 정보
         </Link>
-        <h1 className="mt-2 text-xl font-bold md:text-2xl">전화상담 예약</h1>
-        <p className="mt-3 wrap-anywhere text-base font-bold md:text-lg">
+        <h1 className="mt-2 text-xl font-bold">전화상담 예약</h1>
+        <p className="mt-3 wrap-anywhere text-base font-bold">
           {counselorHeading(counselor.name)}
         </p>
         {counselor.storeName.trim() && (

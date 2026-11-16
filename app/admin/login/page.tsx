@@ -13,9 +13,9 @@ type Props = {
 
 export default function AdminLoginPage(props: Props) {
   return (
-    <main className="flex min-h-screen items-center justify-center px-4 py-7 md:px-6 md:py-9">
-      <div className="w-full max-w-md rounded-card border border-border bg-surface p-4 md:p-6">
-        <h1 className="mb-7 text-2xl font-extrabold text-brand md:text-3xl">
+    <main className="flex min-h-screen items-center justify-center px-4 py-7 @3xl/app:px-6 @3xl/app:py-9">
+      <div className="w-full max-w-md rounded-card border border-border bg-surface p-4 @3xl/app:p-6">
+        <h1 className="mb-7 text-2xl font-extrabold text-brand">
           {siteConfig.name} 관리자
         </h1>
         <Suspense

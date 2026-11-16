@@ -422,7 +422,7 @@ try {
   );
   await go("/support");
   await text("테스트 수정 FAQ");
-  await text("쪽집게천사 운명나라");
+  await text("운명나라 · 동성로 사주·타로·작명");
   for (const width of [360, 768, 1024]) {
     await cdp("Emulation.setDeviceMetricsOverride", {
       width,

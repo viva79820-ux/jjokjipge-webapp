@@ -84,12 +84,12 @@ async function Detail({ params, searchParams }: Props) {
       <p className="text-sm text-muted">
         모든 날짜와 시각은 한국 시간(Asia/Seoul) 기준입니다.
       </p>
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-3 @3xl/app:grid-cols-2">
         {groups.map((group) => (
           <section
             key={group.title}
             aria-label={group.title}
-            className="min-w-0 rounded-card border border-border bg-surface p-3 md:p-4"
+            className="min-w-0 rounded-card border border-border bg-surface p-3 @3xl/app:p-4"
           >
             <h2 className="mb-3 text-lg font-bold">{group.title}</h2>
             <dl className="space-y-3">

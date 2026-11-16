@@ -17,7 +17,7 @@ async function FaqContent() {
 export default function Page() {
   return (
     <section>
-      <h1 className="mb-3 text-lg font-bold md:text-xl">자주 묻는 질문</h1>
+      <h1 className="mb-3 text-lg font-bold">자주 묻는 질문</h1>
       <Suspense
         fallback={
           <p role="status" className="py-6 text-muted">

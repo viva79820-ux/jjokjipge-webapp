@@ -426,7 +426,7 @@ export function CounselorEditor({
     }
   }
   const control =
-    "mt-1 w-full min-w-0 min-h-11 rounded-button border border-border bg-surface p-3";
+    "mt-1 w-full min-w-0 min-h-11 rounded-input border border-border bg-surface p-3";
   const approval = original?.approval_status;
   return (
     <div className="space-y-4 wrap-anywhere">
@@ -437,7 +437,7 @@ export function CounselorEditor({
         {original && (
           <Link
             href={productsHref}
-            className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-button border border-brand bg-surface px-3 text-sm font-semibold text-brand"
+            className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-full border border-brand bg-surface px-3 text-sm font-semibold text-brand"
             onClick={(event) => {
               if (busy || uncertain || done) {
                 event.preventDefault();
@@ -648,7 +648,7 @@ export function CounselorEditor({
           />
           <section
             aria-labelledby={`${prefix}-image-heading`}
-            className="space-y-3 rounded-card border border-border bg-surface p-3 md:p-4"
+            className="space-y-3 rounded-card border border-border bg-surface p-3 @3xl/app:p-4"
           >
             <h2 id={`${prefix}-image-heading`} className="text-lg font-bold">
               사진
@@ -965,7 +965,7 @@ function ItemList({
                   ),
                 )
               }
-              className="mt-1 w-full min-w-0 min-h-11 rounded-button border border-border bg-surface p-3"
+              className="mt-1 w-full min-w-0 min-h-11 rounded-input border border-border bg-surface p-3"
             />
           </label>
           <div className="flex flex-wrap gap-2">

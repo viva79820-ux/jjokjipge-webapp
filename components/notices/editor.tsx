@@ -325,7 +325,7 @@ export function NoticeEditor({
     }
   }
   const control =
-    "mt-1 w-full min-w-0 min-h-11 rounded-button border border-border bg-surface p-3";
+    "mt-1 w-full min-w-0 min-h-11 rounded-input border border-border bg-surface p-3";
   return (
     <div className="space-y-4 wrap-anywhere">
       <Button href={back} variant="secondary">
@@ -406,7 +406,7 @@ export function NoticeEditor({
           ))}
           <section
             aria-labelledby={`${prefix}-image-heading`}
-            className="space-y-4 rounded-card border border-border bg-surface p-3 md:p-4"
+            className="space-y-4 rounded-card border border-border bg-surface p-3 @3xl/app:p-4"
           >
             <h2 id={`${prefix}-image-heading`} className="text-lg font-bold">
               첨부 이미지

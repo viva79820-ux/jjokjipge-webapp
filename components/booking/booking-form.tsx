@@ -34,7 +34,7 @@ type Props = {
   initialDate: string;
 };
 const inputClass =
-  "mt-1 min-h-11 w-full rounded-button border bg-surface px-3 text-body md:text-base";
+  "mt-1 min-h-11 w-full rounded-input border bg-surface px-3 text-body";
 
 export function BookingForm({
   counselorSlug,
@@ -161,10 +161,10 @@ export function BookingForm({
   }
   if (state.success) return <BookingComplete reservation={state.success} />;
   return (
-    <div className="space-y-7 md:space-y-9">
+    <div className="space-y-7 @3xl/app:space-y-9">
       <section>
         <SectionTitle title="상품 선택" />
-        <div className="grid gap-2 md:grid-cols-2">
+        <div className="grid gap-2 @3xl/app:grid-cols-2">
           {products.map((item) => (
             <button
               key={item.id}
@@ -172,7 +172,7 @@ export function BookingForm({
               disabled={pending}
               onClick={() => selectProduct(item.id)}
               aria-pressed={item.id === product.id}
-              className={`block min-h-11 min-w-0 rounded-card border bg-surface p-3 text-left md:p-4 ${item.id === product.id ? "border-brand" : "border-border"}`}
+              className={`block min-h-11 min-w-0 rounded-card border bg-surface p-3 text-left @3xl/app:p-4 ${item.id === product.id ? "border-brand" : "border-border"}`}
             >
               <span className="block wrap-anywhere font-bold">{item.name}</span>
               <span className="mt-2 block">
@@ -206,17 +206,15 @@ export function BookingForm({
         action={action}
         noValidate
         onSubmit={validateBeforeSubmit}
-        className="space-y-7 md:space-y-9"
+        className="space-y-7 @3xl/app:space-y-9"
       >
         <input type="hidden" name="counselorSlug" value={counselorSlug} />
         <input type="hidden" name="productId" value={product.id} />
         <input type="hidden" name="startsAt" value={startsAt} />
         <input type="hidden" name="paymentMethod" value="bank_transfer" />
         <fieldset disabled={pending}>
-          <legend className="mb-3 text-lg font-bold md:text-xl">
-            시간 선택
-          </legend>
-          <div className="grid grid-cols-4 gap-2 md:grid-cols-6">
+          <legend className="mb-3 text-lg font-bold">시간 선택</legend>
+          <div className="grid grid-cols-4 gap-2 @3xl/app:grid-cols-6">
             {slots.map((slot) => (
               <button
                 key={slot.startsAt}
@@ -230,7 +228,7 @@ export function BookingForm({
                     startsAt: undefined,
                   }));
                 }}
-                className={`min-h-11 rounded-button border text-sm disabled:opacity-40 ${startsAt === slot.startsAt ? "border-brand bg-brand text-on-brand" : "border-border bg-surface text-foreground"}`}
+                className={`min-h-11 rounded-full border text-sm disabled:opacity-40 ${startsAt === slot.startsAt ? "border-brand bg-brand text-on-brand" : "border-border bg-surface text-foreground"}`}
               >
                 {timeLabel(slot.startsAt)}
               </button>
@@ -246,7 +244,7 @@ export function BookingForm({
           {errorFor("counselorSlug")}
         </fieldset>
         <fieldset disabled={pending} className="space-y-3">
-          <legend className="mb-3 text-lg font-bold md:text-xl">연락처</legend>
+          <legend className="mb-3 text-lg font-bold">연락처</legend>
           {(
             [
               {
@@ -330,10 +328,8 @@ export function BookingForm({
           ))}
         </fieldset>
         <fieldset disabled={pending}>
-          <legend className="mb-3 text-lg font-bold md:text-xl">
-            결제 방법
-          </legend>
-          <div className="grid gap-2 md:grid-cols-2">
+          <legend className="mb-3 text-lg font-bold">결제 방법</legend>
+          <div className="grid gap-2 @3xl/app:grid-cols-2">
             <label className="flex min-h-11 items-center gap-2 rounded-card border border-brand bg-surface p-3">
               <input type="radio" checked readOnly name="paymentChoice" />
               무통장입금
@@ -387,10 +383,8 @@ export function BookingForm({
           )}
         </fieldset>
         <fieldset disabled={pending} className="space-y-4">
-          <legend className="mb-3 text-lg font-bold md:text-xl">
-            안내와 동의
-          </legend>
-          <div className="rounded-card border border-border bg-surface p-3 md:p-4">
+          <legend className="mb-3 text-lg font-bold">안내와 동의</legend>
+          <div className="rounded-card border border-border bg-surface p-3 @3xl/app:p-4">
             <label className="flex min-h-11 items-center gap-2 font-semibold">
               <input
                 type="checkbox"
@@ -415,7 +409,7 @@ export function BookingForm({
               />
               [필수] 환불 규정 확인
             </label>
-            <div className="space-y-2 text-caption leading-relaxed text-muted md:text-sm">
+            <div className="space-y-2 text-caption leading-relaxed text-muted">
               <p>
                 상담 시작 전에는 언제든 전액 환불됩니다. 상담이 시작된 뒤에는
                 환불되지 않습니다. 다만 상담사 사정으로 상담이 제대로 이루어지지
@@ -429,7 +423,7 @@ export function BookingForm({
             </div>
             {errorFor("refundConsent")}
           </div>
-          <div className="rounded-card border border-border bg-surface p-3 md:p-4">
+          <div className="rounded-card border border-border bg-surface p-3 @3xl/app:p-4">
             <label className="flex min-h-11 items-center gap-2 font-semibold">
               <input
                 type="checkbox"
@@ -454,14 +448,14 @@ export function BookingForm({
               />
               [필수] 개인정보 수집이용
             </label>
-            <p className="text-caption leading-relaxed text-muted md:text-sm">
+            <p className="text-caption leading-relaxed text-muted">
               수집 항목: 이름, 휴대폰 번호, 이메일 / 목적: 상담 예약과 연락,
               예약 조회 / 보관 기간: 전자상거래법에 따라 5년
             </p>
             {errorFor("privacyConsent")}
           </div>
         </fieldset>
-        <section className="rounded-card bg-brand-soft p-3 md:p-4">
+        <section className="rounded-card bg-brand-soft p-3 @3xl/app:p-4">
           <SectionTitle title="예약 요약" />
           <p className="font-semibold">{product.name}</p>
           <p className="mt-1">

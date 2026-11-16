@@ -56,7 +56,7 @@ export function ProductEditor({
   const router = useRouter();
   const listHref = productListUrl(counselor.id, page, status, counselorReturn);
   const control =
-    "mt-1 w-full min-w-0 min-h-11 rounded-button border border-border bg-surface p-3";
+    "mt-1 w-full min-w-0 min-h-11 rounded-input border border-border bg-surface p-3";
   useLayoutEffect(() => {
     if (leaving.current) {
       leaving.current = false;
@@ -222,7 +222,7 @@ export function ProductEditor({
     <div className="space-y-4 wrap-anywhere">
       <Link
         href={listHref}
-        className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-button border border-brand bg-surface px-3 text-sm font-semibold text-brand"
+        className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-full border border-brand bg-surface px-3 text-sm font-semibold text-brand"
         onClick={(event) => {
           if (busy || uncertain) {
             event.preventDefault();

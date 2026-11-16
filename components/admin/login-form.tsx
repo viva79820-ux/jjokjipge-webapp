@@ -89,7 +89,7 @@ export function LoginForm({ next }: { next: string }) {
             aria-describedby={
               errors[field.name] ? `${field.name}-error` : undefined
             }
-            className={`mt-1 min-h-11 w-full min-w-0 rounded-button border bg-surface px-3 outline-none focus:border-brand focus:ring-2 focus:ring-brand ${errors[field.name] ? "border-error" : "border-border"}`}
+            className={`mt-1 min-h-11 w-full min-w-0 rounded-input border bg-surface px-3 outline-none focus:border-brand focus:ring-2 focus:ring-brand ${errors[field.name] ? "border-error" : "border-border"}`}
           />
           {errors[field.name] && (
             <p
@@ -114,7 +114,7 @@ export function LoginForm({ next }: { next: string }) {
       >
         {pending ? "로그인 중..." : "로그인"}
       </Button>
-      <p className="text-caption leading-relaxed text-muted md:text-sm">
+      <p className="text-caption leading-relaxed text-muted">
         비밀번호를 잊으셨으면 엠지미디어에 문의해 주세요.
       </p>
     </form>

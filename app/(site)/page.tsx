@@ -32,18 +32,18 @@ async function HomeContent() {
   const counselors = await getCounselors();
   const recommended = counselors.filter((c) => c.isRecommended);
   return (
-    <div className="min-w-0 space-y-7 px-4 pt-4 md:space-y-9 md:px-6">
+    <div className="min-w-0 space-y-7 px-4 pt-4 @3xl/app:space-y-9 @3xl/app:px-6">
       <CounselorBanner counselors={recommended} />
       <section aria-label="상담 카테고리" className="grid grid-cols-4 gap-2">
         {categories.map(({ label, href, icon: Icon }, index) => (
           <Link
             key={href}
             href={href}
-            className={`flex min-h-24 flex-col items-center justify-center gap-2 rounded-card border border-gold px-1 text-center text-sm font-semibold ${index === 0 ? "bg-brand-deep text-on-brand" : "bg-surface text-foreground"}`}
+            className={`flex min-h-24 flex-col items-center justify-center gap-2 rounded-card border px-1 text-center text-sm font-semibold ${index === 0 ? "border-brand bg-brand text-on-brand" : "border-border bg-surface text-foreground"}`}
           >
             <Icon
               size={28}
-              className={`size-7 md:size-8 ${index === 0 ? "text-gold-light" : "text-brand"}`}
+              className={`size-7 @3xl/app:size-8 ${index === 0 ? "text-on-brand" : "text-brand"}`}
               aria-hidden="true"
             />
             {label}
@@ -53,7 +53,7 @@ async function HomeContent() {
       <section className="flex items-center justify-between gap-2 rounded-card bg-brand-soft p-3">
         <div className="min-w-0">
           <p className="font-bold">상담 후기가 궁금하신가요?</p>
-          <p className="mt-1 text-caption text-muted md:text-sm">
+          <p className="mt-1 text-caption text-muted">
             상담을 받은 분들의 후기를 확인해 보세요.
           </p>
         </div>

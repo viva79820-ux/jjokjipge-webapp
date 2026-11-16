@@ -62,7 +62,7 @@ export async function NoticeListPage({
               <select
                 name="status"
                 defaultValue={f.status}
-                className="ml-2 min-h-11 rounded-button border border-border bg-surface p-2"
+                className="ml-2 min-h-11 rounded-input border border-border bg-surface p-2"
               >
                 <option value="">전체</option>
                 <option value="public">공개</option>
@@ -145,14 +145,12 @@ export async function NoticeDetailPage({
     );
   const src = publicImageUrl(row.image_path);
   return (
-    <article className="space-y-6 wrap-anywhere md:space-y-8">
+    <article className="space-y-6 wrap-anywhere @3xl/app:space-y-8">
       <Button href={back} variant="secondary">
         목록으로 돌아가기
       </Button>
-      <header className="space-y-3 border-b border-border pb-4 md:pb-6">
-        <h1 className="text-2xl leading-tight font-extrabold md:text-3xl">
-          {row.title}
-        </h1>
+      <header className="space-y-3 border-b border-border pb-4 @3xl/app:pb-6">
+        <h1 className="text-2xl leading-tight font-extrabold">{row.title}</h1>
         <div className="flex flex-wrap items-center gap-2">
           {row.is_pinned && <Badge>고정</Badge>}
           <p className="text-sm text-muted">
@@ -160,11 +158,9 @@ export async function NoticeDetailPage({
           </p>
         </div>
       </header>
-      <p className="whitespace-pre-wrap text-body leading-7 md:text-base md:leading-8">
-        {row.body}
-      </p>
+      <p className="whitespace-pre-wrap text-body leading-7">{row.body}</p>
       {src && (
-        <div className="border-t border-border pt-6 md:pt-8">
+        <div className="border-t border-border pt-6 @3xl/app:pt-8">
           <NoticeImage
             key={src}
             src={src}

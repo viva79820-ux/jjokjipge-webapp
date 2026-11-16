@@ -26,12 +26,12 @@ async function Dashboard() {
   const data = await getDashboard();
   if (!data) return <AdminAccessDenied />;
   return (
-    <div className="space-y-7 md:space-y-9">
+    <div className="space-y-7 @3xl/app:space-y-9">
       <h1 className="text-xl font-bold">대시보드</h1>
       <p className="text-sm text-muted">
         모든 날짜와 시각은 한국 시간(Asia/Seoul) 기준입니다.
       </p>
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-3 @3xl/app:grid-cols-2">
         <section className="rounded-card border border-border bg-surface p-4">
           <h2 className="font-bold">오늘 예약</h2>
           <p className="my-2 text-2xl font-bold">{data.daily}건</p>

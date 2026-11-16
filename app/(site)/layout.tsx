@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { SiteHeader } from "@/components/site-header";
 import { BottomTabs } from "@/components/bottom-tabs";
+import { appMainClass, appShellClass } from "@/lib/app-frame";
 
 export default function SiteLayout({
   children,
@@ -8,11 +9,11 @@ export default function SiteLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="mx-auto min-h-screen max-w-app bg-background">
+    <div data-app-shell className={appShellClass}>
       <Suspense fallback={null}>
         <SiteHeader />
       </Suspense>
-      <main className="pb-28">{children}</main>
+      <main className={appMainClass}>{children}</main>
       <Suspense fallback={null}>
         <BottomTabs />
       </Suspense>

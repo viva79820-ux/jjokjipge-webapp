@@ -23,7 +23,7 @@ import type {
 import { ReservationResult } from "./reservation-result";
 
 const inputClass =
-  "mt-1 min-h-11 w-full min-w-0 rounded-button border bg-surface px-3 text-body md:text-base";
+  "mt-1 min-h-11 w-full min-w-0 rounded-input border bg-surface px-3 text-body";
 const initialValues: LookupValues = { reservationNo: "", email: "" };
 function FieldError({ field, message }: { field: string; message?: string }) {
   return message ? (
@@ -116,11 +116,8 @@ export function ReservationLookup() {
   }
   return (
     <section className="min-w-0">
-      <h1 className="text-lg font-bold md:text-xl">예약 조회</h1>
-      <p
-        id="lookup-help"
-        className="mt-2 mb-6 text-caption text-muted md:text-sm"
-      >
+      <h1 className="text-lg font-bold">예약 조회</h1>
+      <p id="lookup-help" className="mt-2 mb-6 text-caption text-muted">
         예약번호와 예약할 때 입력한 이메일을 입력해 주세요.
       </p>
       <form

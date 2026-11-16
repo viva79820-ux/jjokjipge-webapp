@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 };
 export default function Page() {
   return (
-    <div className="min-w-0 px-4 pt-6 md:px-6 md:pt-8">
+    <div className="min-w-0 px-4 pt-6 @3xl/app:px-6 @3xl/app:pt-8">
       <ReservationLookup />
     </div>
   );

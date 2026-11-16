@@ -186,7 +186,7 @@ export function ReservationControls({
                   disabled={pending}
                   aria-invalid={!!error}
                   aria-describedby="cancel-help"
-                  className="w-full rounded-button border border-border bg-background p-3"
+                  className="w-full rounded-input border border-border bg-background p-3"
                 />
                 <p id="cancel-help" className="text-sm text-muted">
                   고객이 볼 수 있으므로 개인정보나 내부 평가를 적지 마세요.

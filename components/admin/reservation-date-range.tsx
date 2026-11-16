@@ -26,7 +26,7 @@ export function ReservationDateRange({
     };
   }, [from, to]);
   const fieldClass =
-    "min-h-11 w-full min-w-0 rounded-button border border-border bg-surface px-3";
+    "min-h-11 w-full min-w-0 rounded-input border border-border bg-surface px-3";
   return (
     <>
       <label className="min-w-0 space-y-1 text-sm">

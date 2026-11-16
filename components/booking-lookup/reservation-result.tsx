@@ -15,15 +15,15 @@ export function ReservationResult({ result }: { result: LookupResult }) {
       <h2
         id="lookup-result-title"
         tabIndex={-1}
-        className="scroll-mt-4 text-lg font-bold focus:outline-none md:text-xl"
+        className="scroll-mt-4 text-lg font-bold focus:outline-none"
       >
         조회 결과
       </h2>
       <section
         aria-label="예약 정보"
-        className="mt-3 min-w-0 rounded-card border border-border bg-surface p-3 md:p-4"
+        className="mt-3 min-w-0 rounded-card border border-border bg-surface p-3 @3xl/app:p-4"
       >
-        <dl className="space-y-3 text-body md:text-base">
+        <dl className="space-y-3 text-body">
           <div className="min-w-0">
             <dt className="text-caption text-muted">예약번호</dt>
             <dd className="font-semibold break-all">{result.reservationNo}</dd>
@@ -86,7 +86,7 @@ export function ReservationResult({ result }: { result: LookupResult }) {
         </dl>
       </section>
       {result.status === "pending_payment" && (
-        <div className="mt-4 min-w-0 rounded-card bg-brand-soft p-3 md:p-4">
+        <div className="mt-4 min-w-0 rounded-card bg-brand-soft p-3 @3xl/app:p-4">
           <h3 className="font-bold">입금 안내</h3>
           <p className="mt-2">입금이 확인되면 예약이 확정돼요.</p>
           {result.paymentMethod === "bank_transfer" && (

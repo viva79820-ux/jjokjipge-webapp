@@ -7,7 +7,7 @@ export function Chip({
 }) {
   return (
     <span
-      className={`inline-block max-w-full wrap-anywhere rounded-full px-2 py-0.5 text-xs font-medium ${primary ? "bg-brand-soft text-brand" : "bg-surface-muted text-muted"}`}
+      className={`inline-flex h-6 max-w-full items-center rounded-full bg-brand-soft px-2.25 text-fine wrap-anywhere text-brand-deep ${primary ? "font-bold" : "font-semibold"}`}
     >
       {children}
     </span>

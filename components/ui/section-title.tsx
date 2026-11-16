@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { ChevronRight, Sparkles } from "lucide-react";
+import { ChevronRight } from "lucide-react";
+
 export function SectionTitle({
   title,
   href,
@@ -8,15 +9,12 @@ export function SectionTitle({
   href?: string;
 }) {
   return (
-    <div className="mb-3 flex items-center justify-between">
-      <h2 className="flex items-center gap-2 text-lg font-bold md:text-xl">
-        <Sparkles size={18} className="text-gold" aria-hidden="true" />
-        {title}
-      </h2>
+    <div className="mb-3 flex items-center justify-between gap-2">
+      <h2 className="min-w-0 text-title font-bold wrap-anywhere">{title}</h2>
       {href && (
         <Link
           href={href}
-          className="flex min-h-11 items-center text-sm text-muted"
+          className="flex min-h-11 shrink-0 items-center text-caption font-semibold text-muted"
         >
           더보기 <ChevronRight size={16} aria-hidden="true" />
         </Link>

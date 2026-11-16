@@ -42,7 +42,7 @@ function toInput(row: FaqRow): FaqInput {
   };
 }
 const inputClass =
-  "mt-1 min-h-11 w-full min-w-0 rounded-button border border-border bg-surface p-3";
+  "mt-1 min-h-11 w-full min-w-0 rounded-input border border-border bg-surface p-3";
 export function SupportEditor(props: Props) {
   const { kind } = props;
   const fieldPrefix = useId();

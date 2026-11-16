@@ -62,25 +62,25 @@ export function FaqList({ faqs, error }: { faqs: Faq[]; error: boolean }) {
             : "이 분류에 등록된 질문이 없습니다."}
         </p>
       ) : (
-        <div key={category} className="space-y-2 md:space-y-3">
+        <div key={category} className="space-y-2 @3xl/app:space-y-3">
           {visible.map((faq) => (
             <details
               key={faq.id}
-              className="rounded-card border border-border bg-surface p-3 md:p-4"
+              className="rounded-card border border-border bg-surface p-3 @3xl/app:p-4"
             >
-              <summary className="min-h-11 cursor-pointer content-center text-body font-semibold wrap-anywhere md:text-base">
+              <summary className="min-h-11 cursor-pointer content-center text-body font-semibold wrap-anywhere">
                 {faq.question}
               </summary>
-              <p className="mt-3 border-t border-border pt-3 text-body leading-relaxed whitespace-pre-wrap wrap-anywhere md:text-base">
+              <p className="mt-3 border-t border-border pt-3 text-body leading-relaxed whitespace-pre-wrap wrap-anywhere">
                 {faq.answer}
               </p>
             </details>
           ))}
         </div>
       )}
-      <div className="mt-7 rounded-card bg-brand-soft p-3 md:mt-9 md:p-4">
+      <div className="mt-7 rounded-card bg-brand-soft p-3 @3xl/app:mt-9 @3xl/app:p-4">
         <p className="font-semibold">찾으시는 답변이 없으신가요?</p>
-        <p className="mt-1 text-caption text-muted md:text-sm">
+        <p className="mt-1 text-caption text-muted">
           로그인 없이도 1:1 문의를 남길 수 있습니다.
         </p>
         <Button href="/support/inquiry" className="mt-3">

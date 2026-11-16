@@ -48,7 +48,7 @@ async function Reservations({
   const pages = Math.max(1, Math.ceil(result.count / PAGE_SIZE));
   if (filters.page > pages) return <InvalidFilters />;
   const fieldClass =
-    "min-h-11 w-full min-w-0 rounded-button border border-border bg-surface px-3";
+    "min-h-11 w-full min-w-0 rounded-input border border-border bg-surface px-3";
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-bold">예약 관리</h1>
@@ -58,7 +58,7 @@ async function Reservations({
       <form
         key={listUrl(filters)}
         action="/admin/reservations"
-        className="grid gap-3 md:grid-cols-2"
+        className="grid gap-3 @3xl/app:grid-cols-2"
       >
         <label className="space-y-1 text-sm">
           상태

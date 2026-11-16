@@ -31,7 +31,7 @@ async function FilteredCounselors({
             key={filter.value}
             href={filter.href}
             aria-current={selected === filter.value ? "page" : undefined}
-            className={`flex min-h-11 flex-1 items-center justify-center rounded-button font-semibold ${selected === filter.value ? "bg-brand text-on-brand" : "bg-surface-muted text-muted"}`}
+            className={`flex min-h-11 flex-1 items-center justify-center rounded-full font-semibold ${selected === filter.value ? "bg-brand text-on-brand" : "bg-surface-muted text-muted"}`}
           >
             {filter.label}
           </Link>
@@ -39,7 +39,7 @@ async function FilteredCounselors({
       </nav>
       <p className="mt-5 text-caption text-muted">상담사 {filtered.length}명</p>
       {filtered.length ? (
-        <ul className="mt-3 grid min-w-0 gap-2 md:grid-cols-2 md:gap-3">
+        <ul className="mt-3 grid min-w-0 gap-2 @3xl/app:grid-cols-2 @3xl/app:gap-3">
           {filtered.map((counselor) => (
             <CounselorListItem key={counselor.id} counselor={counselor} />
           ))}
@@ -57,12 +57,12 @@ export default function ConsultPage({
   searchParams: SearchParams;
 }) {
   return (
-    <div className="min-w-0 px-4 pt-6 md:px-6">
-      <h1 className="text-xl font-bold md:text-2xl">전화상담</h1>
-      <p className="mt-2 text-caption text-muted md:text-sm">
+    <div className="min-w-0 px-4 pt-6 @3xl/app:px-6">
+      <h1 className="text-xl font-bold">전화상담</h1>
+      <p className="mt-2 text-caption text-muted">
         예약한 시간에 상담사가 매장 전화로 연락드려요.
       </p>
-      <div className="mt-7 md:mt-9">
+      <div className="mt-7 @3xl/app:mt-9">
         <Suspense
           fallback={
             <p className="text-muted">상담사 목록을 불러오는 중이에요.</p>

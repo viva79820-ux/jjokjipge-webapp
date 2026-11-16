@@ -125,8 +125,8 @@ export function InquiryForm() {
     return <InquiryComplete receipt={receipt} onNewInquiry={newInquiry} />;
   return (
     <section>
-      <h1 className="text-lg font-bold md:text-xl">1:1 문의</h1>
-      <p className="mt-2 mb-6 text-caption text-muted md:text-sm">
+      <h1 className="text-lg font-bold">1:1 문의</h1>
+      <p className="mt-2 mb-6 text-caption text-muted">
         로그인 없이 문의할 수 있습니다. 예약번호를 제외한 모든 항목은
         필수입니다.
       </p>
@@ -262,7 +262,7 @@ export function InquiryForm() {
             </p>
             {errorFor("content")}
           </div>
-          <div className="rounded-card border border-border bg-surface p-3 md:p-4">
+          <div className="rounded-card border border-border bg-surface p-3 @3xl/app:p-4">
             <label
               htmlFor="inquiry-privacyConsent"
               className="flex min-h-11 cursor-pointer items-center gap-2 font-semibold"
@@ -282,7 +282,7 @@ export function InquiryForm() {
             </label>
             <div
               id="inquiry-privacy-help"
-              className="space-y-2 text-caption leading-relaxed text-muted md:text-sm"
+              className="space-y-2 text-caption leading-relaxed text-muted"
             >
               <p>
                 수집 항목: 이름, 휴대폰 번호, 이메일, 문의 내용, 예약번호(입력한

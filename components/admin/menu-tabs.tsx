@@ -24,7 +24,7 @@ export function AdminMenuTabs() {
   return (
     <nav
       aria-label="관리자 메뉴"
-      className="border-b border-border px-4 md:px-6"
+      className="border-b border-border px-4 @3xl/app:px-6"
     >
       <DragRow selectedIndex={selectedIndex}>
         {menus.map(([label, href], index) => (
@@ -33,7 +33,7 @@ export function AdminMenuTabs() {
             href={href}
             prefetch={false}
             aria-current={index === selectedIndex ? "page" : undefined}
-            className={`flex min-h-12 shrink-0 cursor-pointer items-center justify-center border-b-2 px-4 text-body font-semibold whitespace-nowrap md:flex-1 md:text-base ${index === selectedIndex ? "border-brand text-brand" : "border-transparent text-muted"}`}
+            className={`flex min-h-12 shrink-0 cursor-pointer items-center justify-center border-b-2 px-4 text-body font-semibold whitespace-nowrap @3xl/app:flex-1 ${index === selectedIndex ? "border-brand text-brand" : "border-transparent text-muted"}`}
           >
             {label}
           </Link>

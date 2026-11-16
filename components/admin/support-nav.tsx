@@ -15,7 +15,7 @@ export function AdminSupportNav() {
           aria-current={
             path.startsWith(`/admin/support/${key}`) ? "page" : undefined
           }
-          className={`flex min-h-11 flex-1 items-center justify-center rounded-button px-3 font-semibold ${path.startsWith(`/admin/support/${key}`) ? "bg-brand text-on-brand" : "bg-surface-muted text-muted"}`}
+          className={`flex min-h-11 flex-1 items-center justify-center rounded-full px-3 font-semibold ${path.startsWith(`/admin/support/${key}`) ? "bg-brand text-on-brand" : "bg-surface-muted text-muted"}`}
         >
           {label}
         </Link>

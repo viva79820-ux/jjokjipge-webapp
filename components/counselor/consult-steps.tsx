@@ -23,14 +23,12 @@ export function ConsultSteps() {
             </span>
             <div>
               <p className="font-bold">{step.title}</p>
-              <p className="mt-1 text-caption text-muted md:text-sm">
-                {step.description}
-              </p>
+              <p className="mt-1 text-caption text-muted">{step.description}</p>
             </div>
           </li>
         ))}
       </ol>
-      <p className="mt-4 text-caption text-muted md:text-sm">
+      <p className="mt-4 text-caption text-muted">
         로그인하지 않아도 예약할 수 있어요.
       </p>
     </>

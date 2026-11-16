@@ -68,13 +68,17 @@ export async function SupportList({
           FAQ 등록
         </Button>
       )}
-      <form key={returnTo} action={base} className="grid gap-3 md:grid-cols-2">
+      <form
+        key={returnTo}
+        action={base}
+        className="grid gap-3 @3xl/app:grid-cols-2"
+      >
         <label>
           분류
           <select
             name="category"
             defaultValue={filters.category}
-            className="mt-1 min-h-11 w-full rounded-button border border-border bg-surface px-3"
+            className="mt-1 min-h-11 w-full rounded-input border border-border bg-surface px-3"
           >
             <option value="">전체</option>
             {Object.entries(categories).map(([v, l]) => (
@@ -89,7 +93,7 @@ export async function SupportList({
           <select
             name="status"
             defaultValue={filters.status}
-            className="mt-1 min-h-11 w-full rounded-button border border-border bg-surface px-3"
+            className="mt-1 min-h-11 w-full rounded-input border border-border bg-surface px-3"
           >
             <option value="">전체</option>
             {Object.entries(statuses).map(([v, l]) => (
@@ -110,7 +114,7 @@ export async function SupportList({
         {result.data.map((row) => (
           <article
             key={row.id}
-            className="space-y-2 rounded-card border border-border bg-surface p-3 wrap-anywhere md:p-4"
+            className="space-y-2 rounded-card border border-border bg-surface p-3 wrap-anywhere @3xl/app:p-4"
           >
             {"question" in row ? (
               <>

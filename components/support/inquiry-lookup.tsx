@@ -89,11 +89,8 @@ export function InquiryLookup() {
   }
   return (
     <section>
-      <h1 className="text-lg font-bold md:text-xl">문의 조회</h1>
-      <p
-        id="lookup-help"
-        className="mt-2 mb-6 text-caption text-muted md:text-sm"
-      >
+      <h1 className="text-lg font-bold">문의 조회</h1>
+      <p id="lookup-help" className="mt-2 mb-6 text-caption text-muted">
         문의번호와 작성한 이메일을 입력해 주세요. 로그인한 경우에도 두 값이 모두
         필요합니다.
       </p>
@@ -190,7 +187,7 @@ export function InquiryLookup() {
           <h2
             ref={resultRef}
             tabIndex={-1}
-            className="mt-7 scroll-mt-4 text-lg font-bold focus:outline-none md:text-xl"
+            className="mt-7 scroll-mt-4 text-lg font-bold focus:outline-none"
           >
             조회 결과
           </h2>

@@ -24,11 +24,11 @@ export function BookingComplete({
     }
   }
   return (
-    <section className="space-y-7 md:space-y-9" aria-label="예약 완료">
-      <h2 className="text-xl font-bold md:text-2xl">예약이 접수되었어요</h2>
-      <div className="rounded-card border border-border bg-surface p-3 md:p-4">
+    <section className="space-y-7 @3xl/app:space-y-9" aria-label="예약 완료">
+      <h2 className="text-xl font-bold">예약이 접수되었어요</h2>
+      <div className="rounded-card border border-border bg-surface p-3 @3xl/app:p-4">
         <p className="text-caption text-muted">예약번호</p>
-        <p className="mt-1 break-all text-2xl font-bold text-brand md:text-3xl">
+        <p className="mt-1 break-all text-2xl font-bold text-brand">
           {reservation.reservationNo}
         </p>
         <Button
@@ -68,7 +68,7 @@ export function BookingComplete({
           </div>
         </dl>
       </div>
-      <div className="rounded-card bg-brand-soft p-3 md:p-4">
+      <div className="rounded-card bg-brand-soft p-3 @3xl/app:p-4">
         <h3 className="font-bold">입금 안내 · 예시 계좌</h3>
         <p className="mt-2 break-words">
           {bookingConfig.bank.name} {bookingConfig.bank.account}
@@ -88,7 +88,7 @@ export function BookingComplete({
       >
         예약번호와 이메일로 예약 조회에서 확인할 수 있어요.
       </Link>
-      <p className="text-caption text-muted md:text-sm">
+      <p className="text-caption text-muted">
         취소는 상담 시작 전까지 매장 대표전화 또는 1:1 문의로 신청해 주세요.{" "}
         <a
           href={`tel:${siteConfig.phone}`}

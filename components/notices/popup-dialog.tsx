@@ -163,7 +163,7 @@ export function NoticePopupDialog({ notice }: { notice: NoticePopup | null }) {
                 className="h-auto max-h-[30dvh] w-auto max-w-full object-contain"
               />
             ))}
-          <p className="whitespace-pre-wrap wrap-anywhere text-body md:text-base">
+          <p className="whitespace-pre-wrap wrap-anywhere text-body">
             {summarizeNoticeBody(notice.body)}
           </p>
           <p className="text-sm text-muted">

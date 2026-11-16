@@ -8,7 +8,7 @@ export function CounselorCarousel({ counselors }: { counselors: Counselor[] }) {
       {counselors.map((counselor) => (
         <div
           key={counselor.id}
-          className="min-w-0 flex-[0_0_43.478%] pl-3 md:flex-[0_0_23.256%]"
+          className="min-w-0 flex-[0_0_43.478%] pl-3 @3xl/app:flex-[0_0_23.256%]"
         >
           <CounselorCard counselor={counselor} />
         </div>

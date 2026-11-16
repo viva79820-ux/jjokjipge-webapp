@@ -10,16 +10,16 @@ export function CounselorCard({ counselor }: { counselor: Counselor }) {
     <Link
       href={`/consult/${counselor.id}`}
       draggable={false}
-      className="block h-full min-w-0 cursor-grab overflow-hidden rounded-card border border-gold bg-surface text-center select-none active:cursor-grabbing"
+      className="block h-full min-w-0 cursor-grab overflow-hidden rounded-card border border-border bg-surface text-center select-none active:cursor-grabbing"
     >
       <CounselorPhoto
         src={counselor.imageUrl}
         alt={`${counselorHeading(counselor.name)} 사진`}
-        sizes="(min-width: 768px) 180px, 42vw"
-        className="h-32 w-full rounded-none md:h-48"
+        sizes="240px"
+        className="h-32 w-full rounded-none @3xl/app:h-48"
       />
-      <div className="min-w-0 max-w-full p-3 md:p-4">
-        <p className="wrap-anywhere text-base font-bold md:text-lg">
+      <div className="min-w-0 max-w-full p-3 @3xl/app:p-4">
+        <p className="wrap-anywhere text-base font-bold">
           <CounselorName name={counselor.name} />
         </p>
         <div className="mt-2 flex min-w-0 max-w-full flex-wrap justify-center gap-1">

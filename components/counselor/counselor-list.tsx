@@ -25,14 +25,14 @@ export function CounselorList({ counselors }: { counselors: Counselor[] }) {
             role="tab"
             aria-selected={selected === value}
             onClick={() => setSelected(value)}
-            className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-button font-semibold ${selected === value ? "bg-brand text-on-brand" : "bg-surface-muted text-muted"}`}
+            className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-full font-semibold ${selected === value ? "bg-brand text-on-brand" : "bg-surface-muted text-muted"}`}
           >
             <Icon size={16} aria-hidden="true" />
             {label}
           </button>
         ))}
       </div>
-      <ul className="mt-3 grid min-w-0 gap-2 md:grid-cols-2 md:gap-3">
+      <ul className="mt-3 grid min-w-0 gap-2 @3xl/app:grid-cols-2 @3xl/app:gap-3">
         {filtered.map((c) => (
           <CounselorListItem key={c.id} counselor={c} />
         ))}

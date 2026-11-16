@@ -3,20 +3,20 @@ import { ChevronRight, Headphones, Megaphone } from "lucide-react";
 
 export default function Page() {
   return (
-    <div className="px-4 pt-6 md:px-6 md:pt-8">
-      <h1 className="mb-4 text-lg font-bold md:text-xl">카테고리</h1>
+    <div className="px-4 pt-6 @3xl/app:px-6 @3xl/app:pt-8">
+      <h1 className="mb-4 text-lg font-bold">카테고리</h1>
       <Link
         href="/notices"
-        className="mb-3 flex min-h-24 cursor-pointer items-center gap-3 rounded-card border border-border bg-surface p-3 md:p-4"
+        className="mb-3 flex min-h-24 cursor-pointer items-center gap-3 rounded-card border border-border bg-surface p-3 @3xl/app:p-4"
       >
         <Megaphone
           size={28}
-          className="shrink-0 text-gold"
+          className="shrink-0 text-brand"
           aria-hidden="true"
         />
         <div className="min-w-0 flex-1">
           <p className="font-bold">공지사항</p>
-          <p className="mt-1 text-caption text-muted md:text-sm">
+          <p className="mt-1 text-caption text-muted">
             매장 소식 · 운영시간 · 이용 안내
           </p>
         </div>
@@ -28,16 +28,16 @@ export default function Page() {
       </Link>
       <Link
         href="/support"
-        className="flex min-h-24 items-center gap-3 rounded-card border border-border bg-surface p-3 md:p-4"
+        className="flex min-h-24 items-center gap-3 rounded-card border border-border bg-surface p-3 @3xl/app:p-4"
       >
         <Headphones
           size={28}
-          className="shrink-0 text-gold"
+          className="shrink-0 text-brand"
           aria-hidden="true"
         />
         <div className="min-w-0 flex-1">
           <p className="font-bold">고객센터</p>
-          <p className="mt-1 text-caption text-muted md:text-sm">
+          <p className="mt-1 text-caption text-muted">
             자주 묻는 질문 · 1:1 문의 · 문의 조회
           </p>
         </div>
