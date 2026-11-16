@@ -9,14 +9,18 @@ export function StorePhoto({
   alt,
   sizes,
   className = "",
+  cover = false,
 }: {
   src: string | null;
   alt: string;
   sizes: string;
   className?: string;
+  cover?: boolean;
 }) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
-  const frame = `relative aspect-video overflow-hidden rounded-card bg-surface-muted ${className}`;
+  const frame = cover
+    ? `relative h-50 overflow-hidden bg-brand-soft ${className}`
+    : `relative aspect-video overflow-hidden rounded-card bg-surface-muted ${className}`;
   if (!src || failedSrc === src)
     return (
       <div
@@ -39,7 +43,7 @@ export function StorePhoto({
         src={src}
         alt={alt}
         sizes={sizes}
-        className="object-cover"
+        className={cover ? "object-cover object-[center_35%]" : "object-cover"}
         data-store-photo
         onError={() => setFailedSrc(src)}
       />
