@@ -1097,24 +1097,77 @@ try {
     true,
   );
 
-  await go(
-    `/admin/stores/${lostStoreId}?returnTo=${encodeURIComponent("/admin/stores?status=private")}`,
+  await page.evaluate(
+    `Array.from(document.querySelectorAll('[data-store-id="${lostStoreId}"] a')).find((item)=>item.checkVisibility()).click()`,
   );
+  await until(
+    () => page.evaluate(`location.pathname==='/admin/stores/${lostStoreId}'`),
+    "lost delete editor",
+  );
+  await text("매장 편집");
   await page.button("매장 삭제");
   await page.fill("confirmed_name", "채움 2");
   loseDeleteResponse = true;
   await page.button("매장 영구 삭제");
-  await text("삭제 결과 다시 확인");
+  await until(
+    () =>
+      page.evaluate(
+        `Array.from(document.querySelectorAll("button")).some((item)=>item.checkVisibility()&&!item.disabled&&item.textContent.trim()==="삭제 결과 다시 확인")`,
+      ),
+    "lost delete reconcile",
+  );
   assert.equal(
     stores.some((item) => item.id === lostStoreId),
     false,
   );
   assert.equal(files.has(lostPhoto), true);
   const lostDeleteCount = deleteTrace.length;
+  await page.evaluate("history.back()");
+  await until(
+    () => page.evaluate("location.pathname==='/admin/stores'"),
+    "lost delete activity back",
+  );
+  assert.equal(
+    await page.evaluate(
+      `Array.from(document.querySelectorAll("button")).some((item)=>item.checkVisibility()&&item.textContent.trim()==="삭제 결과 다시 확인")`,
+    ),
+    false,
+  );
+  await page.evaluate("history.forward()");
+  await until(
+    () => page.evaluate(`location.pathname==='/admin/stores/${lostStoreId}'`),
+    "lost delete activity forward",
+  );
+  await text("매장 편집");
+  await until(
+    () =>
+      page.evaluate(
+        `Array.from(document.querySelectorAll("button")).some((item)=>item.checkVisibility()&&!item.disabled&&item.textContent.trim()==="삭제 결과 다시 확인")`,
+      ),
+    "restored reconcile button",
+  );
+  assert.equal(
+    await page.evaluate(
+      `Array.from(document.querySelectorAll("dialog")).some((item)=>item.checkVisibility())`,
+    ),
+    false,
+  );
+  assert.equal(files.has(lostPhoto), true);
+  assert.equal(deleteTrace.length, lostDeleteCount);
   await page.button("삭제 결과 다시 확인");
-  await text("매장을 삭제했습니다.");
+  await until(
+    () =>
+      page.evaluate(
+        `location.pathname==="/admin/stores"&&Array.from(document.querySelectorAll("p")).some((item)=>item.checkVisibility()&&item.textContent.includes("매장을 삭제했습니다."))`,
+      ),
+    "lost delete reconciled",
+  );
   assert.equal(deleteTrace.length, lostDeleteCount);
   assert.equal(files.has(lostPhoto), false);
+  assert.equal(
+    stores.some((item) => item.id === lostStoreId),
+    false,
+  );
 
   await go(
     `/admin/stores/${sharedStoreId}?returnTo=${encodeURIComponent("/admin/stores?status=private")}`,

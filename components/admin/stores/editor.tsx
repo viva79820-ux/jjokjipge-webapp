@@ -86,6 +86,10 @@ export function StoreEditor({
   const pendingCreate = useRef(false);
   const leaving = useRef(false);
   const lock = useRef(false);
+  const deleteRecoveryRef = useRef<
+    (() => Promise<StoreDeleteResult>) | undefined
+  >(undefined);
+  const deleteUnknownRef = useRef(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const reloadRef = useRef<HTMLDivElement>(null);
   const prefix = useId();
@@ -94,16 +98,36 @@ export function StoreEditor({
   const control =
     "mt-1 w-full min-w-0 min-h-11 rounded-button border border-border bg-surface p-3";
   useLayoutEffect(() => {
+    if (deletePlan?.reconcile) deleteRecoveryRef.current = deletePlan.reconcile;
+    else if (!deleteUnknown) deleteRecoveryRef.current = undefined;
+    deleteUnknownRef.current = deleteUnknown;
+  }, [deletePlan, deleteUnknown]);
+  useLayoutEffect(() => {
     if (leaving.current) {
       leaving.current = false;
       lock.current = false;
       setBusy(false);
       setMessage("");
+    } else if (deleteUnknownRef.current) {
+      lock.current = false;
+      setBusy(false);
+      const reconcile = deleteRecoveryRef.current;
+      if (reconcile)
+        setDeletePlan((current) =>
+          current?.reconcile
+            ? current
+            : { state: "unknown", message: "", reconcile },
+        );
     }
     return () => {
       setModal(null);
-      setDeletePlan(null);
       setConfirmedName("");
+      setDeletePlan((current) => {
+        if (leaving.current || !deleteUnknownRef.current) return null;
+        if (current?.reconcile) return current;
+        const reconcile = deleteRecoveryRef.current;
+        return reconcile ? { state: "unknown", message: "", reconcile } : null;
+      });
     };
   }, []);
   useEffect(() => {
@@ -506,9 +530,11 @@ export function StoreEditor({
     if (typeof result.linkedCount === "number")
       setLinkedCounselors(result.linkedCount);
     if (result.state === "unknown") {
+      deleteUnknownRef.current = true;
       setDeleteUnknown(true);
       return;
     }
+    deleteUnknownRef.current = false;
     setDeleteUnknown(false);
     setConfirmedName("");
     if (result.state === "deleted") {
@@ -591,6 +617,7 @@ export function StoreEditor({
       finishDelete(await deletePlan.execute(data));
     } catch {
       setModal(null);
+      deleteUnknownRef.current = true;
       setDeleteUnknown(true);
       setMessage(
         "삭제 응답을 받지 못했습니다. 사진은 정리하지 않고 삭제 결과를 다시 확인해야 합니다.",
@@ -603,12 +630,14 @@ export function StoreEditor({
     }
   }
   async function reconcileDelete() {
-    if (!deletePlan?.reconcile || lock.current || leaving.current) return;
+    const reconcile = deletePlan?.reconcile ?? deleteRecoveryRef.current;
+    if (!reconcile || lock.current || leaving.current) return;
     lock.current = true;
     setBusy(true);
     try {
-      finishDelete(await deletePlan.reconcile());
+      finishDelete(await reconcile());
     } catch {
+      deleteUnknownRef.current = true;
       setDeleteUnknown(true);
       setMessage(
         "삭제 결과를 확인하지 못했습니다. 매장이 남아 있을 수 있어 사진을 정리하지 않았습니다.",
