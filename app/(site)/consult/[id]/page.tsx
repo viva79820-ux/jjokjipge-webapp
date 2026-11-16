@@ -2,25 +2,25 @@ import { siteConfig } from "@/lib/site-config";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, Phone, Store } from "lucide-react";
+import { Check, ChevronLeft, Phone, Store } from "lucide-react";
 import { Suspense } from "react";
 import { getCounselor } from "@/lib/data/counselors";
 import { counselorHeading, displayChips } from "@/lib/counselors/rules";
 import { CounselorName } from "@/components/counselor/name";
 import { CounselorPhoto } from "@/components/counselor/photo";
-import { ProductCard } from "@/components/counselor/product-card";
-import { ConsultSteps } from "@/components/counselor/consult-steps";
-import { Button } from "@/components/ui/button";
+import { CounselorMenu } from "@/components/counselor/counselor-menu";
 import { Chip } from "@/components/ui/chip";
-import { SectionTitle } from "@/components/ui/section-title";
-import { Badge } from "@/components/ui/badge";
 
 type Props = { params: Promise<{ id: string }> };
+const focus =
+  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const counselor = await getCounselor((await params).id);
   if (!counselor) notFound();
   return { title: `${counselorHeading(counselor.name)} | ${siteConfig.name}` };
 }
+
 export default function CounselorPage({ params }: Props) {
   return (
     <Suspense fallback={null}>
@@ -28,96 +28,117 @@ export default function CounselorPage({ params }: Props) {
     </Suspense>
   );
 }
+
 async function CounselorContent({ params }: Props) {
   const counselor = await getCounselor((await params).id);
   if (!counselor) notFound();
-  const bookingHref = `/consult/${counselor.id}/book`;
+  const heading = counselorHeading(counselor.name);
   const chips = displayChips(counselor);
+  const careers = counselor.careers.filter((career) => career.trim());
+  const intro = counselor.intro.trim() ? counselor.intro : "";
+  const description =
+    counselor.description.trim() &&
+    counselor.description.trim() !== counselor.intro.trim()
+      ? counselor.description
+      : "";
+  const storeName = counselor.storeName.trim() ? counselor.storeName : "";
   return (
-    <div className="min-w-0 px-4 pt-3 @3xl/app:px-6">
-      <Link
-        href="/consult"
-        className="inline-flex min-h-11 items-center text-sm text-muted"
+    <div className="min-w-0 pb-16">
+      <header
+        data-counselor-header
+        className="sticky top-0 z-30 flex h-14 items-center gap-1 border-b border-border bg-surface px-2"
       >
-        <ChevronLeft size={18} aria-hidden="true" />
-        상담사 목록
-      </Link>
-      <div className="space-y-7 @3xl/app:space-y-9">
-        <section className="grid min-w-0 gap-4 @3xl/app:grid-cols-[280px_minmax(0,1fr)] @3xl/app:items-start @3xl/app:gap-6">
-          <CounselorPhoto
-            src={counselor.imageUrl}
-            alt={`${counselorHeading(counselor.name)} 사진`}
-            sizes="100vw"
-            className="aspect-square w-full rounded-card"
+        <Link
+          href="/consult"
+          aria-label="뒤로"
+          className={`flex size-11 cursor-pointer items-center justify-center text-foreground ${focus}`}
+        >
+          <ChevronLeft size={24} aria-hidden="true" />
+        </Link>
+        <p className="text-subtitle font-bold">선생님 소개</p>
+      </header>
+      <CounselorPhoto
+        src={counselor.imageUrl}
+        alt={`${heading} 사진`}
+        sizes="100vw"
+        imageClassName="object-cover object-[center_12%]"
+        className="h-85 w-full"
+      />
+      <section className="relative z-10 -mt-7 mx-4 flex flex-col gap-2 rounded-card border border-border bg-surface px-4.5 pt-8 pb-4.5 @3xl/app:mx-6">
+        <h1 className="m-0 text-display font-extrabold wrap-anywhere">
+          <CounselorName
+            name={counselor.name}
+            honorificClassName="text-subtitle font-semibold text-muted"
           />
-          <div className="min-w-0 max-w-full">
-            <h1 className="wrap-anywhere text-xl font-bold">
-              <CounselorName name={counselor.name} />
-            </h1>
-            <div className="mt-3 flex min-w-0 max-w-full flex-wrap gap-1">
-              {chips.map((tag, index) => (
-                <Chip key={tag} primary={index === 0}>
-                  {tag}
-                </Chip>
-              ))}
-            </div>
-            {counselor.storeName.trim() && (
-              <Badge icon={Store} className="mt-4 px-3">
-                {counselor.storeName} 상담사
-              </Badge>
-            )}
-            <Button href={bookingHref} className="mt-5 w-full gap-2">
-              <Phone size={18} aria-hidden="true" />
-              전화 상담 예약하기
-            </Button>
+        </h1>
+        {chips.length > 0 && (
+          <div className="flex min-w-0 max-w-full flex-wrap gap-1">
+            {chips.map((tag, index) => (
+              <Chip key={tag} primary={index === 0}>
+                {tag}
+              </Chip>
+            ))}
           </div>
+        )}
+        {storeName ? (
+          <p className="flex items-start gap-1.5 text-label text-muted">
+            <Store size={16} aria-hidden="true" className="mt-0.5 shrink-0" />
+            <span className="min-w-0 wrap-anywhere">{storeName}</span>
+          </p>
+        ) : null}
+        {intro ? (
+          <p className="text-body wrap-anywhere whitespace-pre-wrap">{intro}</p>
+        ) : null}
+      </section>
+      {careers.length > 0 && (
+        <section className="min-w-0 px-4 pt-7 @3xl/app:px-6">
+          <h2 className="mb-3 text-title font-bold">경력</h2>
+          <ul className="flex list-none flex-col gap-2.5 p-0">
+            {careers.map((career, index) => (
+              <li
+                key={`${index}-${career}`}
+                className="flex min-w-0 items-start gap-2 text-body"
+              >
+                <Check
+                  size={18}
+                  aria-hidden="true"
+                  className="mt-0.5 shrink-0 text-brand"
+                />
+                <span className="min-w-0 wrap-anywhere whitespace-pre-wrap">
+                  {career}
+                </span>
+              </li>
+            ))}
+          </ul>
         </section>
-        <section className="min-w-0">
-          <SectionTitle title="상담사 소개" />
-          <p className="wrap-anywhere leading-relaxed whitespace-pre-wrap">
-            {counselor.description}
+      )}
+      {description ? (
+        <section className="min-w-0 px-4 pt-7 @3xl/app:px-6">
+          <h2 className="mb-3 text-title font-bold">소개</h2>
+          <p className="text-body wrap-anywhere whitespace-pre-wrap">
+            {description}
           </p>
         </section>
-        {counselor.careers.length > 0 && (
-          <section className="min-w-0">
-            <SectionTitle title="경력·교육·자격" />
-            <ul className="min-w-0 list-disc space-y-2 pl-5">
-              {counselor.careers.map((career, index) => (
-                <li
-                  key={`${index}-${career}`}
-                  className="wrap-anywhere whitespace-pre-wrap"
-                >
-                  {career}
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-        <section>
-          <SectionTitle title="상담 상품" />
-          {counselor.products.length ? (
-            <ul className="grid gap-2 @3xl/app:grid-cols-2 @3xl/app:gap-3">
-              {counselor.products.map((product) => (
-                <ProductCard
-                  key={product.id}
-                  product={product}
-                  bookingHref={`${bookingHref}?product=${product.id}`}
-                />
-              ))}
-            </ul>
-          ) : (
-            <p className="text-muted">등록된 상담 상품이 없어요.</p>
-          )}
-        </section>
-        <section>
-          <SectionTitle title="전화상담은 이렇게 진행돼요" />
-          <ConsultSteps />
-        </section>
-        <Button href={bookingHref} className="w-full gap-2">
-          <Phone size={18} aria-hidden="true" />
-          전화 상담 예약하기
-        </Button>
-      </div>
+      ) : null}
+      <CounselorMenu counselorId={counselor.id} products={counselor.products} />
+      <section className="px-4 pt-7 @3xl/app:px-6">
+        <div className="flex flex-col gap-2 rounded-card bg-brand-soft p-4 text-brand-deep">
+          <p className="flex items-center gap-1.5 text-body font-extrabold">
+            <Phone size={18} aria-hidden="true" />
+            전화상담은 이렇게 해요
+          </p>
+          <p className="text-label">
+            예약한 시간에 선생님이 쪽집게천사 매장 전화로 먼저 연락드려요. 개인
+            번호는 쓰지 않아요.
+          </p>
+        </div>
+      </section>
+      <section className="px-4 pt-7 @3xl/app:px-6">
+        <h2 className="mb-3 text-title font-bold">상담 후기</h2>
+        <div className="rounded-card border border-border bg-surface px-5 py-5 text-center text-label text-muted">
+          상담 후기는 준비 중이에요.
+        </div>
+      </section>
     </div>
   );
 }

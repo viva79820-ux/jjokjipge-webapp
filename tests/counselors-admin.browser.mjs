@@ -819,13 +819,13 @@ try {
   await text("사주명리상담경력 10년");
   await text("첫째 줄");
   await text("둘째 줄");
-  await text("더미 동성로 상담사");
+  await text("더미 동성로");
   await until(
     () =>
       page.evaluate(
-        "getComputedStyle(document.querySelector('[data-counselor-photo]')).objectFit==='contain'&&document.querySelector('[data-counselor-photo]').naturalWidth===80",
+        "getComputedStyle(document.querySelector('[data-counselor-photo]')).objectFit==='cover'&&document.querySelector('[data-counselor-photo]').naturalWidth===80",
       ),
-    "contained photo",
+    "covered photo",
   );
   const chipText = await page.evaluate(
     "Array.from(document.querySelectorAll('span')).map((item)=>item.textContent.trim()).filter((item)=>['타로','사주','연애운'].includes(item)).join(',')",
@@ -951,7 +951,7 @@ try {
     await assertInside(longDescription.split("\n")[0]);
     const separated = await page.evaluate(`(() => {
       const name = Array.from(document.querySelectorAll("h1")).find((node) => node.textContent.includes(${JSON.stringify(longName)}));
-      const button = Array.from(document.querySelectorAll("a")).find((node) => node.textContent.includes("전화 상담 예약하기"));
+      const button = Array.from(document.querySelectorAll("a")).find((node) => node.checkVisibility() && node.textContent.includes("전화상담 예약하기"));
       const photo = document.querySelector("[data-counselor-photo-frame]");
       const rect = (node) => {
         const box = node.getBoundingClientRect();

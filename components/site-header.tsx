@@ -9,7 +9,7 @@ const focus =
 
 export function SiteHeader() {
   return (
-    <header className="bg-surface">
+    <header data-site-header className="bg-surface">
       <div className="flex h-15 items-center justify-between gap-2 px-4">
         <Link
           href="/"

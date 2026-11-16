@@ -256,7 +256,7 @@ try {
       const intro = item.querySelector("p");
       const introBox = intro.getBoundingClientRect();
       const button = [...item.querySelectorAll("a")].find((node) =>
-        node.textContent.includes("전화 상담 예약"),
+        node.textContent.includes("전화상담 예약"),
       );
       const buttonBox = button.getBoundingClientRect();
       const overlaps = (a, b) =>
@@ -289,6 +289,7 @@ try {
         fontSize: style.fontSize,
         color: style.color,
         weight: style.fontWeight,
+        wrap: style.overflowWrap,
         radius: style.borderTopLeftRadius,
         shortHeight: short.getBoundingClientRect().height,
         shortWeight: shortStyle.fontWeight,
@@ -300,6 +301,7 @@ try {
     assert.equal(chip.missing, undefined, "긴 상담 주제 칩을 찾지 못했습니다.");
     assert.equal(chip.text, longTopic);
     assert.equal(chip.fontSize, "12px");
+    assert.equal(chip.wrap, "anywhere");
     assert.equal(chip.shortSize, "12px");
     assert.equal(chip.color, "rgb(94, 47, 120)");
     assert.equal(String(chip.weight), "600");
@@ -591,7 +593,7 @@ try {
       return true;
     })()`);
     await shot(name.replace("home-", "consult-chip-"));
-    assertTopic(topic, width <= 430);
+    assertTopic(topic, false);
     const consult = await measure();
     await go("/");
     await until(

@@ -1,6 +1,5 @@
 import { Suspense } from "react";
-import { SiteHeader } from "@/components/site-header";
-import { BottomTabs } from "@/components/bottom-tabs";
+import { BottomTabsGate, SiteHeaderGate } from "@/components/site-chrome";
 import { appMainClass, appShellClass } from "@/lib/app-frame";
 
 export default function SiteLayout({
@@ -11,11 +10,11 @@ export default function SiteLayout({
   return (
     <div data-app-shell className={appShellClass}>
       <Suspense fallback={null}>
-        <SiteHeader />
+        <SiteHeaderGate />
       </Suspense>
       <main className={appMainClass}>{children}</main>
       <Suspense fallback={null}>
-        <BottomTabs />
+        <BottomTabsGate />
       </Suspense>
     </div>
   );

@@ -9,11 +9,13 @@ export function CounselorPhoto({
   alt,
   sizes,
   className = "",
+  imageClassName = "object-contain",
 }: {
   src: string | null;
   alt: string;
   sizes: string;
   className?: string;
+  imageClassName?: string;
 }) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   if (!src || failedSrc === src)
@@ -29,7 +31,7 @@ export function CounselorPhoto({
         src={src}
         alt={alt}
         sizes={sizes}
-        className="object-contain"
+        className={imageClassName}
         data-counselor-photo
         onError={() => setFailedSrc(src)}
       />
