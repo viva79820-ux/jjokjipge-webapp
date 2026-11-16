@@ -20,6 +20,9 @@ const noticeId = "44444444-4444-4444-8444-444444444444";
 const longName = "아주긴이름가나다라마바사아자차카타파하";
 const longCareer = `승인된경력원문${"가".repeat(80)}`;
 const longAddress = `대구광역시 중구 동성로 테스트주소${"나".repeat(80)}`;
+const longTopic = "가나다라마바사아자차카타파하가나다라마바";
+assert.equal([...longTopic].length, 20);
+assert.equal(longTopic.includes(" "), false);
 const failedPhoto = "counselors/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.png";
 const baseCounselor = {
   field: "saju",
@@ -43,6 +46,7 @@ const counselors = [
     id: counselorDbId,
     slug: "long-name",
     name: longName,
+    tags: [longTopic],
     image_path: null,
   },
   {
@@ -237,6 +241,81 @@ try {
         columns: columns.split(" ").filter(Boolean).length,
       };
     })()`);
+  const topicChip = () =>
+    evaluate(`(() => {
+      const topic = ${JSON.stringify(longTopic)};
+      const chip = [...document.querySelectorAll("li span")].find(
+        (node) => node.textContent.replace(/\\s+/g, "") === topic,
+      );
+      if (!chip) return { missing: true };
+      const item = chip.closest("li");
+      const range = document.createRange();
+      range.selectNodeContents(chip);
+      const text = range.getBoundingClientRect();
+      const box = chip.getBoundingClientRect();
+      const intro = item.querySelector("p");
+      const introBox = intro.getBoundingClientRect();
+      const button = [...item.querySelectorAll("a")].find((node) =>
+        node.textContent.includes("전화 상담 예약"),
+      );
+      const buttonBox = button.getBoundingClientRect();
+      const overlaps = (a, b) =>
+        a.left < b.right - 0.5 &&
+        a.right > b.left + 0.5 &&
+        a.top < b.bottom - 0.5 &&
+        a.bottom > b.top + 0.5;
+      const short = [...item.querySelectorAll("span")].find(
+        (node) => node.textContent.replace(/\\s+/g, "") === "사주",
+      );
+      const style = getComputedStyle(chip);
+      const shortStyle = getComputedStyle(short);
+      return {
+        text: chip.textContent.replace(/\\s+/g, ""),
+        lines: range.getClientRects().length,
+        chipWidth: box.width,
+        chipHeight: box.height,
+        textTop: text.top - box.top,
+        textBottom: box.bottom - text.bottom,
+        textHeight: text.height,
+        inside:
+          text.width > 0 &&
+          text.top >= box.top - 0.5 &&
+          text.bottom <= box.bottom + 0.5 &&
+          text.left >= box.left - 0.5 &&
+          text.right <= box.right + 0.5,
+        overlapsIntro: overlaps(text, introBox),
+        overlapsButton: overlaps(text, buttonBox),
+        chipScrolls: chip.scrollWidth > chip.clientWidth + 1,
+        fontSize: style.fontSize,
+        color: style.color,
+        weight: style.fontWeight,
+        radius: style.borderTopLeftRadius,
+        shortHeight: short.getBoundingClientRect().height,
+        shortWeight: shortStyle.fontWeight,
+        shortSize: shortStyle.fontSize,
+        overflow: document.documentElement.scrollWidth > window.innerWidth + 1,
+      };
+    })()`);
+  const assertTopic = (chip, multiline) => {
+    assert.equal(chip.missing, undefined, "긴 상담 주제 칩을 찾지 못했습니다.");
+    assert.equal(chip.text, longTopic);
+    assert.equal(chip.fontSize, "12px");
+    assert.equal(chip.shortSize, "12px");
+    assert.equal(chip.color, "rgb(94, 47, 120)");
+    assert.equal(String(chip.weight), "600");
+    assert.equal(String(chip.shortWeight), "700");
+    assert.equal(Math.round(chip.shortHeight), 24);
+    assert.equal(chip.overflow, false, JSON.stringify(chip));
+    assert.equal(chip.chipScrolls, false, JSON.stringify(chip));
+    assert.equal(chip.overlapsIntro, false, JSON.stringify(chip));
+    assert.equal(chip.overlapsButton, false, JSON.stringify(chip));
+    assert.ok(
+      parseFloat(chip.radius) + 0.5 >= chip.chipHeight / 2,
+      JSON.stringify(chip),
+    );
+    if (multiline) assert.ok(chip.lines > 1, JSON.stringify(chip));
+    assert.equal(chip.inside, true, JSON.stringify(chip));
+  };
 
   await emulate({ width: 390, height: 844, fine: false });
   await go("/");
@@ -496,9 +575,23 @@ try {
     await emulate({ width, height, fine });
     await go("/consult");
     await until(
-      () => evaluate("document.body.innerText.includes('전화상담')"),
+      () =>
+        evaluate(
+          `document.body.innerText.includes(${JSON.stringify(longTopic)})`,
+        ),
       name,
     );
+    const topic = await topicChip();
+    await evaluate(`(() => {
+      const topic = ${JSON.stringify(longTopic)};
+      const chip = [...document.querySelectorAll("li span")].find(
+        (node) => node.textContent.replace(/\\s+/g, "") === topic,
+      );
+      chip?.scrollIntoView({ block: "center" });
+      return true;
+    })()`);
+    await shot(name.replace("home-", "consult-chip-"));
+    assertTopic(topic, width <= 430);
     const consult = await measure();
     await go("/");
     await until(
