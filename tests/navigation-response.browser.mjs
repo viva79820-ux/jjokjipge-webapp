@@ -288,6 +288,34 @@ try {
   const href = () => evaluate("location.pathname + location.search");
 
   await emulate({ width: 390, height: 844, fine: false });
+  await go("/consult?type=saju&type=tarot");
+  await until(
+    () =>
+      evaluate(`(() => {
+        const text = document.body.innerText;
+        return (
+          text.includes("선생님") &&
+          !text.includes("상담사 목록을 불러오는 중이에요.")
+        );
+      })()`),
+    "duplicate field list",
+  );
+  const duplicateHits = counselorHits().length;
+  await delay(1000);
+  const duplicateText = await bodyText();
+  assert.equal(await href(), "/consult?type=saju&type=tarot");
+  assert.equal(duplicateText.includes("선생님 2명"), true, duplicateText);
+  assert.equal(duplicateText.includes("상담사 A"), true, duplicateText);
+  assert.equal(duplicateText.includes("상담사 B"), true, duplicateText);
+  assert.equal(
+    await evaluate(
+      `document.querySelector('nav[aria-label="상담 분야"] a[href="/consult"]')?.getAttribute("aria-current")`,
+    ),
+    "page",
+  );
+  assert.equal(counselorHits().length, duplicateHits);
+  report.push({ duplicateType: "all", href: await href() });
+
   await go("/consult");
   try {
     await waitText("선생님 2명");

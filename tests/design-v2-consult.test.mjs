@@ -48,7 +48,10 @@ test("전화상담 분야 주소는 전체·타로·사주만 선택으로 읽�
   assert.equal(consultFieldParam("tarot"), "tarot");
   assert.equal(consultFieldParam("saju"), "saju");
   assert.equal(consultFieldParam("naming"), "all");
+  assert.equal(consultFieldParam(""), "all");
   assert.deepEqual(consultFieldParam(["tarot"]), "all");
+  assert.equal(consultFieldParam(["saju", "tarot"]), "all");
+  assert.equal(consultFieldParam(["saju", "saju"]), "all");
   const people = [
     { id: "both", fields: ["saju", "tarot"] },
     { id: "tarot", fields: ["tarot"] },

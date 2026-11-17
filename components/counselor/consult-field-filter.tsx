@@ -14,9 +14,8 @@ const focus =
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
 
 function selectedField() {
-  return consultFieldParam(
-    new URLSearchParams(window.location.search).get("type") || undefined,
-  );
+  const values = new URLSearchParams(window.location.search).getAll("type");
+  return consultFieldParam(values.length === 1 ? values[0] : values);
 }
 
 export function ConsultFieldFilter({
