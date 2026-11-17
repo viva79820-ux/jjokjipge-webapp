@@ -22,7 +22,16 @@ export default function Home() {
         {siteConfig.name} 홈
       </h1>
       <HomeNoticePopup />
-      <Suspense fallback={null}>
+      <Suspense
+        fallback={
+          <p
+            role="status"
+            className="px-4 pt-6 text-body text-muted @3xl/app:px-6"
+          >
+            홈 내용을 불러오는 중이에요.
+          </p>
+        }
+      >
         <HomeContent />
       </Suspense>
     </>

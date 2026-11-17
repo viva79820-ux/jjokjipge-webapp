@@ -26,9 +26,20 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
+function BookingPending() {
+  return (
+    <div className="min-w-0 px-4 pt-3 @3xl/app:px-6">
+      <h1 className="text-xl font-bold">전화상담 예약</h1>
+      <p role="status" className="mt-3 text-body text-muted">
+        예약 가능 시간을 확인하고 있어요.
+      </p>
+    </div>
+  );
+}
+
 export default function BookingPage(props: Props) {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<BookingPending />}>
       <BookingContent {...props} />
     </Suspense>
   );

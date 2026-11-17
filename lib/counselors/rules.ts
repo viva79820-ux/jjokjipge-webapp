@@ -300,6 +300,9 @@ export function displayChips(input: {
   for (const tag of input.tags) add(tag);
   return chips;
 }
+export function consultFieldParam(type: string | string[] | undefined) {
+  return type === "tarot" || type === "saju" ? type : "all";
+}
 export function filterByField<T extends { fields: readonly CounselorField[] }>(
   items: readonly T[],
   type: string,

@@ -1,8 +1,7 @@
 import { siteConfig } from "@/lib/site-config";
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Check, ChevronLeft, Phone, Store } from "lucide-react";
+import { Check, Phone, Store } from "lucide-react";
 import { Suspense } from "react";
 import { getCounselor } from "@/lib/data/counselors";
 import { counselorHeading, displayChips } from "@/lib/counselors/rules";
@@ -10,12 +9,13 @@ import { CounselorName } from "@/components/counselor/name";
 import { CounselorPhoto } from "@/components/counselor/photo";
 import { CounselorDetailFrame } from "@/components/counselor/counselor-detail-frame";
 import { CounselorMenu } from "@/components/counselor/counselor-menu";
+import {
+  CounselorDetailHeader,
+  CounselorDetailPending,
+} from "@/components/counselor/detail-header";
 import { Chip } from "@/components/ui/chip";
 
 type Props = { params: Promise<{ id: string }> };
-const focus =
-  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
-
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const counselor = await getCounselor((await params).id);
   if (!counselor) notFound();
@@ -24,7 +24,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default function CounselorPage({ params }: Props) {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<CounselorDetailPending />}>
       <CounselorContent params={params} />
     </Suspense>
   );
@@ -45,19 +45,7 @@ async function CounselorContent({ params }: Props) {
   const storeName = counselor.storeName.trim() ? counselor.storeName : "";
   return (
     <CounselorDetailFrame>
-      <header
-        data-counselor-header
-        className="sticky top-0 z-30 flex h-14 items-center gap-1 border-b border-border bg-surface px-2"
-      >
-        <Link
-          href="/consult"
-          aria-label="뒤로"
-          className={`flex size-11 cursor-pointer items-center justify-center text-foreground ${focus}`}
-        >
-          <ChevronLeft size={24} aria-hidden="true" />
-        </Link>
-        <p className="text-subtitle font-bold">선생님 소개</p>
-      </header>
+      <CounselorDetailHeader />
       <CounselorPhoto
         src={counselor.imageUrl}
         alt={`${heading} 사진`}

@@ -23,6 +23,7 @@ function load(file) {
 }
 
 const { isCounselorDetailPath } = load("../lib/site-path.ts");
+const { consultFieldParam, filterByField } = load("../lib/counselors/rules.ts");
 const { consultPriceLabel, lowestPublicProduct } = load(
   "../lib/counselors/display.ts",
 );
@@ -40,6 +41,27 @@ test("상담사 상세 경로만 공통 메뉴를 숨긴다", () => {
   assert.equal(isCounselorDetailPath("/"), false);
   assert.equal(isCounselorDetailPath(""), false);
   assert.equal(isCounselorDetailPath(null), false);
+});
+
+test("전화상담 분야 주소는 전체·타로·사주만 선택으로 읽는다", () => {
+  assert.equal(consultFieldParam(undefined), "all");
+  assert.equal(consultFieldParam("tarot"), "tarot");
+  assert.equal(consultFieldParam("saju"), "saju");
+  assert.equal(consultFieldParam("naming"), "all");
+  assert.deepEqual(consultFieldParam(["tarot"]), "all");
+  const people = [
+    { id: "both", fields: ["saju", "tarot"] },
+    { id: "tarot", fields: ["tarot"] },
+    { id: "saju", fields: ["saju"] },
+  ];
+  assert.deepEqual(
+    filterByField(people, consultFieldParam("tarot")).map((item) => item.id),
+    ["both", "tarot"],
+  );
+  assert.deepEqual(
+    filterByField(people, consultFieldParam("unknown")).map((item) => item.id),
+    ["both", "tarot", "saju"],
+  );
 });
 
 test("목록 가격은 조회된 상품 중 최저가의 이름과 금액만 쓴다", () => {

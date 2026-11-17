@@ -1,21 +1,13 @@
 import { siteConfig } from "@/lib/site-config";
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Suspense } from "react";
-import { ConsultListCard } from "@/components/counselor/consult-list-card";
+import { ConsultFieldFilter } from "@/components/counselor/consult-field-filter";
 import { ConsultSteps } from "@/components/counselor/consult-steps";
-import { filterByField } from "@/lib/counselors/rules";
+import { consultFieldParam } from "@/lib/counselors/rules";
 import { getCounselors } from "@/lib/data/counselors";
 
 export const metadata: Metadata = { title: `전화상담 | ${siteConfig.name}` };
 type SearchParams = Promise<{ type?: string | string[] }>;
-const filters = [
-  { label: "전체", href: "/consult", value: "all" },
-  { label: "타로", href: "/consult?type=tarot", value: "tarot" },
-  { label: "사주", href: "/consult?type=saju", value: "saju" },
-] as const;
-const focus =
-  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
 
 async function FilteredCounselors({
   searchParams,
@@ -24,41 +16,11 @@ async function FilteredCounselors({
 }) {
   const { type } = await searchParams;
   const counselors = await getCounselors();
-  const selected = type === "tarot" || type === "saju" ? type : "all";
-  const filtered = filterByField(counselors, selected);
   return (
-    <>
-      <nav aria-label="상담 분야" className="flex flex-wrap gap-2">
-        {filters.map((filter) => {
-          const active = selected === filter.value;
-          return (
-            <Link
-              key={filter.value}
-              href={filter.href}
-              aria-current={active ? "page" : undefined}
-              className={`inline-flex min-h-11 cursor-pointer items-center justify-center rounded-full border px-4.5 text-label font-bold ${focus} ${active ? "border-brand bg-brand text-on-brand" : "border-border bg-surface text-foreground"}`}
-            >
-              {filter.label}
-            </Link>
-          );
-        })}
-      </nav>
-      <p className="text-caption font-semibold text-muted">
-        선생님 {filtered.length}명
-      </p>
-      {filtered.length ? (
-        <ul
-          data-counselor-list
-          className="grid min-w-0 gap-3 @3xl/app:grid-cols-2"
-        >
-          {filtered.map((counselor) => (
-            <ConsultListCard key={counselor.id} counselor={counselor} />
-          ))}
-        </ul>
-      ) : (
-        <p className="text-body text-muted">해당 분야 상담사가 아직 없어요.</p>
-      )}
-    </>
+    <ConsultFieldFilter
+      counselors={counselors}
+      initialSelected={consultFieldParam(type)}
+    />
   );
 }
 
