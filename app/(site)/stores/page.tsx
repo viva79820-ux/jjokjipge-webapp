@@ -38,7 +38,10 @@ async function StoresContent() {
     }
   }
   return (
-    <div className="flex min-w-0 flex-col gap-4 px-4 pt-6">
+    <div
+      data-store-page
+      className="flex min-w-0 flex-col gap-4 px-4 pt-6 @3xl/app:px-6"
+    >
       <header>
         <h1 className="text-display font-extrabold">매장상담</h1>
         <p className="mt-1 text-body text-muted">

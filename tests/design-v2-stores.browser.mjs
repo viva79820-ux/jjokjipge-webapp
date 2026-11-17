@@ -543,8 +543,20 @@ try {
   assert.equal(prices.color, "rgb(194, 37, 92)");
   assert.equal(prices.text.includes("매장 가격 기준"), true);
   assert.equal(prices.text.includes("1호점 가격판 기준"), true);
-  assert.equal(prices.text.includes("고객이 확정하기 전"), true);
-  assert.equal(prices.text.includes("1호점 가격판"), true);
+  assert.equal(
+    prices.text.includes(
+      "확인 중인 참고 가격입니다. 방문 전 매장에 최종 요금을 문의해 주세요.",
+    ),
+    true,
+  );
+  assert.equal(
+    prices.text.includes("제공된 동성로 1호점 가격판 판독 값"),
+    true,
+  );
+  assert.equal(prices.text.includes("홈과 매장 화면에 보여줄 때는"), false);
+  assert.equal(prices.text.includes("참고 가격임을 함께 표시한다"), false);
+  assert.equal(prices.text.includes("consult_products"), false);
+  assert.equal(prices.text.includes("결제 금액으로 쓰지 않는다"), false);
   assert.equal(prices.text.includes("일반 30,000원"), true);
   assert.equal(prices.text.includes("중고등 20,000원"), true);
   assert.equal(prices.text.includes("5,000원 (일반·중고등)"), true);
@@ -700,10 +712,14 @@ try {
     const measured = await evaluate(`(() => {
       const shell = document.querySelector("[data-app-shell]");
       const bar = document.querySelector("[data-app-bar]");
+      const page = document.querySelector("[data-store-page]");
+      const pageStyle = getComputedStyle(page);
       const list = document.querySelector("[data-store-list]");
       const columns = getComputedStyle(list).gridTemplateColumns.split(" ").filter(Boolean).length;
       const gallery = document.querySelector("[data-store-gallery]");
       const track = gallery.querySelector(".flex");
+      const price = document.querySelector("#store-prices");
+      const overflows = (node) => !!node && node.scrollWidth > node.clientWidth + 1;
       return {
         fine: matchMedia("(hover: hover) and (pointer: fine)").matches,
         app: Math.round(shell.getBoundingClientRect().width),
@@ -713,6 +729,12 @@ try {
         title: getComputedStyle(document.querySelector("h1")).fontSize,
         body: getComputedStyle(document.body).fontSize,
         galleryWider: track.scrollWidth > gallery.clientWidth + 1,
+        paddingLeft: Math.round(parseFloat(pageStyle.paddingLeft)),
+        paddingRight: Math.round(parseFloat(pageStyle.paddingRight)),
+        cardOverflow: [...document.querySelectorAll("[data-store-slug]")].some(overflows),
+        photoOverflow: [...document.querySelectorAll("[data-store-photo-frame]")].some(overflows),
+        priceOverflow: overflows(price),
+        galleryFrameOverflow: gallery.getBoundingClientRect().right > shell.getBoundingClientRect().right + 1,
       };
     })()`);
     await evaluate(`window.scrollTo(0, document.documentElement.scrollHeight)`);
@@ -732,6 +754,13 @@ try {
     assert.equal(measured.body, "15px", name);
     assert.equal(measured.app, measured.bar, name);
     assert.equal(covered, true, name);
+    const expectedPadding = !fine && width >= 768 ? 24 : 16;
+    assert.equal(measured.paddingLeft, expectedPadding, name);
+    assert.equal(measured.paddingRight, expectedPadding, name);
+    assert.equal(measured.cardOverflow, false, name);
+    assert.equal(measured.photoOverflow, false, name);
+    assert.equal(measured.priceOverflow, false, name);
+    assert.equal(measured.galleryFrameOverflow, false, name);
     if (fine) {
       assert.equal(measured.app, 560, name);
       assert.equal(measured.columns, 1, name);

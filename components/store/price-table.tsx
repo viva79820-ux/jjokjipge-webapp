@@ -6,6 +6,9 @@ const groups = [
   { id: "tarot", title: "타로" },
 ] as const;
 
+const customerPriceNotice =
+  "확인 중인 참고 가격입니다. 방문 전 매장에 최종 요금을 문의해 주세요.";
+
 export function StorePriceTable() {
   return (
     <section
@@ -20,7 +23,7 @@ export function StorePriceTable() {
         <p className="shrink-0 text-fine text-muted">1호점 가격판 기준</p>
       </div>
       <p className="mt-1 text-caption font-medium text-muted">매장 가격 기준</p>
-      <p className="mt-2 text-caption text-muted">{storePriceConfig.notice}</p>
+      <p className="mt-2 text-caption text-muted">{customerPriceNotice}</p>
       <p className="mt-1 text-caption text-muted">{storePriceConfig.source}</p>
       {groups.map((group) => {
         const items = storePriceConfig.items.filter(
