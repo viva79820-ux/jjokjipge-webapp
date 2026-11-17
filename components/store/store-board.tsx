@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import type { Store } from "@/lib/data/stores";
 import { InteriorGallery } from "./interior-gallery";
 import { StorePriceTable } from "./price-table";
@@ -40,36 +41,9 @@ export function StorePriceHash() {
   return null;
 }
 
-export function StoreBoard({
-  entries,
-  initialValues,
-}: {
-  entries: StoreEntry[];
-  initialValues: string[];
-}) {
-  const [values, setValues] = useState(initialValues);
-  const requestKey = initialValues.join("\0");
-  const [trackedRequest, setTrackedRequest] = useState(requestKey);
-  if (trackedRequest !== requestKey) {
-    setTrackedRequest(requestKey);
-    setValues(initialValues);
-  }
-  useEffect(() => {
-    const onPop = (event: PopStateEvent) => {
-      setValues(
-        new URL(window.location.href).searchParams.getAll(storeQueryKey),
-      );
-      const page = document.querySelector("[data-store-page]");
-      const visible =
-        page instanceof HTMLElement && page.getClientRects().length > 0;
-      if (visible && window.location.pathname === "/stores") {
-        event.stopImmediatePropagation();
-      }
-    };
-    window.addEventListener("popstate", onPop, true);
-    return () => window.removeEventListener("popstate", onPop, true);
-  }, []);
-
+export function StoreBoard({ entries }: { entries: StoreEntry[] }) {
+  const searchParams = useSearchParams();
+  const values = searchParams.getAll(storeQueryKey);
   const stores = entries.map((entry) => entry.store);
   const selection = resolveStoreSelection(stores, values);
   const selected =
@@ -79,12 +53,8 @@ export function StoreBoard({
     const href = storeSelectionHref(window.location.href, id);
     const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     if (href === current) return;
-    const previous = window.history.state;
-    const state =
-      previous && typeof previous === "object" ? { ...previous } : previous;
-    // 라우터로 이동하면 매장 목록을 다시 받는다. 주소만 남긴다.
-    History.prototype.pushState.call(window.history, state, "", href);
-    setValues([id]);
+    // Next가 이 호출로 주소와 useSearchParams를 맞춘다.
+    window.history.pushState(null, "", href);
   }
 
   return (

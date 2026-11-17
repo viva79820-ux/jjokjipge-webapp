@@ -10,29 +10,19 @@ import {
 } from "@/components/store/store-board";
 import { getCounselors, type Counselor } from "@/lib/data/counselors";
 import { getStores, type Store } from "@/lib/data/stores";
-import { storeParamList } from "@/components/store/present";
 import { siteConfig } from "@/lib/site-config";
 
 export const metadata: Metadata = { title: `매장상담 | ${siteConfig.name}` };
 
-export default function StoresPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ store?: string | string[] }>;
-}) {
+export default function StoresPage() {
   return (
     <Suspense fallback={null}>
-      <StoresContent searchParams={searchParams} />
+      <StoresContent />
     </Suspense>
   );
 }
 
-async function StoresContent({
-  searchParams,
-}: {
-  searchParams: Promise<{ store?: string | string[] }>;
-}) {
-  const initialValues = storeParamList((await searchParams).store);
+async function StoresContent() {
   let stores: Store[] | null = null;
   let storeError = false;
   try {
@@ -94,9 +84,7 @@ async function StoresContent({
         </p>
       )}
       {counselorError && <p role="alert">상담사 연결을 불러오지 못했습니다.</p>}
-      {!storeError && entries.length > 0 && (
-        <StoreBoard entries={entries} initialValues={initialValues} />
-      )}
+      {!storeError && entries.length > 0 && <StoreBoard entries={entries} />}
       <Link
         href="/consult"
         data-consult-cta

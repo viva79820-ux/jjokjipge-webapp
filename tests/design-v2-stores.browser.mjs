@@ -936,6 +936,133 @@ try {
     "forward",
   );
 
+  const describeVisit = `(() => {
+    const values = new URL(location.href).searchParams.getAll("store");
+    const detail = document.querySelector("[data-selected-store]");
+    const cardOf = (slug) => {
+      const card = document.querySelector('[data-store-slug="' + slug + '"]');
+      const photo = card ? card.querySelector("[data-store-photo]") : null;
+      return {
+        selected: card ? card.getAttribute("data-selected") : null,
+        expanded: card
+          ? card.querySelector("[data-store-select]").getAttribute("aria-expanded")
+          : null,
+        photo: card ? card.getAttribute("data-photo-source") : null,
+        src: photo ? photo.src : "",
+        visible: card instanceof HTMLElement && card.getClientRects().length > 0,
+      };
+    };
+    const prices = document.querySelector("#store-prices");
+    const gallery = document.querySelector("[data-store-gallery]");
+    return {
+      path: location.pathname,
+      values,
+      mark: window.__visitMark || null,
+      detail: detail ? detail.getAttribute("data-selected-store") : null,
+      detailVisible:
+        detail instanceof HTMLElement && detail.getClientRects().length > 0,
+      detailText: detail ? detail.innerText : "",
+      local: cardOf("store-local"),
+      third: cardOf("store-third"),
+      pricesVisible:
+        prices instanceof HTMLElement && prices.getClientRects().length > 0,
+      priceText: prices ? prices.innerText : "",
+      naming: !!(prices && prices.querySelector('[data-price-key="naming"]')),
+      priceCount: document.querySelectorAll("#store-prices").length,
+      galleryVisible:
+        gallery instanceof HTMLElement && gallery.getClientRects().length > 0,
+      gallery: gallery
+        ? [...gallery.querySelectorAll("img")].map((img) => img.currentSrc || img.src)
+        : [],
+    };
+  })()`;
+  const matchesVisit = (snap, slug) => {
+    if (!snap) return false;
+    const card = slug === "store-local" ? snap.local : snap.third;
+    const other = slug === "store-local" ? snap.third : snap.local;
+    const name =
+      slug === "store-local" ? "동성로 2호점" : "쪽집게 사주타로 천사3호점";
+    const address =
+      slug === "store-local"
+        ? "대구 중구 동성로 2길 20"
+        : "대구광역시 중구 동성로3길 38 (지번: 삼덕동1가 28-26)";
+    return (
+      snap.path === "/stores" &&
+      snap.mark === "stores-restore" &&
+      snap.values.length === 1 &&
+      snap.values[0] === slug &&
+      snap.detail === slug &&
+      snap.detailVisible === true &&
+      snap.detailText.includes(name) &&
+      snap.detailText.includes(address) &&
+      card.selected === "true" &&
+      card.expanded === "true" &&
+      card.visible === true &&
+      other.selected === "false" &&
+      other.expanded === "false" &&
+      snap.local.photo === "local" &&
+      snap.local.src.includes("store2.jpg") &&
+      !snap.local.src.includes("store1.jpg") &&
+      snap.third.photo === "empty" &&
+      snap.third.src === "" &&
+      snap.pricesVisible === true &&
+      snap.naming === true &&
+      snap.priceCount === 1 &&
+      snap.priceText.includes("1호점 가격판 기준") &&
+      snap.priceText.includes("선택한 매장의 확정 요금이 아닙니다.") &&
+      !snap.priceText.includes("3호점 확정") &&
+      snap.galleryVisible === true &&
+      ["interior.jpg", "tarotmat.jpg", "signs.jpg"].every((name) =>
+        snap.gallery.some((src) => src.includes(name)),
+      )
+    );
+  };
+  const waitVisit = async (slug) => {
+    let snap = null;
+    const end = Date.now() + 4000;
+    while (Date.now() < end) {
+      snap = await evaluate(describeVisit);
+      if (matchesVisit(snap, slug)) return snap;
+      await delay(100);
+    }
+    return snap;
+  };
+  await go("/stores?store=store-local");
+  await until(
+    () =>
+      evaluate(
+        `new URL(location.href).searchParams.get("store") === "store-local" && document.querySelector("[data-selected-store]")?.getAttribute("data-selected-store") === "store-local"`,
+      ),
+    "direct store-local",
+  );
+  await selectStore("store-third");
+  await evaluate(`window.__visitMark = "stores-restore"`);
+  await evaluate(`document.querySelector("[data-consult-cta]").click()`);
+  await until(
+    () =>
+      evaluate(
+        `location.pathname === "/consult" && window.__visitMark === "stores-restore"`,
+      ),
+    "consult from stores",
+  );
+  const consultCalls = dataCalls();
+  await evaluate(`history.go(-2)`);
+  const restored = await waitVisit("store-local");
+  assert.equal(
+    matchesVisit(restored, "store-local"),
+    true,
+    JSON.stringify(restored),
+  );
+  assert.equal(dataCalls(), consultCalls);
+  await evaluate(`history.go(1)`);
+  const forwarded = await waitVisit("store-third");
+  assert.equal(
+    matchesVisit(forwarded, "store-third"),
+    true,
+    JSON.stringify(forwarded),
+  );
+  assert.equal(dataCalls(), consultCalls);
+
   const direct = await (await fetch(`${base}/stores?store=store-local`)).text();
   assert.equal(direct.includes('data-selected-store="store-local"'), true);
   assert.equal(direct.includes('data-price-key="naming"'), true);

@@ -164,7 +164,10 @@ test("참고 가격 문구는 설정값에서 만들고 금액 차이를 유지�
   );
   assert.equal(board.includes("매장 내부 참고 사진"), true);
   assert.equal(board.includes("공통 소개 사진입니다."), true);
-  assert.equal(board.includes("History.prototype.pushState"), true);
+  assert.equal(board.includes("window.history.pushState"), true);
+  assert.equal(board.includes("useSearchParams"), true);
+  assert.equal(board.includes("History.prototype.pushState"), false);
+  assert.equal(board.includes("stopImmediatePropagation"), false);
   assert.equal(board.includes("0507"), false);
   assert.equal(price.includes("선택한 매장의 확정 요금이 아닙니다."), true);
   assert.equal(price.includes("매장 방문 상담 참고 가격입니다."), true);
