@@ -34,13 +34,15 @@ const photoProduct = "88888888-8888-4888-8888-888888888888";
 const longName = `긴이름${"가".repeat(27)}`;
 const longTopic = "가나다라마바사아자차카타파하가나다라마바";
 const longCareer = `경력원문${"가".repeat(196)}`;
-const longProduct = `긴상품명${"나".repeat(24)}`;
+const longProduct = `긴상품명${"나".repeat(96)}`;
 const longIntro = `소개원문${"다".repeat(40)}`;
 const longDescription = `${"라".repeat(80)}\n둘째 줄 ${"마".repeat(40)}`;
 assert.equal([...longName].length, 30);
 assert.equal([...longTopic].length, 20);
 assert.equal([...longCareer].length, 200);
+assert.equal([...longProduct].length, 100);
 assert.equal(longTopic.includes(" "), false);
+assert.equal(longProduct.includes(" "), false);
 const failedPhoto = "counselors/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.png";
 let emptySaju = false;
 
@@ -374,6 +376,108 @@ try {
         columns: columns.split(" ").filter(Boolean).length,
       };
     })()`);
+  const readClearance = async () => {
+    await evaluate(`(() => {
+      const top = Math.max(
+        document.body.scrollHeight,
+        document.documentElement.scrollHeight,
+      );
+      window.scrollTo(0, top);
+      return true;
+    })()`);
+    await delay(150);
+    return evaluate(`(() => {
+      const visible = (selector) =>
+        [...document.querySelectorAll(selector)].find((node) =>
+          node.checkVisibility(),
+        );
+      const review = [...document.querySelectorAll("div")].find(
+        (node) =>
+          node.textContent.trim() === "상담 후기는 준비 중이에요." &&
+          node.checkVisibility(),
+      );
+      const bar = visible("[data-booking-bar]");
+      const detail = visible("[data-counselor-detail]");
+      const main = document.querySelector("main");
+      const reviewBox = review.getBoundingClientRect();
+      const barBox = bar ? bar.getBoundingClientRect() : null;
+      const detailStyle = detail ? getComputedStyle(detail) : null;
+      const detailPad = detailStyle
+        ? Number.parseFloat(detailStyle.paddingBottom) || 0
+        : 0;
+      const detailMargin = detailStyle
+        ? Number.parseFloat(detailStyle.marginBottom) || 0
+        : 0;
+      const mainPad = main
+        ? Number.parseFloat(getComputedStyle(main).paddingBottom) || 0
+        : 0;
+      let scrollSpace = 0;
+      let node = review.parentElement;
+      while (node && node !== document.documentElement) {
+        const style = getComputedStyle(node);
+        scrollSpace += Number.parseFloat(style.paddingBottom) || 0;
+        scrollSpace += Number.parseFloat(style.marginBottom) || 0;
+        if (node === document.body) break;
+        node = node.parentElement;
+      }
+      const selected = [...document.querySelectorAll('input[type="radio"]')].find(
+        (node) => node.checked && node.checkVisibility(),
+      );
+      const link = bar
+        ? [...bar.querySelectorAll("a")].find((node) => node.checkVisibility())
+        : null;
+      const gap = barBox
+        ? barBox.top - reviewBox.bottom
+        : window.innerHeight - reviewBox.bottom;
+      return {
+        reviewBottom: reviewBox.bottom,
+        barTop: barBox ? barBox.top : null,
+        barHeight: barBox ? barBox.height : 0,
+        gap,
+        covered: barBox ? reviewBox.bottom - barBox.top : 0,
+        detailPad,
+        detailMargin,
+        mainPad,
+        scrollSpace,
+        productId: bar ? bar.dataset.productId : null,
+        href: link ? link.getAttribute("href") : null,
+        selected: selected ? selected.value : null,
+        barText: bar ? bar.innerText : "",
+        barPaddingBottom: bar
+          ? Number.parseFloat(getComputedStyle(bar).paddingBottom) || 0
+          : 0,
+        innerWidth: window.innerWidth,
+        innerHeight: window.innerHeight,
+        scrollable:
+          Math.max(
+            document.body.scrollHeight,
+            document.documentElement.scrollHeight,
+          ) >
+          window.innerHeight + 2,
+      };
+    })()`);
+  };
+  const assertBarClearance = (reading, label) => {
+    assert.ok(
+      reading.barHeight > 0 && reading.gap >= -1 && reading.gap <= 8,
+      `${label} ${JSON.stringify(reading)}`,
+    );
+    assert.ok(
+      Math.abs(reading.scrollSpace - reading.barHeight) <= 1.5,
+      `${label} space ${JSON.stringify(reading)}`,
+    );
+  };
+  const assertLongSelection = (reading) => {
+    assert.equal(reading.productId, expensiveProduct);
+    assert.equal(reading.selected, expensiveProduct);
+    assert.equal(
+      reading.href,
+      `/consult/both/book?product=${expensiveProduct}`,
+    );
+    assert.equal(reading.barText.includes(longProduct), true);
+    assert.equal(reading.barText.includes("30,000원"), true);
+    assert.equal(reading.barText.includes("5,000원"), false);
+  };
 
   await emulate({ width: 390, height: 844, fine: false });
   await go("/consult");
@@ -502,6 +606,63 @@ try {
     true,
   );
 
+  const longWidths = [
+    ["360", 360, 844, false],
+    ["390", 390, 844, false],
+    ["430", 430, 844, false],
+    ["768", 768, 1024, false],
+    ["1024", 1024, 1366, false],
+    ["pc-1280", 1280, 900, true],
+  ];
+  const longReadings = [];
+  for (const [name, width, height, fine] of longWidths) {
+    await emulate({ width, height, fine });
+    const reading = await readClearance();
+    longReadings.push({ name, ...reading });
+    if (name === "360" && reading.covered > 1) {
+      writeFileSync(
+        join(outDir, "long-name-before.json"),
+        JSON.stringify(reading, null, 2),
+      );
+      await shot("counselor-long-360-before.png");
+    }
+    await shot(`counselor-long-${name}.png`);
+    assertLongSelection(reading);
+    assertBarClearance(reading, `long ${name}`);
+  }
+  writeFileSync(
+    join(outDir, "long-name-clearance.json"),
+    JSON.stringify(longReadings, null, 2),
+  );
+  let safeAreaEmulated = false;
+  try {
+    await chrome.call("Emulation.setSafeAreaInsetsOverride", {
+      insets: { top: 0, left: 0, right: 0, bottom: 34 },
+    });
+    safeAreaEmulated = true;
+  } catch (error) {
+    writeFileSync(
+      join(outDir, "safe-area-emulation.txt"),
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+  if (safeAreaEmulated) {
+    await emulate({ width: 360, height: 844, fine: false });
+    const safeReading = await readClearance();
+    writeFileSync(
+      join(outDir, "long-name-safe-area.json"),
+      JSON.stringify(safeReading, null, 2),
+    );
+    await shot("counselor-long-360-safe-area.png");
+    assertLongSelection(safeReading);
+    assertBarClearance(safeReading, "safe area");
+    assert.ok(safeReading.barPaddingBottom >= 34, JSON.stringify(safeReading));
+    await chrome.call("Emulation.setSafeAreaInsetsOverride", {
+      insets: { top: 0, left: 0, right: 0, bottom: 0 },
+    });
+  }
+  await emulate({ width: 390, height: 844, fine: false });
+
   await evaluate(`(() => {
     document.querySelector(${JSON.stringify(`input[value="${cheapProduct}"]`)}).click();
     return true;
@@ -558,6 +719,95 @@ try {
     })()`),
     true,
   );
+  const cheapReading = await readClearance();
+  assert.equal(cheapReading.productId, cheapProduct);
+  assert.equal(cheapReading.selected, cheapProduct);
+  assert.equal(cheapReading.href, `/consult/both/book?product=${cheapProduct}`);
+  assert.equal(cheapReading.barText.includes("짧은 상담"), true);
+  assert.equal(cheapReading.barText.includes("5,000원"), true);
+  assertBarClearance(cheapReading, "short product");
+
+  await evaluate(`(() => {
+    const input = [...document.querySelectorAll('input[type="radio"]')].find(
+      (node) =>
+        node.value === ${JSON.stringify(expensiveProduct)} &&
+        node.checkVisibility(),
+    );
+    input.click();
+    return true;
+  })()`);
+  await until(
+    () =>
+      evaluate(`(() => {
+        const bar = [...document.querySelectorAll("[data-booking-bar]")].find(
+          (node) => node.checkVisibility(),
+        );
+        return !!bar && bar.dataset.productId === ${JSON.stringify(expensiveProduct)};
+      })()`),
+    "reselect long product",
+  );
+  await emulate({ width: 360, height: 844, fine: false });
+  const relongNarrow = await readClearance();
+  assertLongSelection(relongNarrow);
+  assertBarClearance(relongNarrow, "reselect long 360");
+  await emulate({ width: 1280, height: 900, fine: true });
+  const relongPc = await readClearance();
+  assertLongSelection(relongPc);
+  assertBarClearance(relongPc, "reselect long pc");
+  await emulate({ width: 390, height: 844, fine: false });
+  await evaluate("history.back()");
+  await until(
+    () => evaluate("location.pathname === '/consult'"),
+    "long back to list",
+  );
+  await waitText("이렇게 진행돼요");
+  assert.equal(await visibleCount("[data-booking-bar]"), 0);
+  assert.equal(await visibleCount("[data-counselor-header]"), 0);
+  assert.equal(
+    await evaluate(`(() => {
+      const frames = [...document.querySelectorAll("[data-counselor-detail]")];
+      return frames
+        .filter((node) => !node.checkVisibility())
+        .every(
+          (node) =>
+            node.style.paddingBottom === "" && node.style.marginBottom === "",
+        );
+    })()`),
+    true,
+  );
+  await evaluate("history.forward()");
+  await until(
+    () => evaluate("location.pathname === '/consult/both'"),
+    "long forward to detail",
+  );
+  await waitText("선생님 소개");
+  const restoredLong = await readClearance();
+  assertLongSelection(restoredLong);
+  assertBarClearance(restoredLong, "long forward");
+  await emulate({ width: 360, height: 844, fine: false });
+  const restoredNarrow = await readClearance();
+  assertLongSelection(restoredNarrow);
+  assertBarClearance(restoredNarrow, "long forward 360");
+  await shot("counselor-long-restored-360.png");
+  await emulate({ width: 390, height: 844, fine: false });
+  await evaluate(`(() => {
+    const input = [...document.querySelectorAll('input[type="radio"]')].find(
+      (node) =>
+        node.value === ${JSON.stringify(cheapProduct)} && node.checkVisibility(),
+    );
+    input.click();
+    return true;
+  })()`);
+  await until(
+    () =>
+      evaluate(`(() => {
+        const bar = [...document.querySelectorAll("[data-booking-bar]")].find(
+          (node) => node.checkVisibility(),
+        );
+        return !!bar && bar.dataset.productId === ${JSON.stringify(cheapProduct)};
+      })()`),
+    "reselect short product",
+  );
 
   await clickVisible("[data-booking-bar] a");
   await until(
@@ -594,6 +844,10 @@ try {
     true,
   );
   assert.equal(await visibleCount("[data-site-header]"), 0);
+  const cheapBack = await readClearance();
+  assert.equal(cheapBack.productId, cheapProduct);
+  assert.equal(cheapBack.selected, cheapProduct);
+  assertBarClearance(cheapBack, "short back");
   await evaluate("history.back()");
   await until(
     () => evaluate("location.pathname === '/consult'"),
@@ -622,6 +876,10 @@ try {
     ),
     true,
   );
+  const cheapForward = await readClearance();
+  assert.equal(cheapForward.productId, cheapProduct);
+  assert.equal(cheapForward.selected, cheapProduct);
+  assertBarClearance(cheapForward, "short forward");
 
   await clickVisible('[aria-label="뒤로"]');
   await until(
@@ -640,6 +898,24 @@ try {
     ),
     true,
   );
+  const emptyProducts = await readClearance();
+  writeFileSync(
+    join(outDir, "empty-products-clearance.json"),
+    JSON.stringify(emptyProducts, null, 2),
+  );
+  await shot("counselor-empty-products.png");
+  assert.equal(emptyProducts.barHeight, 0);
+  assert.equal(emptyProducts.productId, null);
+  assert.ok(
+    Math.abs(emptyProducts.scrollSpace) <= 2,
+    JSON.stringify(emptyProducts),
+  );
+  if (emptyProducts.scrollable) {
+    assert.ok(
+      emptyProducts.gap >= -1 && emptyProducts.gap <= 8,
+      JSON.stringify(emptyProducts),
+    );
+  }
   await go("/consult/photo-fail");
   await until(
     () =>
@@ -779,7 +1055,11 @@ try {
       });
     })()`);
     await shot(`counselor-${name}.png`);
-    results.push({ name, list, detail, targets });
+    const clearance = await readClearance();
+    await shot(`counselor-clearance-${name}.png`);
+    assertLongSelection(clearance);
+    assertBarClearance(clearance, `viewport ${name}`);
+    results.push({ name, list, detail, targets, clearance });
     assert.equal(list.fine, fine);
     assert.equal(detail.fine, fine);
     assert.equal(list.overflow, false, JSON.stringify(list));

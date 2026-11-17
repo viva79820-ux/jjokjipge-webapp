@@ -8,6 +8,7 @@ import { getCounselor } from "@/lib/data/counselors";
 import { counselorHeading, displayChips } from "@/lib/counselors/rules";
 import { CounselorName } from "@/components/counselor/name";
 import { CounselorPhoto } from "@/components/counselor/photo";
+import { CounselorDetailFrame } from "@/components/counselor/counselor-detail-frame";
 import { CounselorMenu } from "@/components/counselor/counselor-menu";
 import { Chip } from "@/components/ui/chip";
 
@@ -43,7 +44,7 @@ async function CounselorContent({ params }: Props) {
       : "";
   const storeName = counselor.storeName.trim() ? counselor.storeName : "";
   return (
-    <div className="min-w-0 pb-16">
+    <CounselorDetailFrame>
       <header
         data-counselor-header
         className="sticky top-0 z-30 flex h-14 items-center gap-1 border-b border-border bg-surface px-2"
@@ -139,6 +140,6 @@ async function CounselorContent({ params }: Props) {
           상담 후기는 준비 중이에요.
         </div>
       </section>
-    </div>
+    </CounselorDetailFrame>
   );
 }

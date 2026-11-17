@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Phone } from "lucide-react";
 import { appFixedBarClass } from "@/lib/app-frame";
+import { syncBookingSpace } from "@/components/counselor/counselor-detail-frame";
 
 type Product = { id: string; name: string; minutes: number; price: number };
 
@@ -39,9 +40,16 @@ function ProductPicker({
   products: Product[];
 }) {
   const [selectedId, setSelectedId] = useState(products[0].id);
+  const barRef = useRef<HTMLDivElement>(null);
   const selected =
     products.find((product) => product.id === selectedId) ?? products[0];
   const href = `/consult/${counselorId}/book?product=${selected.id}`;
+  useLayoutEffect(() => {
+    const frame = barRef.current?.closest<HTMLElement>(
+      "[data-counselor-detail]",
+    );
+    if (frame) syncBookingSpace(frame);
+  }, [selected.id, selected.name]);
   return (
     <>
       <section className="min-w-0 px-4 pt-7 @3xl/app:px-6">
@@ -91,6 +99,7 @@ function ProductPicker({
         </fieldset>
       </section>
       <div
+        ref={barRef}
         data-booking-bar
         data-product-id={selected.id}
         className={`${appFixedBarClass} flex flex-wrap items-center gap-3 border-t border-border bg-surface px-4 pt-3 pb-[calc(1.25rem+env(safe-area-inset-bottom))]`}
