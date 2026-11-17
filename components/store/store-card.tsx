@@ -4,7 +4,7 @@ import type { Store } from "@/lib/data/stores";
 import { storeTelHref } from "@/lib/stores/rules";
 import { Chip } from "@/components/ui/chip";
 import { StorePhoto } from "./photo";
-import { localStoreExterior, naverMapSearchUrl } from "./present";
+import { naverMapSearchUrl, storePhotoPlan } from "./present";
 
 const control =
   "inline-flex min-h-11 cursor-pointer items-center justify-center gap-1.5 rounded-full px-3 text-label font-bold whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
@@ -12,27 +12,24 @@ const control =
 export function StoreCard({
   store,
   staff,
+  selected,
+  onSelect,
 }: {
   store: Store;
   staff: { id: string; name: string }[];
+  selected: boolean;
+  onSelect: (id: string) => void;
 }) {
-  const exterior = store.imageUrl ? null : localStoreExterior(store.name);
-  const src = store.imageUrl ?? exterior?.src ?? null;
+  const plan = storePhotoPlan(store.name, store.imageUrl);
   const mapUrl = naverMapSearchUrl(store.address);
-  const photoSource = store.imageUrl ? "db" : exterior ? "local" : "empty";
   return (
     <article
       data-store-slug={store.id}
-      data-photo-source={photoSource}
-      className="min-w-0 overflow-hidden rounded-card border border-border bg-surface"
+      data-photo-source={plan.source}
+      data-selected={selected ? "true" : "false"}
+      className={`min-w-0 overflow-hidden rounded-card border bg-surface ${selected ? "border-brand" : "border-border"}`}
     >
-      <StorePhoto
-        src={src}
-        alt={exterior?.alt ?? `${store.name} 사진`}
-        sizes="(max-width: 767px) 100vw, 480px"
-        className="w-full"
-        cover
-      />
+      <StoreExteriors plan={plan} />
       <div className="flex flex-col gap-2.5 p-4">
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="max-w-full text-title font-extrabold wrap-anywhere">
@@ -83,6 +80,17 @@ export function StoreCard({
             </div>
           </div>
         )}
+        <button
+          type="button"
+          data-store-select={store.id}
+          aria-expanded={selected}
+          aria-controls="store-detail"
+          aria-label={selected ? `${store.name} 선택됨` : `${store.name} 선택`}
+          onClick={() => onSelect(store.id)}
+          className={`${control} w-full ${selected ? "bg-brand text-on-brand" : "border border-brand bg-surface text-brand"}`}
+        >
+          {selected ? "선택됨" : "이 매장 보기"}
+        </button>
         <div className={`grid gap-2 ${mapUrl ? "grid-cols-2" : "grid-cols-1"}`}>
           <a
             href={storeTelHref(store.phone)}
@@ -107,5 +115,51 @@ export function StoreCard({
         </div>
       </div>
     </article>
+  );
+}
+
+function StoreExteriors({ plan }: { plan: ReturnType<typeof storePhotoPlan> }) {
+  if (plan.photos.length === 0) {
+    return (
+      <StorePhoto
+        src={null}
+        alt=""
+        sizes="(max-width: 767px) 100vw, 480px"
+        className="w-full"
+        cover
+      />
+    );
+  }
+  if (plan.photos.length === 1) {
+    const photo = plan.photos[0];
+    return (
+      <StorePhoto
+        src={photo.src}
+        alt={photo.alt}
+        sizes="(max-width: 767px) 100vw, 480px"
+        className="w-full"
+        cover
+      />
+    );
+  }
+  return (
+    <div className="grid grid-cols-2">
+      {plan.photos.map((photo) => (
+        <figure key={photo.src} className="min-w-0">
+          <StorePhoto
+            src={photo.src}
+            alt={photo.alt}
+            sizes="(max-width: 767px) 50vw, 240px"
+            className="w-full"
+            cover
+          />
+          {photo.label ? (
+            <figcaption className="px-2 py-1.5 text-center text-fine text-muted">
+              {photo.label}
+            </figcaption>
+          ) : null}
+        </figure>
+      ))}
+    </div>
   );
 }

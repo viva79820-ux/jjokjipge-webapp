@@ -26,13 +26,14 @@ export function StorePhoto({
       <div
         role="img"
         aria-label="매장 사진 자리"
-        className={`flex items-center justify-center text-muted ${frame}`}
+        className={`flex flex-col items-center justify-center gap-1 text-muted ${frame}`}
       >
         <Store
           aria-hidden="true"
           className="h-1/3 max-h-14 w-1/3 max-w-14"
           strokeWidth={1}
         />
+        <span className="text-fine">사진 준비 중</span>
       </div>
     );
   return (

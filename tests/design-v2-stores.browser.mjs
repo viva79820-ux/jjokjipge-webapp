@@ -107,6 +107,42 @@ const stores = [
     sort_order: 0,
     is_active: true,
   },
+  {
+    id: "00000000-0000-4000-8000-000000000008",
+    slug: "store-joint",
+    name: "쪽집게천사 사주타로1,2호점",
+    description: "",
+    address: "대구광역시 중구 동성로3길 39 1층 (지번: 삼덕동1가 17-15)",
+    hours: "",
+    phone: "0507-1498-0232",
+    image_path: null,
+    sort_order: 6,
+    is_active: true,
+  },
+  {
+    id: "00000000-0000-4000-8000-000000000009",
+    slug: "store-third",
+    name: "쪽집게 사주타로 천사3호점",
+    description: "",
+    address: "대구광역시 중구 동성로3길 38 (지번: 삼덕동1가 28-26)",
+    hours: "",
+    phone: "010-5936-9559",
+    image_path: null,
+    sort_order: 7,
+    is_active: true,
+  },
+  {
+    id: "00000000-0000-4000-8000-00000000000a",
+    slug: "store-joint-db",
+    name: "쪽집게천사 사주타로1,2호점",
+    description: "대표 사진",
+    address: "대구광역시 중구 동성로3길 39 1층",
+    hours: "",
+    phone: "0507-1498-0232",
+    image_path: dbPhoto,
+    sort_order: 8,
+    is_active: true,
+  },
 ];
 const counselor = (slug, name, storeSlug, extra = {}) => ({
   slug,
@@ -219,8 +255,12 @@ const fixture = createServer(async (req, res) => {
       json(res, []);
       return;
     }
+    const visible =
+      mode === "drop-photo"
+        ? stores.filter((row) => row.slug !== "store-photo")
+        : stores;
     const selected = sortRows(
-      applyEq(stores, url.searchParams),
+      applyEq(visible, url.searchParams),
       url.searchParams.get("order"),
     );
     json(res, selected);
@@ -255,11 +295,23 @@ const env = {
 let app;
 let chrome;
 try {
-  const build = spawnSync(
+  let build = spawnSync(
     process.execPath,
     ["node_modules/next/dist/bin/next", "build"],
     { env, encoding: "utf8", windowsHide: true },
   );
+  if (
+    build.status !== 0 &&
+    `${build.stdout || ""}\n${build.stderr || ""}`.includes(
+      "Retry the same command",
+    )
+  ) {
+    build = spawnSync(
+      process.execPath,
+      ["node_modules/next/dist/bin/next", "build"],
+      { env, encoding: "utf8", windowsHide: true },
+    );
+  }
   if (build.status !== 0) {
     writeFileSync(
       join(outDir, "build.log"),
@@ -327,6 +379,40 @@ try {
     `document.querySelector('[data-store-slug="${slug}"]')`;
   const inside = (slug, selector) =>
     `document.querySelector('[data-store-slug="${slug}"] ${selector}')`;
+  const dataCalls = () =>
+    calls.filter(
+      (item) => item.includes("/stores?") || item.includes("/counselors?"),
+    ).length;
+  const selectStore = async (slug) => {
+    const before = dataCalls();
+    await evaluate(
+      `document.querySelector('[data-store-slug="${slug}"] [data-store-select="${slug}"]').click()`,
+    );
+    await until(
+      () =>
+        evaluate(
+          `document.querySelector("[data-selected-store]")?.getAttribute("data-selected-store") === "${slug}"`,
+        ),
+      `select ${slug}`,
+    );
+    await delay(400);
+    assert.equal(dataCalls(), before, `refetch ${slug}`);
+    assert.equal(await evaluate(`location.pathname`), "/stores");
+    assert.equal(
+      await evaluate(`new URL(location.href).searchParams.get("store")`),
+      slug,
+    );
+    assert.equal(
+      await evaluate(`document.body.innerText.includes("먼저 나오는 매장")`),
+      true,
+    );
+    assert.equal(
+      await evaluate(
+        `document.querySelector('[data-store-slug="${slug}"] [data-store-select]').getAttribute("aria-expanded")`,
+      ),
+      "true",
+    );
+  };
 
   await emulate({ width: 390, height: 844, fine: false });
   await go("/stores");
@@ -341,7 +427,39 @@ try {
     "store-long",
     "store-placeholder",
     "store-ambiguous",
+    "store-joint",
+    "store-third",
+    "store-joint-db",
   ]);
+  assert.equal(
+    await evaluate(`document.querySelector("[data-store-gallery]") === null`),
+    true,
+  );
+  assert.equal(
+    await evaluate(`document.querySelector("[data-price-key]") === null`),
+    true,
+  );
+  assert.equal(
+    await evaluate(`document.querySelector("[data-selected-store]") === null`),
+    true,
+  );
+  assert.equal(
+    await evaluate(
+      `document.body.innerText.includes("매장을 선택하면 사진과 참고 가격을 볼 수 있어요")`,
+    ),
+    true,
+  );
+  assert.equal(
+    await evaluate(`(() => {
+      const buttons = [...document.querySelectorAll("[aria-expanded]")];
+      return buttons.length > 0 && buttons.every((node) => node.getAttribute("aria-expanded") === "false" && node.getAttribute("aria-controls") === "store-detail" && node.querySelector("a") === null && node.closest("a") === null);
+    })()`),
+    true,
+  );
+  assert.equal(
+    await evaluate(`document.querySelectorAll("#store-prices").length`),
+    1,
+  );
   assert.equal(
     await evaluate(`document.body.innerText.includes("숨긴매장")`),
     false,
@@ -476,6 +594,88 @@ try {
     await evaluate(`${card("store-local")}.getAttribute("data-photo-source")`),
     "local",
   );
+  const jointAddress =
+    "대구광역시 중구 동성로3길 39 1층 (지번: 삼덕동1가 17-15)";
+  const thirdAddress = "대구광역시 중구 동성로3길 38 (지번: 삼덕동1가 28-26)";
+  assert.equal(
+    await evaluate(`${card("store-joint")}.getAttribute("data-photo-source")`),
+    "joint",
+  );
+  assert.equal(
+    await evaluate(`${card("store-third")}.getAttribute("data-photo-source")`),
+    "empty",
+  );
+  assert.equal(
+    await evaluate(
+      `${card("store-joint-db")}.getAttribute("data-photo-source")`,
+    ),
+    "db",
+  );
+  assert.equal(
+    await evaluate(
+      `${inside("store-joint", 'a[href^="tel:"]')}.getAttribute("href")`,
+    ),
+    "tel:050714980232",
+  );
+  assert.equal(
+    await evaluate(
+      `${inside("store-third", 'a[href^="tel:"]')}.getAttribute("href")`,
+    ),
+    "tel:01059369559",
+  );
+  assert.equal(
+    await evaluate(
+      `${inside("store-joint", 'a[href*="map.naver.com"]')}.getAttribute("href")`,
+    ),
+    `https://map.naver.com/p/search/${encodeURIComponent(jointAddress)}`,
+  );
+  assert.equal(
+    await evaluate(
+      `${inside("store-third", 'a[href*="map.naver.com"]')}.getAttribute("href")`,
+    ),
+    `https://map.naver.com/p/search/${encodeURIComponent(thirdAddress)}`,
+  );
+  assert.equal(
+    await evaluate(`(() => {
+      const card = ${card("store-joint")};
+      const images = [...card.querySelectorAll("[data-store-photo]")].map((img) => img.getAttribute("src"));
+      return card.innerText.includes("1호점 외관") && card.innerText.includes("2호점 외관") && images.some((src) => src.includes("store1.jpg")) && images.some((src) => src.includes("store2.jpg"));
+    })()`),
+    true,
+  );
+  assert.equal(
+    await evaluate(`(() => {
+      const card = ${card("store-third")};
+      return card.innerText.includes("사진 준비 중") && !card.innerText.includes("1호점 외관") && card.querySelector("[data-store-photo]") === null && card.querySelector('[aria-label="매장 사진 자리"]') !== null;
+    })()`),
+    true,
+  );
+  assert.equal(
+    await evaluate(`(() => {
+      const card = ${card("store-joint-db")};
+      const images = [...card.querySelectorAll("[data-store-photo]")];
+      return images.length === 1 && !images[0].src.includes("store1.jpg") && !images[0].src.includes("store2.jpg") && !card.innerText.includes("1호점 외관");
+    })()`),
+    true,
+  );
+  assert.equal(
+    await evaluate(`(() => {
+      const link = ${card("store-joint")}.querySelector('a[href^="tel:"]');
+      link.addEventListener("click", (event) => event.preventDefault(), { once: true });
+      link.click();
+      return location.search + "|" + (document.querySelector("[data-selected-store]") === null);
+    })()`),
+    "|true",
+  );
+  assert.equal(
+    await evaluate(`(() => {
+      const link = ${card("store-third")}.querySelector('a[href*="map.naver.com"]');
+      link.addEventListener("click", (event) => event.preventDefault(), { once: true });
+      link.click();
+      return document.querySelector("[data-selected-store]") === null;
+    })()`),
+    true,
+  );
   await until(
     () =>
       evaluate(
@@ -508,6 +708,17 @@ try {
       `getComputedStyle(${inside("store-photo", "[data-store-photo-frame]")}).height`,
     ),
     "200px",
+  );
+  await evaluate(`window.scrollTo(0, 640)`);
+  await delay(50);
+  await selectStore("store-photo");
+  const stayed = await evaluate(`window.scrollY`);
+  assert.ok(stayed > 200, `scroll jumped ${stayed}`);
+  assert.equal(
+    await evaluate(
+      `[...document.querySelectorAll("[data-store-select]")].filter((node) => node.getAttribute("aria-expanded") === "true").length`,
+    ),
+    1,
   );
   assert.equal(
     await evaluate(`(() => {
@@ -564,6 +775,19 @@ try {
   assert.equal(prices.text.includes("커플 15,000원"), true);
   assert.equal(prices.text.includes("작명"), true);
   assert.equal(prices.text.includes("300,000원"), true);
+  assert.equal(
+    prices.text.includes(
+      "매장 방문 상담 참고 가격입니다. 선택한 매장의 확정 요금이 아닙니다.",
+    ),
+    true,
+  );
+  assert.equal(prices.text.includes("3호점 확정"), false);
+  assert.equal(
+    await evaluate(
+      `document.body.innerText.includes("매장 내부 참고 사진") && document.body.innerText.includes("공통 소개 사진입니다.")`,
+    ),
+    true,
+  );
   assert.equal(
     await evaluate(
       `document.querySelector("[data-consult-cta]").getAttribute("href")`,
@@ -636,16 +860,151 @@ try {
     () => evaluate(`location.hash === "#store-prices"`),
     "price anchor",
   );
-  await delay(300);
+  await until(
+    () =>
+      evaluate(`(() => {
+        const section = document.querySelector("#store-prices");
+        if (!section) return false;
+        const top = section.getBoundingClientRect().top;
+        return top < 120 && top > -40;
+      })()`),
+    "price anchor position",
+  );
   const anchor = await evaluate(`(() => {
+    const section = document.querySelector("#store-prices");
+    return {
+      top: Math.round(section.getBoundingClientRect().top),
+      naming: !!section.querySelector('[data-price-key="naming"]'),
+      guide: section.innerText.includes("매장을 선택하면 사진과 참고 가격을 볼 수 있어요"),
+      ids: document.querySelectorAll("#store-prices").length,
+      selected: document.querySelector("[data-selected-store]") === null,
+    };
+  })()`);
+  assert.equal(anchor.naming, false);
+  assert.equal(anchor.guide, true);
+  assert.equal(anchor.ids, 1);
+  assert.equal(anchor.selected, true);
+  assert.ok(anchor.top < 120 && anchor.top > -40, JSON.stringify(anchor));
+  const anchorCalls = dataCalls();
+  await evaluate(
+    `document.querySelector('#store-prices [data-store-select="store-local"]').click()`,
+  );
+  await until(
+    () =>
+      evaluate(
+        `document.querySelector("[data-selected-store]")?.getAttribute("data-selected-store") === "store-local" && !!document.querySelector('#store-prices [data-price-key="naming"]') && document.querySelectorAll("#store-prices").length === 1`,
+      ),
+    "anchor select",
+  );
+  await delay(400);
+  assert.equal(dataCalls(), anchorCalls);
+  assert.equal(
+    await evaluate(
+      `location.hash === "#store-prices" && new URL(location.href).searchParams.get("store") === "store-local"`,
+    ),
+    true,
+  );
+  await shot("anchor-390.png", true);
+
+  await selectStore("store-third");
+  assert.equal(
+    await evaluate(`(() => {
+      const detail = document.querySelector("[data-selected-store]");
+      const prices = document.querySelector("#store-prices").innerText;
+      return detail.getAttribute("data-selected-store") === "store-third" && detail.innerText.includes("쪽집게 사주타로 천사3호점") && prices.includes("1호점 가격판 기준") && prices.includes("선택한 매장의 확정 요금이 아닙니다.") && !prices.includes("3호점 확정") && document.body.innerText.includes("공통 소개 사진입니다.");
+    })()`),
+    true,
+  );
+  await shot("third-390.png", true);
+  const historyCalls = dataCalls();
+  await evaluate(`history.back()`);
+  await until(
+    () =>
+      evaluate(
+        `new URL(location.href).searchParams.get("store") === "store-local" && document.querySelector("[data-selected-store]")?.getAttribute("data-selected-store") === "store-local"`,
+      ),
+    "back",
+  );
+  await delay(400);
+  assert.equal(dataCalls(), historyCalls);
+  await evaluate(`history.forward()`);
+  await until(
+    () =>
+      evaluate(
+        `new URL(location.href).searchParams.get("store") === "store-third" && document.querySelector("[data-selected-store]")?.getAttribute("data-selected-store") === "store-third"`,
+      ),
+    "forward",
+  );
+
+  const direct = await (await fetch(`${base}/stores?store=store-local`)).text();
+  assert.equal(direct.includes('data-selected-store="store-local"'), true);
+  assert.equal(direct.includes('data-price-key="naming"'), true);
+  assert.equal(direct.includes("숨긴매장"), false);
+  const hidden = await (
+    await fetch(`${base}/stores?store=store-hidden`)
+  ).text();
+  assert.equal(hidden.includes("data-selected-store="), false);
+  assert.equal(hidden.includes("숨긴매장"), false);
+  assert.equal(
+    hidden.includes("선택한 매장을 공개 목록에서 찾을 수 없습니다."),
+    true,
+  );
+  const missing = await (await fetch(`${base}/stores?store=missing`)).text();
+  assert.equal(missing.includes("data-selected-store="), false);
+  assert.equal(
+    missing.includes("선택한 매장을 공개 목록에서 찾을 수 없습니다."),
+    true,
+  );
+  const both = await (
+    await fetch(`${base}/stores?store=store-photo&store=store-local`)
+  ).text();
+  assert.equal(both.includes("data-selected-store="), false);
+
+  await go("/stores?store=store-hidden");
+  await until(
+    () =>
+      evaluate(
+        `document.body.innerText.includes("선택한 매장을 공개 목록에서 찾을 수 없습니다.")`,
+      ),
+    "hidden selection",
+  );
+  assert.equal(
+    await evaluate(
+      `document.querySelector("[data-selected-store]") === null && document.querySelector("[data-store-gallery]") === null && document.querySelector("[data-price-key]") === null && !document.body.innerText.includes("숨긴매장")`,
+    ),
+    true,
+  );
+  await go("/stores?store=store-local#store-prices");
+  await until(
+    () =>
+      evaluate(
+        `document.querySelector("[data-selected-store]")?.getAttribute("data-selected-store") === "store-local"`,
+      ),
+    "direct selection",
+  );
+  await until(
+    () =>
+      evaluate(`(() => {
+        const section = document.querySelector("#store-prices");
+        if (!section) return false;
+        const top = section.getBoundingClientRect().top;
+        return top < 160 && top > -80 && !!section.querySelector('[data-price-key="naming"]');
+      })()`),
+    "direct price anchor",
+  );
+  const directAnchor = await evaluate(`(() => {
     const section = document.querySelector("#store-prices");
     return {
       top: Math.round(section.getBoundingClientRect().top),
       naming: !!section.querySelector('[data-price-key="naming"]'),
     };
   })()`);
-  assert.equal(anchor.naming, true);
-  assert.ok(anchor.top < 120 && anchor.top > -40, JSON.stringify(anchor));
+  assert.equal(directAnchor.naming, true);
+  assert.ok(
+    directAnchor.top < 160 && directAnchor.top > -80,
+    JSON.stringify(directAnchor),
+  );
+  await shot("selected-390.png", true);
 
   await emulate({ width: 390, height: 844, fine: false });
   await go("/stores");
@@ -705,9 +1064,18 @@ try {
     await emulate({ width, height, fine });
     await go("/stores");
     await until(
-      () => evaluate(`document.body.innerText.includes("가격표")`),
+      () =>
+        evaluate(
+          `document.body.innerText.includes("매장을 선택하면 사진과 참고 가격을 볼 수 있어요") && document.querySelector("[data-store-gallery]") === null`,
+        ),
       name,
     );
+    assert.equal(
+      await evaluate(`document.documentElement.scrollWidth > innerWidth + 1`),
+      false,
+      name,
+    );
+    await selectStore("store-first");
     await evaluate("window.scrollTo(0, 0)");
     const measured = await evaluate(`(() => {
       const shell = document.querySelector("[data-app-shell]");
@@ -774,7 +1142,7 @@ try {
     }
   }
   await emulate({ width: 1280, height: 900, fine: true });
-  await go("/stores");
+  await go("/stores?store=store-first");
   await until(
     () => evaluate(`!!document.querySelector("[data-store-gallery]")`),
     "pc gallery",
@@ -800,6 +1168,24 @@ try {
     "counselor detail",
   );
 
+  await emulate({ width: 390, height: 844, fine: false });
+  await setMode("drop-photo");
+  await go("/stores?store=store-photo");
+  await until(
+    () =>
+      evaluate(
+        `document.body.innerText.includes("선택한 매장을 공개 목록에서 찾을 수 없습니다.")`,
+      ),
+    "dropped store",
+  );
+  assert.equal(
+    await evaluate(
+      `!document.body.innerText.includes("사진우선 1호점") && !document.body.innerText.includes("대구 중구 동성로 1길 10") && document.querySelector("[data-selected-store]") === null && document.querySelector("[data-store-gallery]") === null && document.querySelector('[data-store-slug="store-local"] [aria-expanded="true"]') === null`,
+    ),
+    true,
+  );
+  await shot("missing-selection-390.png", true);
+
   await setMode("empty");
   await go("/stores");
   await until(
@@ -812,7 +1198,9 @@ try {
     true,
   );
   assert.equal(
-    await evaluate(`!!document.querySelector("#store-prices")`),
+    await evaluate(
+      `!!document.querySelector("#store-prices") && document.querySelector("[data-price-key]") === null`,
+    ),
     true,
   );
   await shot("empty-390.png", true);

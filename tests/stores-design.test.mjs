@@ -6,8 +6,13 @@ import {
   formatStorePriceAmounts,
   interiorPhotos,
   isMappableAddress,
+  jointStoreExteriors,
   localStoreExterior,
   naverMapSearchUrl,
+  resolveStoreSelection,
+  storeParamList,
+  storePhotoPlan,
+  storeSelectionHref,
 } from "../components/store/present.ts";
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
@@ -36,6 +41,46 @@ test("외관 사진은 호점이 분명할 때만 고르고 순서에는 기대�
   assert.equal(localStoreExterior("11호점"), null);
   assert.equal(localStoreExterior("21호점"), null);
   assert.equal(localStoreExterior(""), null);
+  assert.equal(localStoreExterior("쪽집게천사 사주타로1,2호점"), null);
+  assert.equal(localStoreExterior("쪽집게 사주타로 천사3호점"), null);
+  const joint = jointStoreExteriors("쪽집게천사 사주타로1,2호점");
+  assert.deepEqual(
+    joint?.map((photo) => [photo.src, photo.label]),
+    [
+      ["/images/brand/store1.jpg", "1호점 외관"],
+      ["/images/brand/store2.jpg", "2호점 외관"],
+    ],
+  );
+  assert.equal(
+    jointStoreExteriors("쪽집게천사사주타로1,2호점")?.[0].src,
+    "/images/brand/store1.jpg",
+  );
+  assert.equal(jointStoreExteriors("쪽집게천사 사주타로1·2호점"), null);
+  assert.equal(jointStoreExteriors("사주타로1,2호점"), null);
+  assert.equal(jointStoreExteriors("1·2호점"), null);
+  assert.equal(jointStoreExteriors("쪽집게 사주타로 천사3호점"), null);
+  assert.equal(
+    storePhotoPlan("쪽집게천사 사주타로1,2호점", null).source,
+    "joint",
+  );
+  assert.equal(
+    storePhotoPlan("쪽집게천사 사주타로1,2호점", "https://cdn.example/a.png")
+      .source,
+    "db",
+  );
+  assert.equal(
+    storePhotoPlan(
+      "쪽집게천사 사주타로1,2호점",
+      "https://cdn.example/a.png",
+    ).photos.some((photo) => photo.src.includes("store1")),
+    false,
+  );
+  assert.equal(storePhotoPlan("동성로 2호점", null).source, "local");
+  assert.equal(
+    storePhotoPlan("쪽집게 사주타로 천사3호점", null).source,
+    "empty",
+  );
+  assert.equal(storePhotoPlan("1·2호점", null).source, "empty");
   assert.deepEqual(
     interiorPhotos.map((photo) => photo.src),
     [
@@ -97,6 +142,8 @@ test("참고 가격 문구는 설정값에서 만들고 금액 차이를 유지�
   assert.equal(byKey.naming.group, "saju");
   const price = read("../components/store/price-table.tsx");
   const page = read("../app/(site)/stores/page.tsx");
+  const board = read("../components/store/store-board.tsx");
+  const present = read("../components/store/present.ts");
   assert.equal(price.includes("storePriceConfig"), true);
   assert.equal(price.includes('id="store-prices"'), true);
   assert.equal(price.includes("30000"), false);
@@ -109,4 +156,48 @@ test("참고 가격 문구는 설정값에서 만들고 금액 차이를 유지�
   assert.equal(page.includes("공개된 매장이 없습니다."), true);
   assert.equal(page.includes("매장 정보를 불러오지 못했습니다."), true);
   assert.equal(page.includes('href="/consult"'), true);
+  assert.equal(page.includes("0507-1498-0232"), false);
+  assert.equal(page.includes("쪽집게천사 사주타로1,2호점"), false);
+  assert.equal(
+    board.includes("매장을 선택하면 사진과 참고 가격을 볼 수 있어요"),
+    true,
+  );
+  assert.equal(board.includes("매장 내부 참고 사진"), true);
+  assert.equal(board.includes("공통 소개 사진입니다."), true);
+  assert.equal(board.includes("History.prototype.pushState"), true);
+  assert.equal(board.includes("0507"), false);
+  assert.equal(price.includes("선택한 매장의 확정 요금이 아닙니다."), true);
+  assert.equal(price.includes("매장 방문 상담 참고 가격입니다."), true);
+  assert.equal(present.includes("0507"), false);
+  assert.equal(present.includes("동성로3길"), false);
+  assert.equal(present.includes("쪽집게천사사주타로1,2호점"), true);
+  const listed = [{ id: "a" }, { id: "b" }];
+  assert.deepEqual(resolveStoreSelection(listed, []), {
+    store: null,
+    invalid: false,
+  });
+  assert.deepEqual(resolveStoreSelection(listed, storeParamList("a")), {
+    store: { id: "a" },
+    invalid: false,
+  });
+  assert.deepEqual(resolveStoreSelection(listed, ["missing"]), {
+    store: null,
+    invalid: true,
+  });
+  assert.deepEqual(resolveStoreSelection(listed, ["a", "b"]), {
+    store: null,
+    invalid: true,
+  });
+  assert.deepEqual(resolveStoreSelection(listed, [""]), {
+    store: null,
+    invalid: true,
+  });
+  assert.equal(
+    storeSelectionHref("https://example.com/stores#store-prices", "a"),
+    "/stores?store=a#store-prices",
+  );
+  assert.equal(
+    storeSelectionHref("https://example.com/stores?store=a", "b"),
+    "/stores?store=b",
+  );
 });

@@ -8,6 +8,8 @@ const groups = [
 
 const customerPriceNotice =
   "확인 중인 참고 가격입니다. 방문 전 매장에 최종 요금을 문의해 주세요.";
+const scopeNotice =
+  "매장 방문 상담 참고 가격입니다. 선택한 매장의 확정 요금이 아닙니다.";
 
 export function StorePriceTable() {
   return (
@@ -23,6 +25,7 @@ export function StorePriceTable() {
         <p className="shrink-0 text-fine text-muted">1호점 가격판 기준</p>
       </div>
       <p className="mt-1 text-caption font-medium text-muted">매장 가격 기준</p>
+      <p className="mt-2 text-caption text-muted">{scopeNotice}</p>
       <p className="mt-2 text-caption text-muted">{customerPriceNotice}</p>
       <p className="mt-1 text-caption text-muted">{storePriceConfig.source}</p>
       {groups.map((group) => {
