@@ -3,6 +3,7 @@ import { connection } from "next/server";
 import { createPublicClient } from "@/lib/supabase/public";
 import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/admin/auth";
+import { homeNoticeFromList, type HomeNoticeLine } from "@/lib/home/notice";
 import {
   columns,
   popupColumns,
@@ -81,5 +82,16 @@ export async function loadHomePopup() {
     return await homePopupNotice();
   } catch {
     return null;
+  }
+}
+
+export async function loadHomeNoticeLine(): Promise<HomeNoticeLine> {
+  try {
+    await connection();
+    const list = await noticeList(1);
+    if (!list) return { status: "error" };
+    return homeNoticeFromList(list.data[0]);
+  } catch {
+    return { status: "error" };
   }
 }

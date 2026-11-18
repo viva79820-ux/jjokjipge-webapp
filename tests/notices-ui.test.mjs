@@ -210,6 +210,7 @@ function harness({
       },
     },
     "./rules": rules,
+    "@/lib/home/notice": load("../lib/home/notice.ts"),
   });
   return {
     ...actions,

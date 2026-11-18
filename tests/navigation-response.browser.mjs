@@ -566,10 +566,10 @@ try {
   );
   assert.equal(
     homePending.includes("홈 내용을 불러오는 중이에요.") ||
-      homePending.includes("추천 상담사"),
+      homePending.includes("추천 선생님"),
     true,
   );
-  await waitText("추천 상담사");
+  await waitText("추천 선생님");
 
   await go("/category");
   await waitText("고객센터");

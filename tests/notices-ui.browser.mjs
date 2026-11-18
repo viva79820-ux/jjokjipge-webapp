@@ -875,7 +875,7 @@ try {
   });
   await go("/");
   await expectHomePopup(false);
-  await text("추천 상담사");
+  await text("추천 선생님");
   const t1 = "2026-11-09T00:00:00.000000+00:00";
   const t2 = "2026-11-10T00:00:00.000000+00:00";
   const t3 = "2026-11-11T00:00:00.000000+00:00";
@@ -1103,7 +1103,7 @@ try {
   await go("/category");
   await go("/");
   await expectHomePopup(false);
-  await text("추천 상담사");
+  await text("추천 선생님");
   await b.evaluate(
     "sessionStorage.removeItem('jjokjipge:notice-popup:session')",
   );
@@ -1176,7 +1176,7 @@ try {
   await b.button("닫기");
   await go("/");
   await expectHomePopup(false);
-  await text("추천 상담사");
+  await text("추천 선생님");
   assert.equal(
     await b.evaluate("document.body.innerText.includes('동률 최신 아이디')"),
     false,
@@ -1189,7 +1189,7 @@ try {
   readFail = true;
   await go("/");
   await expectHomePopup(false);
-  await text("추천 상담사");
+  await text("추천 선생님");
   assert.equal(
     await b.evaluate("document.body.innerText.includes('Application error')"),
     false,
@@ -1226,7 +1226,7 @@ try {
   follow.is_published = false;
   await go("/");
   await expectHomePopup(false);
-  await text("추천 상담사");
+  await text("추천 선생님");
   assert.equal(
     await b.evaluate("document.body.innerText.includes('동률 낮은 아이디')"),
     false,
@@ -1361,7 +1361,7 @@ try {
   );
   await go("/");
   await expectHomePopup(false);
-  await text("추천 상담사");
+  await text("추천 선생님");
   await go("/admin/notices/" + draft.id);
   await setChecked("공개", true);
   await b.button("저장 전 확인");
@@ -1444,7 +1444,7 @@ try {
   assert.equal(rows.length, 0);
   await go("/");
   await expectHomePopup(false);
-  await text("추천 상담사");
+  await text("추천 선생님");
   console.log(
     "PASS home popup query, dismissal, images, category card, admin popup setting",
   );
