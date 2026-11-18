@@ -349,3 +349,54 @@ Storage 검사는 SELECT·INSERT·UPDATE 메타데이터 SQL·정책·버킷 설
 이 SQL 검사는 역할·RLS·CHECK·경로 형식·기본값·전체 롤백을 본다. 실제 Storage API, 파일 존재, MIME, 용량, 실제 로그인 세션은 검사하지 않는다.
 
 `node --test tests/counselors-admin-schema.test.mjs`는 마이그레이션 본문과 사전 검사 본문, baseline·롤백 형식을 정적으로 맞춘다. `node tests/counselors-admin-schema.model.mjs`는 준비된 PGlite에서 역할·RLS·CHECK·성공 예외·전체 롤백·이미 적용된 DB의 거부·잘못된 기존 이미지 경로의 중단을 실행한다. 이 모형은 `btree_gist`가 없어 예약 겹침 배제 제약만 재현하지 못하며, 실제 Supabase나 Storage 검증이 아니다.
+
+## 10. 클래스·콘텐츠
+
+마이그레이션은 `supabase/migrations/20261118010000_classes_contents_schema.sql`이다. 실제 강의·영상·블로그·인스타그램·유튜브 자료나 운영용 더미는 넣지 않는다.
+
+### public.classes
+
+| 컬럼                   | 타입·기본값                | 제약·의미                                                   |
+| ---------------------- | -------------------------- | ----------------------------------------------------------- |
+| id                     | uuid PK, gen_random_uuid() | 필수                                                        |
+| title                  | text                       | 필수, 공백만 불가, 최대 100자                               |
+| description            | text                       | 필수, 공백만 불가, 최대 5000자                              |
+| field                  | text                       | 필수, `saju` 또는 `tarot`                                   |
+| video_url              | text null                  | 외부 HTTPS 영상 주소, 최대 2048자                           |
+| is_published           | boolean, false             | 필수, 신규 기본 비공개                                      |
+| sort_order             | integer, 0                 | 필수, 0 이상의 정수                                         |
+| created_at, updated_at | timestamptz, now()         | 필수, 기존 `private.set_updated_at()` 트리거로 수정 시 갱신 |
+
+비공개 초안은 `video_url` 없이 저장할 수 있다. `is_published = true`인 강의에는 유효한 `video_url`이 반드시 있어야 한다.
+
+### public.contents
+
+| 컬럼                   | 타입·기본값                | 제약·의미                                                   |
+| ---------------------- | -------------------------- | ----------------------------------------------------------- |
+| id                     | uuid PK, gen_random_uuid() | 필수                                                        |
+| title                  | text                       | 필수, 공백만 불가, 최대 100자                               |
+| description            | text null                  | 선택, 값이 있으면 공백만 불가, 최대 1000자                  |
+| channel                | text                       | 필수, `blog`, `instagram`, `youtube` 중 하나                |
+| external_url           | text null                  | 외부 HTTPS 주소, 최대 2048자                                |
+| is_published           | boolean, false             | 필수, 신규 기본 비공개                                      |
+| sort_order             | integer, 0                 | 필수, 0 이상의 정수                                         |
+| created_at, updated_at | timestamptz, now()         | 필수, 기존 `private.set_updated_at()` 트리거로 수정 시 갱신 |
+
+비공개 초안은 `external_url` 없이 저장할 수 있다. `is_published = true`인 콘텐츠에는 유효한 `external_url`이 반드시 있어야 한다.
+
+### 주소·정렬·권한
+
+- 두 주소는 `https://`와 비어 있지 않은 호스트가 필요하다. 공백·제어문자·사용자명 또는 비밀번호가 든 권한부, HTTP·상대·`javascript:`·`data:` 주소는 DB CHECK가 거부한다. 정상적인 경로·쿼리 문자열은 허용한다.
+- DB 검사는 저장 형식의 방어선이다. 후속 고객·관리자 화면에서도 표준 URL 파서로 HTTPS 프로토콜, 호스트, 사용자명·비밀번호 부재와 길이를 다시 검증해야 한다.
+- 주소에 서버가 접속하거나 메타데이터를 수집하지 않는다. 자체 영상 호스팅, 이미지·Storage 정책, 게시 이력, 유료 강의·결제, 자동 수집은 이번 범위 밖이다.
+- 두 목록의 정렬은 `sort_order ASC, created_at DESC, id DESC`다. 공개 여부와 정렬 열을 묶은 인덱스를 테이블마다 하나씩 둔다.
+- RLS를 켠다. `anon`과 일반 `authenticated`는 공개 행만 SELECT할 수 있다. 관리자는 기존 `private.is_admin()` 판정으로 비공개 포함 SELECT와 INSERT·UPDATE·DELETE가 가능하며 UPDATE에는 `USING`과 `WITH CHECK`를 모두 둔다.
+- 테이블 권한은 PUBLIC·`anon`·`authenticated`·`service_role`의 기본 권한을 먼저 모두 회수한다. `anon`에는 SELECT만, `authenticated`에는 SELECT·INSERT·UPDATE·DELETE만 부여하고 실제 쓰기 행은 RLS가 관리자에게만 허용한다. TRUNCATE·REFERENCES·TRIGGER 권한은 부여하지 않는다.
+
+### SQL 사전 검사와 롤백 확인
+
+1. 승인본 검토 뒤 운영 DB의 다른 작업이 없는 새 SQL Editor에서 `supabase/tests/classes_contents_preflight.sql` 전체를 실행한다. 마지막 SQLSTATE P0001의 `CLASSES_CONTENTS_PREFLIGHT_OK`만 성공이며 DETAIL의 baseline JSON을 별도로 보관한다.
+2. `supabase/tests/classes_contents_rollback_check.sql`을 복사한 실행본에서만 `baseline jsonb := null`을 DETAIL 원본으로 바꾸고 전체를 별도로 실행한다. `CLASSES_CONTENTS_ROLLBACK_OK`를 확인한다. 저장소 원본은 null로 유지하고 실행 결과를 커밋하지 않는다.
+3. 사전 검사와 롤백 확인이 모두 성공한 뒤에만 마이그레이션을 반영한다. 검사는 실제 계정·profile을 만들거나 수정하지 않는다. 일반 회원 profile이 없으면 프로필 없는 비관리자 인증 역할로 DB RLS만 검사하며 실제 일반 회원 로그인 검증과 구분한다.
+
+`node --test tests/classes-contents-schema.test.mjs`는 마이그레이션·사전 검사 본문 동기화와 안전 조건을 정적으로 확인한다. `node tests/classes-contents-schema.model.mjs`는 준비된 PGlite에서 CHECK·RLS·GRANT·성공 예외·전체 롤백을 실제 SQL로 실행한다. 격리 검사는 실제 Supabase Data API나 실제 로그인 세션을 검증하지 않는다.
