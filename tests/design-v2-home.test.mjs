@@ -51,7 +51,24 @@ test("사진 있는 추천 상담사만 배너에 남고 빈 경력은 만들지
     ["photo"],
   );
   assert.deepEqual(visibleCareers(["  사주 10년  ", "", "   "]), ["사주 10년"]);
+  assert.deepEqual(visibleCareers(["  하나  ", "둘", "셋"]), [
+    "하나",
+    "둘",
+    "셋",
+  ]);
   assert.deepEqual(visibleCareers([]), []);
+});
+
+test("배너 경력은 두 줄로 제한하고 푸터는 3호점까지 적는다", () => {
+  const banner = read("../components/home/banner.tsx");
+  const footer = read("../components/home/footer.tsx");
+  const detail = read("../app/(site)/consult/[id]/page.tsx");
+  assert.equal(banner.includes("line-clamp-2"), true);
+  assert.equal(banner.includes(".slice("), false);
+  assert.equal(footer.includes("1호점 · 2호점 · 3호점"), true);
+  assert.equal(footer.includes("[대표자명]"), true);
+  assert.equal(footer.includes("[매장 주소]"), true);
+  assert.equal(detail.includes("line-clamp"), false);
 });
 
 test("홈 매장 메뉴는 설정 금액과 단위를 그대로 읽는다", () => {

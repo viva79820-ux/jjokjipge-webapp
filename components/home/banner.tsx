@@ -100,7 +100,10 @@ function HomeBannerSlides({ counselors }: { counselors: Counselor[] }) {
                     <span className="inline-flex h-[26px] w-fit max-w-full items-center rounded-full bg-halo px-2.5 text-fine font-extrabold text-foreground">
                       전화상담 선생님
                     </span>
-                    <p className="text-display font-extrabold wrap-anywhere text-on-brand">
+                    <p
+                      data-home-banner-name
+                      className="text-display font-extrabold wrap-anywhere text-on-brand"
+                    >
                       <CounselorName
                         name={counselor.name}
                         suffix="same"
@@ -108,11 +111,12 @@ function HomeBannerSlides({ counselors }: { counselors: Counselor[] }) {
                       />
                     </p>
                     {careers.length > 0 ? (
-                      <div className="text-label wrap-anywhere text-brand-soft">
-                        {careers.map((career, careerIndex) => (
-                          <p key={`${careerIndex}-${career}`}>{career}</p>
-                        ))}
-                      </div>
+                      <p
+                        data-home-banner-career
+                        className="line-clamp-2 min-w-0 max-w-full text-label wrap-anywhere whitespace-pre-line text-brand-soft"
+                      >
+                        {careers.join("\n")}
+                      </p>
                     ) : null}
                     <Link
                       href={`/consult/${counselor.id}`}

@@ -18,7 +18,7 @@ export function HomeFooter() {
         <span className="min-w-0 wrap-anywhere">{siteConfig.name}</span>
       </div>
       <p className="wrap-anywhere">
-        대구 동성로 사주·타로·작명 전문 · 1호점 · 2호점
+        대구 동성로 사주·타로·작명 전문 · 1호점 · 2호점 · 3호점
       </p>
       <p className="wrap-anywhere">
         상호 {siteConfig.name} · 대표 [대표자명] · 사업자등록번호 [번호]

@@ -136,7 +136,7 @@ const counselors = [
     field: "tarot",
     fields: ["tarot"],
     tags: [],
-    careers: [],
+    careers: ["타로 상담 5년"],
     intro: "",
     description: "",
     image_path: `counselors/${failId}.jpg`,
@@ -534,6 +534,37 @@ try {
     await delay(400);
     return before;
   };
+  const clickAt = async (selector) => {
+    await evaluate(
+      `document.querySelector(${JSON.stringify(selector)}).scrollIntoView({ block: "center" })`,
+    );
+    await delay(150);
+    const point = await evaluate(`(() => {
+      const node = document.querySelector(${JSON.stringify(selector)});
+      const box = node.getBoundingClientRect();
+      return {
+        x: Math.round(box.left + box.width / 2),
+        y: Math.round(box.top + box.height / 2),
+      };
+    })()`);
+    await chrome.call("Input.dispatchMouseEvent", {
+      type: "mousePressed",
+      x: point.x,
+      y: point.y,
+      button: "left",
+      buttons: 1,
+      clickCount: 1,
+    });
+    await chrome.call("Input.dispatchMouseEvent", {
+      type: "mouseReleased",
+      x: point.x,
+      y: point.y,
+      button: "left",
+      buttons: 0,
+      clickCount: 1,
+    });
+    return point;
+  };
 
   await emulate({ width: 390, height: 844, fine: false });
   await go("/");
@@ -560,7 +591,13 @@ try {
   await waitText("추천 선생님");
   await waitText("매장 상담 메뉴");
   await waitText(longName);
-  await waitText(longCareer.trim());
+  await until(
+    () =>
+      evaluate(
+        `document.querySelector("[data-home-banner-career]")?.textContent.includes(${JSON.stringify(longCareer.trim())})`,
+      ),
+    "banner career text",
+  );
   await waitText("1호점 가격판을 바탕으로 한 확인 중인 매장 참고 가격입니다.");
   const home = await evaluate(`(() => {
     const text = document.body.innerText;
@@ -622,6 +659,7 @@ try {
   assert.equal(home.noticeStatus, "ready");
   assert.equal(home.reviews, true);
   assert.equal(home.footer.includes("쪽집게천사 운명나라"), true);
+  assert.equal(home.footer.includes("1호점 · 2호점 · 3호점"), true);
   assert.equal(home.footer.includes("[대표자명]"), true);
   assert.equal(home.footer.includes("이용약관"), false);
   for (const absent of [
@@ -656,6 +694,34 @@ try {
     "failed photo placeholder",
   );
 
+  const careerAt = () =>
+    evaluate(`(() => {
+      const metrics = (id) => {
+        const slide = document.querySelector('[data-home-banner-slide="' + id + '"]');
+        const career = slide.querySelector("[data-home-banner-career]");
+        const name = slide.querySelector("[data-home-banner-name]");
+        const button = slide.querySelector("[data-home-banner-reserve]");
+        const photo = slide.querySelector("[data-home-banner-photo]");
+        const pager = document.querySelector("[data-home-banner-index]");
+        const lineHeight = parseFloat(getComputedStyle(career).lineHeight);
+        const box = career.getBoundingClientRect();
+        const hit = (a, b) => a.right > b.left + 1 && a.left < b.right && a.bottom > b.top + 1 && a.top < b.bottom;
+        return {
+          lines: Math.round(box.height / lineHeight),
+          height: Math.round(box.height),
+          lineHeight,
+          banner: Math.round(slide.getBoundingClientRect().height),
+          text: career.textContent,
+          nameText: name.textContent,
+          nameClipped: name.scrollHeight > name.clientHeight + 1,
+          buttonPhoto: hit(button.getBoundingClientRect(), photo.getBoundingClientRect()),
+          buttonPager: hit(button.getBoundingClientRect(), pager.getBoundingClientRect()),
+          nameButton: hit(name.getBoundingClientRect(), button.getBoundingClientRect()),
+        };
+      };
+      return { long: metrics("long-name"), short: metrics("photo-fail") };
+    })()`);
+  const careerReport = [];
   const measure = () =>
     evaluate(`(() => {
       const shell = document.querySelector("[data-app-shell]");
@@ -708,6 +774,27 @@ try {
   ]) {
     await emulate(viewport);
     await waitText("추천 선생님");
+    const career = await careerAt();
+    careerReport.push({
+      viewport: viewport.name,
+      longLines: career.long.lines,
+      longHeight: career.long.height,
+      longBanner: career.long.banner,
+      shortLines: career.short.lines,
+      shortHeight: career.short.height,
+      nameClipped: career.long.nameClipped,
+      buttonPhoto: career.long.buttonPhoto,
+      buttonPager: career.long.buttonPager,
+      nameButton: career.long.nameButton,
+    });
+    assert.equal(
+      career.long.text.includes(longCareer.trim()),
+      true,
+      viewport.name,
+    );
+    assert.equal(career.short.text, "타로 상담 5년", viewport.name);
+    assert.equal(career.long.nameText.includes(longName), true, viewport.name);
+    assert.ok(career.long.banner >= 228, viewport.name);
     const box = await measure();
     await shot(`home-${viewport.name}.png`);
     assert.equal(box.overflow, false, JSON.stringify(box));
@@ -726,9 +813,35 @@ try {
       assert.equal(box.padding, "16px");
     }
   }
+  console.log(`CAREER ${JSON.stringify(careerReport)}`);
+  for (const item of careerReport) {
+    assert.ok(item.longLines <= 2, JSON.stringify(item));
+    assert.ok(item.longHeight <= 42, JSON.stringify(item));
+    assert.equal(item.shortLines <= 2, true, JSON.stringify(item));
+    assert.equal(item.nameClipped, false, JSON.stringify(item));
+    assert.equal(item.buttonPhoto, false, JSON.stringify(item));
+    assert.equal(item.buttonPager, false, JSON.stringify(item));
+    assert.equal(item.nameButton, false, JSON.stringify(item));
+  }
 
   await emulate({ width: 390, height: 844, fine: false });
   await evaluate("window.scrollTo(0, 0)");
+  await clickAt('[data-home-banner-reserve="long-name"]');
+  await until(
+    () =>
+      evaluate(
+        `location.pathname === "/consult/long-name" && document.body.innerText.includes("경력") && document.body.innerText.includes(${JSON.stringify(longCareer.trim())}) && document.body.innerText.includes(${JSON.stringify(longName)})`,
+      ),
+    "long counselor detail",
+  );
+  await evaluate("history.back()");
+  await until(
+    () =>
+      evaluate(
+        `location.pathname === "/" && document.body.innerText.includes("추천 선생님") && !!document.querySelector("[data-home-banner]")`,
+      ),
+    "home before drag",
+  );
   const beforeDrag = await drag("[data-home-banner]");
   assert.equal(await evaluate("location.pathname"), "/");
   await until(
@@ -786,13 +899,7 @@ try {
     "recommended list",
   );
 
-  // 드래그 끝 pointerup이 배너 밖이면 Embla가 다음 클릭 하나를 삼킨다.
-  await evaluate(
-    `document.querySelector('[data-home-banner-slide="photo-fail"]').click()`,
-  );
-  await evaluate(
-    `document.querySelector('[data-home-banner-reserve="photo-fail"]').click()`,
-  );
+  await clickAt('[data-home-banner-reserve="photo-fail"]');
   await until(
     () =>
       evaluate(
