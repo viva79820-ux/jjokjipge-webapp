@@ -23,6 +23,7 @@ import {
   returnUrl,
   type Query,
 } from "@/lib/contents/rules";
+import { AdminContentFilter, ContentListSettled } from "./admin-filter";
 import { ChannelMark, ContentExternalLink } from "./channel";
 import { ContentEditor } from "./editor";
 import { ContentRetry } from "./retry";
@@ -153,10 +154,17 @@ export async function AdminContentListPage({
       </div>
     );
   const result = await adminContentList(filters.page, filters.status);
-  if (!result) return <AdminAccessDenied />;
+  if (!result)
+    return (
+      <>
+        <ContentListSettled token="denied" />
+        <AdminAccessDenied />
+      </>
+    );
   if (result.error)
     return (
       <div role="alert" className="space-y-3">
+        <ContentListSettled token="error" />
         <p>콘텐츠 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.</p>
         <ContentRetry />
       </div>
@@ -168,6 +176,9 @@ export async function AdminContentListPage({
   const emptyCatalog = result.catalogTotal === 0;
   return (
     <div className="min-w-0 space-y-4">
+      <ContentListSettled
+        token={`${filters.status}:${filters.page}:${filters.deleted}:${result.count}`}
+      />
       <h1 className="text-title font-bold">콘텐츠</h1>
       {filters.deleted && (
         <p role="status" className="text-brand">
@@ -177,28 +188,11 @@ export async function AdminContentListPage({
       <Button href={`/admin/contents/new?returnTo=${encodeURIComponent(back)}`}>
         콘텐츠 등록
       </Button>
-      <form
-        action="/admin/contents"
-        method="get"
-        className="flex flex-wrap gap-2"
-      >
-        <label className="text-label font-semibold">
-          공개 상태
-          <select
-            name="status"
-            defaultValue={filters.status}
-            className="mt-1 ml-2 min-h-11 rounded-input border border-border bg-surface p-2"
-          >
-            <option value="">전체</option>
-            <option value="public">공개</option>
-            <option value="private">비공개</option>
-          </select>
-        </label>
-        <Button type="submit">필터 적용</Button>
-        <Button href={adminListUrl()} variant="secondary">
-          초기화
-        </Button>
-      </form>
+      <AdminContentFilter
+        status={filters.status}
+        page={filters.page}
+        deleted={filters.deleted}
+      />
       <p className="text-caption font-medium text-muted">총 {result.count}건</p>
       {result.count === 0 && emptyCatalog && (
         <p role="status">등록된 콘텐츠가 없습니다.</p>

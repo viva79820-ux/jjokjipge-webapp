@@ -113,6 +113,7 @@ let listFail = false;
 let forceEmpty = false;
 let hideYoutube = false;
 let loseResponse = false;
+let delayList = 0;
 let seq = 0;
 const contentsRequests = [];
 const stamp = () =>
@@ -240,6 +241,8 @@ async function handle(req, res) {
     search: url.search,
     auth: req.headers.authorization || "",
   });
+  if (delayList && (req.method === "GET" || req.method === "HEAD"))
+    await delay(delayList);
   if (listFail && (req.method === "GET" || req.method === "HEAD")) {
     res.writeHead(500);
     res.end(JSON.stringify({ code: "XX000", message: "fixture" }));
@@ -312,6 +315,7 @@ const env = {
 };
 let app;
 let page;
+let documents;
 try {
   const build = spawnSync(
     process.execPath,
@@ -627,17 +631,126 @@ try {
   await go("/admin/contents?status=nope");
   await text("목록 조건이 올바르지 않습니다.");
   await go("/admin/contents");
+  documents = await documentCounter(page.debugPort);
   await page.evaluate(`(() => {
+    window.__contentsFilterMark = "keep";
+    const push = history.pushState.bind(history);
+    history.pushState = function(...args) {
+      window.__contentsPushCount = (window.__contentsPushCount || 0) + 1;
+      return push(...args);
+    };
+  })()`);
+  const beforePage = documents.docs.length;
+  await clickLink("다음");
+  await until(
+    () => page.evaluate("location.search === '?page=2'"),
+    "admin page 2",
+  );
+  await text("2 / 2");
+  assert.equal(await markerValue(), "keep");
+  assert.equal(documents.docs.length, beforePage, documents.docs.join("\n"));
+  delayList = 1200;
+  const beforeFilter = documents.docs.length;
+  await page.evaluate(`(() => {
+    window.__contentsPushCount = 0;
     const select = document.querySelector('select[name="status"]');
     select.value = "private";
     select.form.requestSubmit();
+    select.form.requestSubmit();
   })()`);
+  await delay(120);
+  assert.equal(await markerValue(), "keep");
+  assert.equal(documents.docs.length, beforeFilter, documents.docs.join("\n"));
+  const pendingBody = await page.evaluate(
+    "document.body ? document.body.innerText.length : 0",
+  );
+  assert.ok(pendingBody > 20, String(pendingBody));
+  await text("필터를 적용하는 중…");
+  delayList = 0;
   await until(
-    () => page.evaluate("location.search.includes('status=private')"),
+    () =>
+      page.evaluate(
+        "location.search.includes('status=private') && !location.search.includes('page=')",
+      ),
     "private filter",
+  );
+  assert.equal(await markerValue(), "keep");
+  assert.equal(documents.docs.length, beforeFilter, documents.docs.join("\n"));
+  assert.equal(await page.evaluate("window.__contentsPushCount"), 1);
+  await text("SECRET_PRIVATE_TITLE");
+  await absent("인스타 공개글");
+  await text("1 / 1");
+  assert.equal(await statusValue(), "private");
+  await chooseStatus("public");
+  await until(
+    () => page.evaluate("location.search === '?status=public'"),
+    "public filter",
+  );
+  await text("인스타 공개글");
+  await absent("SECRET_PRIVATE_TITLE");
+  await text("1 / 2");
+  assert.equal(await statusValue(), "public");
+  assert.equal(await markerValue(), "keep");
+  await clickLink("다음");
+  await until(
+    () => page.evaluate("location.search === '?page=2&status=public'"),
+    "public page 2",
+  );
+  await text("2 / 2");
+  await clickLink("이전");
+  await until(
+    () => page.evaluate("location.search === '?status=public'"),
+    "public page 1",
+  );
+  await chooseStatus("");
+  await until(
+    () =>
+      page.evaluate(
+        "location.pathname === '/admin/contents' && !location.search",
+      ),
+    "all filter",
+  );
+  await text("SECRET_PRIVATE_TITLE");
+  await text("인스타 공개글");
+  await text("총 23건");
+  assert.equal(await statusValue(), "");
+  await chooseStatus("private");
+  await until(
+    () => page.evaluate("location.search === '?status=private'"),
+    "private again",
+  );
+  await page.evaluate("history.back()");
+  await until(
+    () =>
+      page.evaluate(
+        "location.pathname === '/admin/contents' && !location.search",
+      ),
+    "filter back",
+  );
+  await text("인스타 공개글");
+  assert.equal(await statusValue(), "");
+  assert.equal(await markerValue(), "keep");
+  await page.evaluate("history.forward()");
+  await until(
+    () => page.evaluate("location.search === '?status=private'"),
+    "filter forward",
   );
   await text("SECRET_PRIVATE_TITLE");
   await absent("인스타 공개글");
+  assert.equal(await statusValue(), "private");
+  await clickLink("초기화");
+  await until(
+    () =>
+      page.evaluate(
+        "location.pathname === '/admin/contents' && !location.search",
+      ),
+    "filter reset",
+  );
+  await text("총 23건");
+  await go("/admin/contents?status=public");
+  await text("인스타 공개글");
+  await absent("SECRET_PRIVATE_TITLE");
+  assert.equal(await statusValue(), "public");
   await go("/admin/contents/new?returnTo=%2Fadmin%2Fcontents");
   await setField("title", "연속 저장 제목");
   await page.evaluate(`(() => {
@@ -858,7 +971,67 @@ try {
     requests: contentsRequests.length,
   });
 } finally {
+  documents?.close();
   if (page) await page.close();
   stop(app);
   fixture.close();
+}
+
+async function documentCounter(debugPort) {
+  const targets = await (
+    await fetch(`http://127.0.0.1:${debugPort}/json/list`)
+  ).json();
+  const socket = new WebSocket(
+    targets.find((item) => item.type === "page").webSocketDebuggerUrl,
+  );
+  await new Promise((resolve, reject) => {
+    socket.addEventListener("open", resolve, { once: true });
+    socket.addEventListener("error", reject, { once: true });
+  });
+  const docs = [];
+  let sequence = 0;
+  const pending = new Map();
+  socket.addEventListener("message", (event) => {
+    const message = JSON.parse(event.data);
+    if (message.id && pending.has(message.id)) {
+      pending.get(message.id)(message.result);
+      pending.delete(message.id);
+    }
+    if (
+      message.method === "Network.requestWillBeSent" &&
+      message.params.type === "Document"
+    )
+      docs.push(message.params.request.url);
+  });
+  const call = (method, params = {}) =>
+    new Promise((resolve) => {
+      const id = ++sequence;
+      pending.set(id, resolve);
+      socket.send(JSON.stringify({ id, method, params }));
+    });
+  await call("Network.enable");
+  return { docs, close: () => socket.close() };
+}
+
+async function markerValue() {
+  try {
+    return await page.evaluate("window.__contentsFilterMark || null");
+  } catch {
+    return null;
+  }
+}
+
+async function statusValue() {
+  return page.evaluate(`(() => {
+    const select = Array.from(document.querySelectorAll('select[name="status"]')).find((item) => item.checkVisibility());
+    return select ? select.value : null;
+  })()`);
+}
+
+async function chooseStatus(value) {
+  await page.evaluate(`(() => {
+    const select = Array.from(document.querySelectorAll('select[name="status"]')).find((item) => item.checkVisibility());
+    select.value = ${JSON.stringify(value)};
+    select.form.requestSubmit();
+  })()`);
 }

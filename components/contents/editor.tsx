@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import {
+  confirmContentDeletion,
   reloadContent,
   saveContent,
   type Result,
@@ -56,6 +57,7 @@ export function ContentEditor({
   const baseline = useRef(initial);
   const leaving = useRef(false);
   const deleting = useRef(false);
+  const deleteAttempt = useRef<{ id: string; version: string } | null>(null);
   const shown = useRef(true);
   const pendingHref = useRef<string | null>(null);
   const reloadRef = useRef<HTMLDivElement>(null);
@@ -226,10 +228,18 @@ export function ContentEditor({
         return;
       }
       if (action === "delete") {
+        const source = baseline.current;
+        if (!source) return;
+        const attempt = { id: source.id, version: source.updated_at };
+        deleteAttempt.current = attempt;
         deleting.current = true;
         const data = form();
         data.set("mode", "delete");
-        finish(await submitContentAttempt(() => saveContent(data)));
+        data.set("id", attempt.id);
+        data.set("version", attempt.version);
+        const result = await submitContentAttempt(() => saveContent(data));
+        if (result.state !== "unknown") deleteAttempt.current = null;
+        finish(result);
         return;
       }
       deleting.current = false;
@@ -250,27 +260,59 @@ export function ContentEditor({
     lock.current = true;
     setBusy(true);
     try {
+      if (deleting.current) {
+        const attempt = deleteAttempt.current;
+        if (!attempt) {
+          setMessage(
+            "저장 결과를 확인하지 못했습니다. 입력은 유지하고 다시 확인해 주세요.",
+          );
+          return;
+        }
+        const checked = await confirmContentDeletion(
+          attempt.id,
+          attempt.version,
+        );
+        if (checked.deleted) {
+          deleteAttempt.current = null;
+          deleting.current = false;
+          setUncertain(false);
+          setConflict(false);
+          finish({
+            state: "saved",
+            deleted: true,
+            message: checked.message,
+          });
+          return;
+        }
+        if (checked.state === "conflict") {
+          deleteAttempt.current = null;
+          deleting.current = false;
+          setUncertain(false);
+          setConflict(true);
+          setGone(false);
+          setMessage(checked.message);
+          focusStatus();
+          return;
+        }
+        if (checked.unchanged) {
+          deleteAttempt.current = null;
+          deleting.current = false;
+          setUncertain(false);
+          setConflict(false);
+          setMessage(checked.message);
+          focusStatus();
+          return;
+        }
+        setUncertain(true);
+        setMessage(checked.message);
+        return;
+      }
       const loaded = await reloadContent(baseline.current?.id || draftId);
       if (
         loaded.state === "unknown" ||
         (loaded.state === "rejected" && !loaded.missing)
       ) {
         setMessage(loaded.message);
-        return;
-      }
-      if (deleting.current) {
-        if (loaded.missing && baseline.current) {
-          finish({
-            state: "saved",
-            deleted: true,
-            message: "콘텐츠가 없는 것을 확인했습니다.",
-            row: baseline.current,
-          });
-          return;
-        }
-        deleting.current = false;
-        setUncertain(false);
-        setMessage("삭제가 반영되지 않았습니다. 콘텐츠는 그대로입니다.");
         return;
       }
       if (!baseline.current && loaded.missing) {

@@ -20,6 +20,7 @@ export type Result = {
   errors?: Record<string, string>;
   missing?: boolean;
   deleted?: boolean;
+  unchanged?: boolean;
 };
 
 const denied: Result = {
@@ -85,6 +86,38 @@ function savedRow(
 ): Result {
   invalidate(row.id);
   return { state: "saved", message, row };
+}
+
+export async function confirmContentDeletion(
+  id: string,
+  version: string,
+): Promise<Result> {
+  const admin = await requireAdmin();
+  if (!admin) return denied;
+  if (!uuid(id) || !version || !versionValid(version))
+    return { state: "rejected", message: "요청을 확인해 주세요." };
+  try {
+    const read = await readRow(await createClient(), id);
+    if (read.error) return unknown;
+    if (!read.data) {
+      invalidate(id);
+      return {
+        state: "saved",
+        deleted: true,
+        message: "콘텐츠가 없는 것을 확인했습니다.",
+      };
+    }
+    const row = read.data as ContentRecord;
+    if (row.updated_at !== version)
+      return { state: "conflict", message: conflictMessage };
+    return {
+      state: "rejected",
+      unchanged: true,
+      message: "삭제가 반영되지 않았습니다. 콘텐츠는 그대로입니다.",
+    };
+  } catch {
+    return unknown;
+  }
 }
 
 export async function reloadContent(id: string): Promise<Result> {
