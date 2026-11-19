@@ -71,8 +71,12 @@ let admin = true;
 let listFail = false;
 let customerEmpty = false;
 let loseResponse = false;
+let dropWrite = false;
+let readFail = false;
+let listDelay = 0;
 let writeDelay = 0;
 let writes = 0;
+let classGets = 0;
 let seq = 0;
 const stamp = () =>
   `2026-11-18T04:00:00.${String(++seq).padStart(6, "0")}+00:00`;
@@ -203,10 +207,23 @@ async function handle(req, res) {
     res.end(req.method === "HEAD" ? "" : "[]");
     return;
   }
+  if (readFail && req.method === "GET" && url.searchParams.has("id")) {
+    readFail = false;
+    res.writeHead(500);
+    res.end(JSON.stringify({ code: "XX000", message: "fixture" }));
+    return;
+  }
+  if (listDelay && (req.method === "GET" || req.method === "HEAD"))
+    await delay(listDelay);
   if (["POST", "PATCH", "DELETE"].includes(req.method || "")) {
     if (role !== "admin") {
       res.writeHead(401);
       res.end(JSON.stringify({ code: "42501", message: "permission" }));
+      return;
+    }
+    if (dropWrite) {
+      dropWrite = false;
+      req.socket.destroy();
       return;
     }
     if (writeDelay) await delay(writeDelay);
@@ -247,6 +264,7 @@ async function handle(req, res) {
     send(res, 200, selected, selected.length);
     return;
   }
+  if (req.method === "GET" || req.method === "HEAD") classGets += 1;
   let selected = classes.filter(
     (row) => visible(row, role) && matches(row, url.searchParams),
   );
@@ -295,7 +313,27 @@ try {
     "app",
     90000,
   );
+  const sockets = [];
+  const NativeSocket = globalThis.WebSocket;
+  globalThis.WebSocket = class extends NativeSocket {
+    constructor(url, protocols) {
+      if (protocols === undefined) super(url);
+      else super(url, protocols);
+      sockets.push(this);
+    }
+  };
   page = await browser();
+  const documentRequests = [];
+  await page.call("Network.enable");
+  for (const socket of sockets)
+    socket.addEventListener("message", (event) => {
+      const message = JSON.parse(event.data);
+      if (
+        message.method === "Network.requestWillBeSent" &&
+        message.params?.type === "Document"
+      )
+        documentRequests.push(message.params.request.url);
+    });
   const text = (value) =>
     until(
       () =>
@@ -508,14 +546,104 @@ try {
     `[...document.querySelectorAll('a')].find((item) => item.checkVisibility() && item.textContent.trim() === '콘텐츠').getAttribute('href')`,
   );
   assert.equal(contentHref, "/admin/contents");
+  const here = () => page.evaluate("location.pathname + location.search");
+  const statusValue = () => visibleValue("status");
+  const applyStatus = async (status) => {
+    await page.evaluate(`(() => {
+      const select = [...document.querySelectorAll('[name=status]')].find((node) => node.checkVisibility());
+      select.value = ${JSON.stringify(status)};
+      select.form.requestSubmit();
+    })()`);
+  };
   await page.evaluate(`(() => {
-    const select = [...document.querySelectorAll('[name=status]')].find((node) => node.checkVisibility());
-    select.value = 'private';
-    select.form.requestSubmit();
+    window.__classFilterMarker = "keep";
+    sessionStorage.setItem("class-doc-nav", "0");
+    window.addEventListener("beforeunload", () => {
+      const next = Number(sessionStorage.getItem("class-doc-nav") || "0") + 1;
+      sessionStorage.setItem("class-doc-nav", String(next));
+    }, { capture: true });
   })()`);
+  const docsBeforeFilter = documentRequests.length;
+  const getsBeforePrivate = classGets;
+  await applyStatus("private");
   await text("총 1건");
   await text("테스트 비공개비밀");
   await absent(longTitle);
+  assert.equal(await page.evaluate("window.__classFilterMarker"), "keep");
+  assert.equal(
+    await page.evaluate("sessionStorage.getItem('class-doc-nav')"),
+    "0",
+  );
+  assert.equal(documentRequests.length, docsBeforeFilter);
+  assert.equal(await here(), "/admin/classes?status=private");
+  assert.equal(await statusValue(), "private");
+  const privateGets = classGets - getsBeforePrivate;
+  assert.ok(privateGets >= 1, `private filter reads ${privateGets}`);
+  await applyStatus("public");
+  await text("총 21건");
+  await text(longTitle);
+  await absent("테스트 비공개비밀");
+  assert.equal(await here(), "/admin/classes?status=public");
+  assert.equal(await statusValue(), "public");
+  assert.equal(documentRequests.length, docsBeforeFilter);
+  await page.evaluate("history.back()");
+  await text("총 1건");
+  assert.equal(await here(), "/admin/classes?status=private");
+  assert.equal(await statusValue(), "private");
+  await page.evaluate("history.forward()");
+  await text("총 21건");
+  assert.equal(await here(), "/admin/classes?status=public");
+  assert.equal(await statusValue(), "public");
+  await clickLink("초기화");
+  await text("총 22건");
+  assert.equal(await here(), "/admin/classes");
+  assert.equal(await statusValue(), "");
+  await clickLink("다음");
+  await text("테스트 둘째쪽");
+  assert.equal(await here(), "/admin/classes?page=2");
+  await text("2 / 2");
+  await applyStatus("private");
+  await text("총 1건");
+  await text("1 / 1");
+  assert.equal(await here(), "/admin/classes?status=private");
+  assert.equal(await statusValue(), "private");
+  assert.equal(await page.evaluate("window.__classFilterMarker"), "keep");
+  assert.equal(
+    await page.evaluate("sessionStorage.getItem('class-doc-nav')"),
+    "0",
+  );
+  assert.equal(documentRequests.length, docsBeforeFilter);
+  listDelay = 800;
+  await page.evaluate(`(() => {
+    window.__sawFilterPending = false;
+    const observer = new MutationObserver(() => {
+      if (document.body.innerText.includes("필터 적용 중"))
+        window.__sawFilterPending = true;
+    });
+    observer.observe(document.body, { subtree: true, childList: true, characterData: true });
+  })()`);
+  const getsBeforeDouble = classGets;
+  await page.evaluate(`(() => {
+    const select = [...document.querySelectorAll('[name=status]')].find((node) => node.checkVisibility());
+    select.value = "public";
+    select.form.requestSubmit();
+    select.form.requestSubmit();
+  })()`);
+  await until(
+    () => page.evaluate("window.__sawFilterPending === true"),
+    "filter pending",
+  );
+  await text("총 21건");
+  listDelay = 0;
+  assert.equal(classGets - getsBeforeDouble, privateGets);
+  assert.equal(await here(), "/admin/classes?status=public");
+  assert.equal(await statusValue(), "public");
+  assert.equal(documentRequests.length, docsBeforeFilter);
+  await go("/admin/classes?status=public");
+  await text("총 21건");
+  await absent("테스트 비공개비밀");
+  assert.equal(await here(), "/admin/classes?status=public");
+  assert.equal(await statusValue(), "public");
   const beforeCreate = writes;
   await clickLink("클래스 등록");
   await text("클래스 등록");
@@ -657,6 +785,174 @@ try {
   await text("강의를 찾을 수 없습니다.");
   await absent("응답 유실 설명");
   await go("/admin/classes");
+  const createClass = async (title) => {
+    if (!(await page.evaluate("location.pathname === '/admin/classes'"))) {
+      await clickLink("클래스");
+      await until(
+        () => page.evaluate("location.pathname === '/admin/classes'"),
+        "class list",
+      );
+    }
+    await clickLink("클래스 등록");
+    await text("클래스 등록");
+    await page.fill("title", title);
+    await page.fill("description", `${title} 설명`);
+    await choose("field", "saju");
+    const before = writes;
+    await page.button("저장 전 확인");
+    await confirm();
+    await until(
+      () =>
+        page.evaluate(
+          "location.pathname.startsWith('/admin/classes/') && !location.pathname.endsWith('/new')",
+        ),
+      title,
+    );
+    assert.equal(writes, before + 1);
+    const path = await page.evaluate("location.pathname");
+    return { path, id: path.split("/").at(-1) };
+  };
+  const lost = await createClass("테스트 삭제반영");
+  loseResponse = true;
+  const beforeLostDelete = writes;
+  await page.button("삭제 전 확인");
+  await confirm();
+  await text("삭제 결과를 확인하지 못했습니다. 다시 확인해 주세요.");
+  await absent("저장은 반영되지 않았습니다.");
+  await absent("클래스를 저장했습니다.");
+  assert.equal(writes, beforeLostDelete + 1);
+  assert.equal(
+    classes.some((row) => row.id === lost.id),
+    false,
+  );
+  const beforeReconcile = writes;
+  await page.button("삭제 결과 다시 확인");
+  await until(
+    () => page.evaluate("location.pathname === '/admin/classes'"),
+    "reconciled delete",
+  );
+  await text("클래스를 삭제했습니다.");
+  assert.equal(writes, beforeReconcile);
+  const missed = await createClass("테스트 삭제미도달");
+  dropWrite = true;
+  const beforeMissed = writes;
+  await page.button("삭제 전 확인");
+  await confirm();
+  await text("삭제 결과를 확인하지 못했습니다. 다시 확인해 주세요.");
+  assert.equal(
+    classes.some((row) => row.id === missed.id),
+    true,
+  );
+  assert.equal(writes, beforeMissed);
+  await page.button("삭제 결과 다시 확인");
+  await text(
+    "삭제는 반영되지 않았습니다. 클래스는 그대로 있습니다. 다시 삭제할 수 있습니다.",
+  );
+  assert.equal(writes, beforeMissed);
+  await page.button("삭제 전 확인");
+  await confirm();
+  await until(
+    () => page.evaluate("location.pathname === '/admin/classes'"),
+    "explicit delete",
+  );
+  assert.equal(writes, beforeMissed + 1);
+  assert.equal(
+    classes.some((row) => row.id === missed.id),
+    false,
+  );
+  const unread = await createClass("테스트 삭제조회실패");
+  dropWrite = true;
+  const beforeUnread = writes;
+  await page.button("삭제 전 확인");
+  await confirm();
+  await text("삭제 결과를 확인하지 못했습니다. 다시 확인해 주세요.");
+  readFail = true;
+  await page.button("삭제 결과 다시 확인");
+  await until(
+    async () =>
+      !readFail &&
+      (await page.evaluate(
+        "[...document.querySelectorAll('button')].some((node) => node.checkVisibility() && !node.disabled && node.textContent.trim() === '삭제 결과 다시 확인')",
+      )),
+    "delete read failed",
+  );
+  await text("삭제 결과를 확인하지 못했습니다. 다시 확인해 주세요.");
+  await absent("삭제는 반영되지 않았습니다.");
+  await absent("이 클래스는 삭제되었습니다.");
+  await absent("클래스를 삭제했습니다.");
+  assert.equal(writes, beforeUnread);
+  assert.equal(
+    classes.some((row) => row.id === unread.id),
+    true,
+  );
+  assert.equal(
+    await page.evaluate(
+      "[...document.querySelectorAll('button')].some((node) => node.checkVisibility() && node.textContent.trim() === '삭제 결과 다시 확인')",
+    ),
+    true,
+  );
+  const changed = await createClass("테스트 삭제변경");
+  dropWrite = true;
+  const beforeChanged = writes;
+  await page.button("삭제 전 확인");
+  await confirm();
+  await text("삭제 결과를 확인하지 못했습니다. 다시 확인해 주세요.");
+  const changedRow = classes.find((row) => row.id === changed.id);
+  changedRow.updated_at = stamp();
+  changedRow.title = "테스트 삭제변경됨";
+  await page.button("삭제 결과 다시 확인");
+  await text("다른 작업으로 클래스가 변경됐습니다.");
+  assert.equal(writes, beforeChanged);
+  assert.equal(changedRow.title, "테스트 삭제변경됨");
+  const roundTrip = await createClass("테스트 삭제왕복");
+  await page.button("삭제 전 확인");
+  await text("클래스 삭제 확인");
+  const beforeHide = writes;
+  await clickLink("사이트 보기");
+  await until(() => page.evaluate("location.pathname === '/'"), "left editor");
+  await page.evaluate("history.back()");
+  await until(
+    () =>
+      page.evaluate(`location.pathname === ${JSON.stringify(roundTrip.path)}`),
+    "restored editor",
+  );
+  await absent("클래스 삭제 확인");
+  assert.equal(writes, beforeHide);
+  assert.equal(
+    classes.some((row) => row.id === roundTrip.id),
+    true,
+  );
+  loseResponse = true;
+  const beforeRoundDelete = writes;
+  await page.button("삭제 전 확인");
+  await confirm();
+  await text("삭제 결과를 확인하지 못했습니다. 다시 확인해 주세요.");
+  assert.equal(writes, beforeRoundDelete + 1);
+  assert.equal(
+    classes.some((row) => row.id === roundTrip.id),
+    false,
+  );
+  await clickLink("사이트 보기");
+  await until(
+    () => page.evaluate("location.pathname === '/'"),
+    "left uncertain",
+  );
+  await page.evaluate("history.back()");
+  await until(
+    () =>
+      page.evaluate(
+        `location.pathname === ${JSON.stringify(roundTrip.path)} && document.body.innerText.includes('삭제 결과 다시 확인')`,
+      ),
+    "restored uncertain delete",
+  );
+  assert.equal(writes, beforeRoundDelete + 1);
+  await page.button("삭제 결과 다시 확인");
+  await until(
+    () => page.evaluate("location.pathname === '/admin/classes'"),
+    "round trip delete",
+  );
+  await text("클래스를 삭제했습니다.");
+  assert.equal(writes, beforeRoundDelete + 1);
   const beforeDraft = writes;
   await clickLink("클래스 등록");
   await page.fill("title", "테스트 임시보관");

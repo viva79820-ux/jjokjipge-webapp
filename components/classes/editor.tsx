@@ -59,7 +59,11 @@ export function ClassEditor({
   const [conflict, setConflict] = useState(false);
   const [uncertain, setUncertain] = useState(false);
   const [removed, setRemoved] = useState(false);
+  const [attemptMode, setAttemptMode] = useState<
+    "create" | "update" | "delete" | ""
+  >("");
   const lock = useRef(false);
+  const attemptRef = useRef<FormData | null>(null);
   const baseline = useRef(initial);
   const leaving = useRef(false);
   const createdNavigate = useRef(false);
@@ -90,6 +94,8 @@ export function ClassEditor({
       setMessage("");
       setConflict(false);
       setUncertain(false);
+      setAttemptMode("");
+      attemptRef.current = null;
       setDraftId("");
     };
   }, []);
@@ -161,9 +167,25 @@ export function ClassEditor({
   function focusStatus() {
     requestAnimationFrame(() => statusRef.current?.focus());
   }
+  function remember(data: FormData) {
+    const copy = new FormData();
+    for (const [key, value] of data.entries()) {
+      if (typeof value === "string") copy.append(key, value);
+    }
+    attemptRef.current = copy;
+    const mode = copy.get("mode");
+    setAttemptMode(
+      mode === "create" || mode === "update" || mode === "delete" ? mode : "",
+    );
+  }
+  function forgetAttempt() {
+    attemptRef.current = null;
+    setAttemptMode("");
+  }
   function finish(result: Result) {
     setModal(null);
     setErrors(result.errors || {});
+    if (result.state !== "unknown") forgetAttempt();
     if (result.deleted) {
       setRemoved(true);
       setMessage(result.message);
@@ -192,7 +214,11 @@ export function ClassEditor({
       focusStatus();
       return;
     }
-    setMessage(result.message);
+    setMessage(
+      result.state === "unknown" && attemptRef.current?.get("mode") === "delete"
+        ? "삭제 결과를 확인하지 못했습니다. 다시 확인해 주세요."
+        : result.message,
+    );
     setConflict(result.state === "conflict");
     setUncertain(result.state === "unknown");
     focusStatus();
@@ -223,15 +249,20 @@ export function ClassEditor({
       }
       if (modal === "delete") {
         const data = form("delete");
+        remember(data);
         finish(await submitClassAttempt(() => saveClass(data)));
         return;
       }
-      finish(await submitClassAttempt(() => saveClass(form())));
+      const data = form();
+      remember(data);
+      finish(await submitClassAttempt(() => saveClass(data)));
     } catch {
       setUncertain(true);
       setModal(null);
       setMessage(
-        "결과를 확인하지 못했습니다. 저장 결과를 확인한 뒤 진행해 주세요.",
+        attemptRef.current?.get("mode") === "delete"
+          ? "삭제 결과를 확인하지 못했습니다. 다시 확인해 주세요."
+          : "결과를 확인하지 못했습니다. 저장 결과를 확인한 뒤 진행해 주세요.",
       );
       focusStatus();
     } finally {
@@ -242,15 +273,48 @@ export function ClassEditor({
     }
   }
   async function reconcile() {
-    if (lock.current || leaving.current || removed) return;
+    const attempt = attemptRef.current;
+    const mode = attempt?.get("mode");
+    const id = attempt?.get("id");
+    if (
+      !attempt ||
+      typeof id !== "string" ||
+      lock.current ||
+      leaving.current ||
+      removed
+    )
+      return;
     lock.current = true;
     setBusy(true);
     try {
-      const checked = await confirmClass(original?.id || draftId, form());
-      if (
-        checked.state === "unknown" ||
-        (checked.state === "rejected" && !checked.missing)
-      ) {
+      const checked = await confirmClass(id, attempt);
+      if (checked.state === "unknown") {
+        setMessage(
+          mode === "delete"
+            ? "삭제 결과를 확인하지 못했습니다. 다시 확인해 주세요."
+            : checked.message,
+        );
+        focusStatus();
+        return;
+      }
+      if (mode === "delete") {
+        if (checked.deleted) {
+          finish(checked);
+          return;
+        }
+        if (checked.unchanged || checked.state === "conflict") {
+          forgetAttempt();
+          setUncertain(false);
+          setConflict(checked.state === "conflict");
+          setMessage(checked.message);
+          focusStatus();
+          return;
+        }
+        setMessage(checked.message);
+        focusStatus();
+        return;
+      }
+      if (checked.state === "rejected" && !checked.missing) {
         setMessage(checked.message);
         focusStatus();
         return;
@@ -259,6 +323,7 @@ export function ClassEditor({
         finish(checked);
         return;
       }
+      forgetAttempt();
       setUncertain(false);
       if (checked.state === "conflict") setConflict(true);
       setMessage(
@@ -269,7 +334,9 @@ export function ClassEditor({
       focusStatus();
     } catch {
       setMessage(
-        "저장 결과를 확인하지 못했습니다. 입력은 유지하고 다시 확인해 주세요.",
+        mode === "delete"
+          ? "삭제 결과를 확인하지 못했습니다. 다시 확인해 주세요."
+          : "저장 결과를 확인하지 못했습니다. 입력은 유지하고 다시 확인해 주세요.",
       );
       focusStatus();
     } finally {
@@ -533,7 +600,9 @@ export function ClassEditor({
       </p>
       {uncertain && (
         <Button disabled={busy} onClick={reconcile}>
-          저장 결과 다시 확인
+          {attemptMode === "delete"
+            ? "삭제 결과 다시 확인"
+            : "저장 결과 다시 확인"}
         </Button>
       )}
       {modal && (

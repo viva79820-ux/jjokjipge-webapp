@@ -15,6 +15,7 @@ function load(file, adapters = {}) {
       compilerOptions: {
         module: ts.ModuleKind.CommonJS,
         target: ts.ScriptTarget.ES2022,
+        jsx: ts.JsxEmit.ReactJSX,
       },
     }).outputText,
   )((name) => {
@@ -184,10 +185,18 @@ function execute(world, query) {
         const index = world.classes.indexOf(row);
         if (index >= 0) world.classes.splice(index, 1);
       }
+      if (world.lose) {
+        world.lose = false;
+        throw Error("socket");
+      }
       return finish(query, selected, selected.length);
     }
     for (const row of selected)
       Object.assign(row, query.payload, { updated_at: nextVersion });
+    if (world.lose) {
+      world.lose = false;
+      throw Error("socket");
+    }
   }
   selected = sortRows(selected, query.orders);
   const total = selected.length;
@@ -231,8 +240,15 @@ function world(extra = {}) {
     readError: null,
     writeError: null,
     rangeError: false,
+    failNextClient: false,
     ...extra,
   };
+}
+
+function writes(state) {
+  return state.calls.filter((query) =>
+    ["insert", "update", "delete"].includes(query.kind),
+  );
 }
 
 function modules(state, auth) {
@@ -242,6 +258,10 @@ function modules(state, auth) {
   const server = {
     createClient: async () => {
       serverClients += 1;
+      if (state.failNextClient) {
+        state.failNextClient = false;
+        throw Error("socket");
+      }
       if (auth.blockClient) throw Error("client opened");
       return memory({ ...state, role: "admin" });
     },
@@ -667,4 +687,429 @@ test("class screens do not render raw html or refresh the whole app", () => {
   );
   assert.equal(menu.includes('["클래스", "/admin/classes"]'), true);
   assert.equal(menu.includes('["콘텐츠", "/admin/contents"]'), true);
+});
+
+test("lost delete response reconciles by reading and does not delete again", async () => {
+  const state = world();
+  state.lose = true;
+  const api = modules(state, adminAuth);
+  const lost = await api.saveClass(form({ mode: "delete" }));
+  state.lose = false;
+  assert.equal(lost.state, "unknown");
+  assert.equal(
+    state.classes.some((row) => row.id === classId),
+    false,
+  );
+  assert.equal(
+    writes(state).filter((query) => query.kind === "delete").length,
+    1,
+  );
+  const before = state.calls.length;
+  const checked = await api.confirmClass(
+    classId,
+    form({ mode: "delete", version }),
+  );
+  assert.equal(checked.deleted, true);
+  assert.equal(checked.message, "클래스를 삭제했습니다.");
+  assert.equal(checked.message.includes("저장"), false);
+  assert.equal(
+    writes(state).filter((query) => query.kind === "delete").length,
+    1,
+  );
+  assert.equal(
+    state.calls.slice(before).every((query) => query.kind === "select"),
+    true,
+  );
+});
+
+test("delete confirmation separates missed, changed, and unread results", async () => {
+  const missed = world();
+  missed.failNextClient = true;
+  const missedApi = modules(missed, adminAuth);
+  assert.equal(
+    (await missedApi.saveClass(form({ mode: "delete" }))).state,
+    "unknown",
+  );
+  assert.equal(writes(missed).length, 0);
+  const unchanged = await missedApi.confirmClass(
+    classId,
+    form({ mode: "delete", version }),
+  );
+  assert.equal(unchanged.unchanged, true);
+  assert.equal(unchanged.message.includes("삭제는 반영되지 않았습니다"), true);
+  assert.equal(unchanged.message.includes("저장은 반영되지 않았습니다"), false);
+  assert.equal(writes(missed).length, 0);
+
+  const changed = world();
+  const changedApi = modules(changed, adminAuth);
+  changed.classes.find((row) => row.id === classId).updated_at = nextVersion;
+  const conflicted = await changedApi.confirmClass(
+    classId,
+    form({ mode: "delete", version }),
+  );
+  assert.equal(conflicted.state, "conflict");
+  assert.equal(writes(changed).length, 0);
+  assert.equal(
+    changed.classes.find((row) => row.id === classId).title,
+    "테스트 기존강의",
+  );
+
+  const unread = world();
+  unread.lose = true;
+  const unreadApi = modules(unread, adminAuth);
+  assert.equal(
+    (await unreadApi.saveClass(form({ mode: "delete" }))).state,
+    "unknown",
+  );
+  unread.lose = false;
+  unread.readError = { code: "XX000" };
+  const uncertain = await unreadApi.confirmClass(
+    classId,
+    form({ mode: "delete", version }),
+  );
+  assert.equal(uncertain.state, "unknown");
+  assert.equal(uncertain.deleted, undefined);
+  assert.equal(uncertain.unchanged, undefined);
+  assert.equal(
+    writes(unread).filter((query) => query.kind === "delete").length,
+    1,
+  );
+
+  const invalid = world();
+  const invalidApi = modules(invalid, adminAuth);
+  const duplicated = form({ mode: "delete" });
+  duplicated.append("mode", "update");
+  for (const request of [
+    duplicated,
+    form({ mode: "remove" }),
+    form({ mode: "delete", version: "어제" }),
+    form({ mode: "delete", id: otherId }),
+    form({ mode: "create", version: version }),
+  ])
+    assert.equal(
+      (await invalidApi.confirmClass(classId, request)).state,
+      "rejected",
+    );
+  assert.equal(invalid.calls.length, 0);
+  assert.equal(invalidApi.serverClients(), 0);
+});
+
+test("lost create and update responses still confirm without another write", async () => {
+  const createdId = "33333333-3333-4333-8333-333333333333";
+  const state = world();
+  state.lose = true;
+  const api = modules(state, adminAuth);
+  const created = await api.saveClass(
+    form({
+      id: createdId,
+      mode: "create",
+      version: "",
+      title: "테스트 응답유실",
+      video_url: "",
+    }),
+  );
+  state.lose = false;
+  assert.equal(created.state, "unknown");
+  const beforeCreate = writes(state).length;
+  const confirmed = await api.confirmClass(
+    createdId,
+    form({
+      id: createdId,
+      mode: "create",
+      version: "",
+      title: "테스트 응답유실",
+      video_url: "",
+    }),
+  );
+  assert.equal(confirmed.state, "saved");
+  assert.equal(confirmed.message, "클래스를 저장했습니다.");
+  assert.equal(writes(state).length, beforeCreate);
+
+  state.lose = true;
+  const updated = await api.saveClass(
+    form({ title: "테스트 수정유실", is_published: "true" }),
+  );
+  state.lose = false;
+  assert.equal(updated.state, "unknown");
+  const beforeUpdate = writes(state).length;
+  const recovered = await api.confirmClass(
+    classId,
+    form({ title: "테스트 수정유실", is_published: "true", version }),
+  );
+  assert.equal(recovered.state, "saved");
+  assert.equal(recovered.row.title, "테스트 수정유실");
+  assert.equal(writes(state).length, beforeUpdate);
+});
+
+async function openEditor(state, props = {}) {
+  const { installClassDom, textOf } = await import("./classes-dom.mjs");
+  const document = installClassDom();
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const React = await import("react");
+  const { createRoot } = await import("react-dom/client");
+  const { act } = React;
+  const api = modules(state, adminAuth);
+  const seen = [];
+  const confirm = api.confirmClass.bind(api);
+  api.confirmClass = async (id, data) => {
+    seen.push(Object.fromEntries(data.entries()));
+    return confirm(id, data);
+  };
+  const routes = [];
+  const editor = load("components/classes/editor.tsx", {
+    react: React,
+    "react/jsx-runtime": await import("react/jsx-runtime"),
+    "next/link": {
+      default: ({ children, href, onClick }) =>
+        React.createElement("a", { href, onClick }, children),
+    },
+    "next/navigation": {
+      useRouter: () => ({
+        replace: (url) => routes.push(url),
+        push: (url) => routes.push(url),
+      }),
+    },
+    "@/lib/admin/reservation-rules": { formatTime: (value) => value },
+    "@/components/ui/button": {
+      Button: ({ children, onClick, disabled, type = "button", href }) =>
+        href
+          ? React.createElement("a", { href }, children)
+          : React.createElement(
+              "button",
+              { type, disabled: Boolean(disabled), onClick },
+              children,
+            ),
+    },
+    "@/components/ui/modal": {
+      Modal: ({ title, children, footer }) =>
+        React.createElement(
+          "div",
+          { role: "dialog" },
+          React.createElement("h2", null, title),
+          children,
+          footer,
+        ),
+    },
+    "@/lib/classes/actions": api,
+    "@/lib/classes/submit": submit,
+    "@/lib/classes/rules": rules,
+  });
+  const initial =
+    props.initial === undefined
+      ? state.classes.find((row) => row.id === classId)
+      : props.initial;
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  let hidden = false;
+  const draw = () =>
+    React.createElement(
+      React.Activity,
+      { mode: hidden ? "hidden" : "visible" },
+      React.createElement(editor.ClassEditor, {
+        initial,
+        page: 1,
+        status: "",
+        initialMessage: "",
+      }),
+    );
+  await act(async () => {
+    root.render(draw());
+  });
+  const button = (label) => {
+    let found = null;
+    const tags = [];
+    const visit = (node) => {
+      if (node.tagName)
+        tags.push(`${node.tagName}:${textOf(node).trim().slice(0, 24)}`);
+      if (found) return;
+      if (node.tagName === "BUTTON" && textOf(node).trim() === label)
+        found = node;
+      for (const child of node.childNodes || []) visit(child);
+    };
+    const buttons = [];
+    const collect = (node) => {
+      if (node.tagName === "BUTTON")
+        buttons.push(
+          `${(node.childNodes || []).map((child) => child.nodeValue).join("/")}`,
+        );
+      for (const child of node.childNodes || []) collect(child);
+    };
+    collect(container);
+    visit(container);
+    assert.ok(found, `${label} :: ${buttons.join(" || ")}`);
+    return found;
+  };
+  const click = async (label) => {
+    await act(async () => {
+      const node = button(label);
+      node.dispatchEvent({ type: "click" });
+      if (node.type === "submit") {
+        let form = node.parentNode;
+        while (form && form.tagName !== "FORM") form = form.parentNode;
+        form?.dispatchEvent({ type: "submit" });
+      }
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+  };
+  const text = () => textOf(container);
+  const setHidden = async (value) => {
+    hidden = value;
+    await act(async () => {
+      root.render(draw());
+    });
+  };
+  const edit = async (node, value) => {
+    await act(async () => {
+      if (typeof value === "boolean") node.checked = value;
+      else node.value = value;
+      node.dispatchEvent({ type: "input" });
+      node.dispatchEvent({ type: "change" });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  };
+  const input = (name) => {
+    let found = null;
+    const visit = (node) => {
+      if (found) return;
+      if (node.name === name || node.getAttribute?.("name") === name)
+        found = node;
+      for (const child of node.childNodes || []) visit(child);
+    };
+    visit(container);
+    assert.ok(found, name);
+    return found;
+  };
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
+  return { click, text, routes, root, button, input, edit, setHidden, seen };
+}
+
+test("editor treats a lost delete as deleted without writing again", async () => {
+  const state = world();
+  const view = await openEditor(state);
+  await view.click("삭제 전 확인");
+  state.lose = true;
+  const before = writes(state).length;
+  await view.click("확인 후 처리");
+  state.lose = false;
+  assert.equal(
+    writes(state).filter((query) => query.kind === "delete").length,
+    1,
+  );
+  assert.equal(writes(state).length, before + 1);
+  assert.equal(
+    state.classes.some((row) => row.id === classId),
+    false,
+  );
+  assert.equal(view.text().includes("저장은 반영되지 않았습니다."), false);
+  assert.equal(view.text().includes("클래스를 저장했습니다."), false);
+  assert.equal(view.text().includes("삭제 결과를 확인하지 못했습니다."), true);
+  assert.equal(view.routes.length, 0);
+  const seen = state.calls.length;
+  const duringHide = writes(state).length;
+  await view.setHidden(true);
+  assert.equal(view.text().includes("클래스 삭제 확인"), false);
+  assert.equal(writes(state).length, duringHide);
+  await view.setHidden(false);
+  assert.equal(view.text().includes("삭제 결과 다시 확인"), true);
+  assert.equal(writes(state).length, duringHide);
+  await view.click("삭제 결과 다시 확인");
+  assert.equal(view.text().includes("이 클래스는 삭제되었습니다."), true);
+  assert.equal(view.text().includes("클래스를 저장했습니다."), false);
+  assert.equal(view.text().includes("저장은 반영되지 않았습니다."), false);
+  assert.equal(view.routes.at(-1), "/admin/classes?result=deleted");
+  assert.equal(
+    writes(state).filter((query) => query.kind === "delete").length,
+    1,
+  );
+  assert.equal(
+    state.calls.slice(seen).every((query) => query.kind === "select"),
+    true,
+  );
+  view.root.unmount();
+});
+
+test("editor keeps a missed or changed delete uncertain without another write", async () => {
+  const missed = world();
+  missed.failNextClient = true;
+  const missedView = await openEditor(missed);
+  await missedView.click("삭제 전 확인");
+  await missedView.click("확인 후 처리");
+  assert.equal(writes(missed).length, 0);
+  assert.equal(
+    missed.classes.some((row) => row.id === classId),
+    true,
+  );
+  await missedView.click("삭제 결과 다시 확인");
+  assert.equal(missedView.seen.at(-1).mode, "delete");
+  assert.equal(missedView.seen.at(-1).title, "테스트 기존강의");
+  assert.equal(missedView.text().includes("삭제는 반영되지 않았습니다"), true);
+  assert.equal(missedView.text().includes("저장은 반영되지 않았습니다"), false);
+  assert.equal(missedView.text().includes("클래스를 저장했습니다"), false);
+  assert.equal(writes(missed).length, 0);
+  missedView.root.unmount();
+
+  const unread = world();
+  unread.lose = true;
+  const unreadView = await openEditor(unread);
+  await unreadView.click("삭제 전 확인");
+  await unreadView.click("확인 후 처리");
+  unread.lose = false;
+  unread.readError = { code: "XX000" };
+  const beforeRead = writes(unread).length;
+  await unreadView.click("삭제 결과 다시 확인");
+  assert.equal(
+    unreadView.text().includes("삭제 결과를 확인하지 못했습니다."),
+    true,
+  );
+  assert.equal(unreadView.text().includes("삭제는 반영되지 않았습니다"), false);
+  assert.equal(
+    unreadView.text().includes("이 클래스는 삭제되었습니다."),
+    false,
+  );
+  assert.equal(writes(unread).length, beforeRead);
+  assert.equal(unreadView.text().includes("삭제 결과 다시 확인"), true);
+  unreadView.root.unmount();
+
+  const changed = world();
+  changed.failNextClient = true;
+  const changedView = await openEditor(changed);
+  await changedView.click("삭제 전 확인");
+  await changedView.click("확인 후 처리");
+  changed.classes.find((row) => row.id === classId).updated_at = nextVersion;
+  changed.classes.find((row) => row.id === classId).title = "테스트 서버제목";
+  await changedView.click("삭제 결과 다시 확인");
+  assert.equal(
+    changedView.text().includes("다른 작업으로 클래스가 변경됐습니다."),
+    true,
+  );
+  assert.equal(writes(changed).length, 0);
+  assert.equal(
+    changed.classes.find((row) => row.id === classId).title,
+    "테스트 서버제목",
+  );
+  changedView.root.unmount();
+});
+
+test("editor keeps save recovery and repeated edits on one screen", async () => {
+  const state = world();
+  const view = await openEditor(state);
+  await view.click("저장 전 확인");
+  await view.click("확인 후 처리");
+  assert.equal(view.text().includes("클래스를 저장했습니다."), true);
+  assert.equal(
+    writes(state).filter((query) => query.kind === "update").length,
+    1,
+  );
+  await view.click("저장 전 확인");
+  await view.click("확인 후 처리");
+  assert.equal(view.text().includes("클래스를 저장했습니다."), true);
+  assert.equal(
+    writes(state).filter((query) => query.kind === "update").length,
+    2,
+  );
+  assert.equal(view.routes.length, 0);
+  view.root.unmount();
 });

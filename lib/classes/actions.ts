@@ -21,6 +21,7 @@ export type Result = {
   errors?: Record<string, string>;
   missing?: boolean;
   deleted?: boolean;
+  unchanged?: boolean;
 };
 
 const denied: Result = {
@@ -81,6 +82,24 @@ function savedResult(row: ClassRecord, deleted = false): Result {
   };
 }
 
+function deletedResult(id: string): Result {
+  invalidate(id);
+  return {
+    state: "saved",
+    message: "클래스를 삭제했습니다.",
+    deleted: true,
+  };
+}
+
+function duplicateField(form: FormData) {
+  const seen = new Set<string>();
+  for (const key of form.keys()) {
+    if (seen.has(key)) return true;
+    seen.add(key);
+  }
+  return false;
+}
+
 export async function reloadClass(id: string): Promise<Result> {
   const admin = await requireAdmin();
   if (!admin) return denied;
@@ -121,8 +140,8 @@ export async function saveClass(form: FormData): Promise<Result> {
       message: "입력값을 확인해 주세요.",
       errors: parsed.errors,
     };
-  const db = await createClient();
   try {
+    const db = await createClient();
     const read = await readClass(db, id);
     if (read.error) return unknown;
     const current = read.data as ClassRecord | null;
@@ -198,13 +217,39 @@ export async function confirmClass(
 ): Promise<Result> {
   const admin = await requireAdmin();
   if (!admin) return denied;
-  if (!uuid(id) || !(form instanceof FormData))
+  if (!uuid(id) || !(form instanceof FormData) || duplicateField(form))
+    return { state: "rejected", message: "요청을 확인해 주세요." };
+  const formId = scalar(form, "id");
+  const mode = scalar(form, "mode");
+  const version = scalar(form, "version");
+  if (
+    formId !== id ||
+    (mode !== "create" && mode !== "update" && mode !== "delete") ||
+    (mode === "create" ? version !== "" : !version || !versionValid(version))
+  )
     return { state: "rejected", message: "요청을 확인해 주세요." };
   try {
     const db = await createClient();
     const read = await readClass(db, id);
     if (read.error) return unknown;
     const row = read.data as ClassRecord | null;
+    if (mode === "delete") {
+      if (!row) return deletedResult(id);
+      if (row.updated_at === version)
+        return {
+          state: "rejected",
+          message:
+            "삭제는 반영되지 않았습니다. 클래스는 그대로 있습니다. 다시 삭제할 수 있습니다.",
+          unchanged: true,
+          row,
+        };
+      return {
+        state: "conflict",
+        message:
+          "다른 작업으로 클래스가 변경됐습니다. 최신 내용을 확인해 주세요.",
+        row,
+      };
+    }
     if (!row) return missing;
     if (!classMatches(row, form))
       return {

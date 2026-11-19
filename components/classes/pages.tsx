@@ -5,6 +5,7 @@ import { requireAdmin } from "@/lib/admin/auth";
 import { AdminAccessDenied } from "@/components/admin/access-denied";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ClassAdminFilter } from "@/components/classes/admin-filter";
 import { ClassEditor } from "@/components/classes/editor";
 import {
   adminClassDetail,
@@ -70,26 +71,11 @@ export async function ClassListPage({
           <Button href={classNewUrl(filters.page, filters.status)}>
             클래스 등록
           </Button>
-          <form action="/admin/classes" className="flex flex-wrap gap-2">
-            <label className="text-label font-semibold">
-              공개 상태
-              <select
-                name="status"
-                defaultValue={filters.status}
-                className="mt-1 block min-h-11 w-full rounded-input border border-border bg-surface p-3"
-              >
-                <option value="">전체</option>
-                <option value="public">공개</option>
-                <option value="private">비공개</option>
-              </select>
-            </label>
-            <div className="flex items-end gap-2">
-              <Button type="submit">필터 적용</Button>
-              <Button href="/admin/classes" variant="secondary">
-                초기화
-              </Button>
-            </div>
-          </form>
+          <ClassAdminFilter
+            status={filters.status}
+            page={filters.page}
+            result={filters.result}
+          />
         </>
       )}
       <p className="text-caption text-muted">총 {result.count}건</p>
