@@ -147,6 +147,16 @@ function finish(query, rows, total) {
 }
 
 function execute(world, query) {
+  const outcome = completeQuery(world, query);
+  const hold = world.hold;
+  if (hold && !hold.done && hold.kinds.includes(query.kind)) {
+    hold.seen += 1;
+    return hold.promise.then(() => outcome);
+  }
+  return outcome;
+}
+
+function completeQuery(world, query) {
   if (query.table !== "classes")
     return { data: null, error: { code: "42P01" }, count: null };
   if (world.readError && query.kind === "select")
@@ -236,6 +246,7 @@ function world(extra = {}) {
       },
     ],
     lose: false,
+    hold: null,
     silentReject: false,
     readError: null,
     writeError: null,
@@ -249,6 +260,26 @@ function writes(state) {
   return state.calls.filter((query) =>
     ["insert", "update", "delete"].includes(query.kind),
   );
+}
+
+function pause(state, kinds) {
+  let resolve;
+  const promise = new Promise((done) => {
+    resolve = done;
+  });
+  const hold = {
+    kinds,
+    promise,
+    seen: 0,
+    done: false,
+    release() {
+      hold.done = true;
+      state.hold = null;
+      resolve();
+    },
+  };
+  state.hold = hold;
+  return hold;
 }
 
 function modules(state, auth) {
@@ -962,7 +993,10 @@ async function openEditor(state, props = {}) {
   const edit = async (node, value) => {
     await act(async () => {
       if (typeof value === "boolean") node.checked = value;
-      else node.value = value;
+      else {
+        if (node.tagName === "INPUT" && !node.type) node.type = "text";
+        node.value = value;
+      }
       node.dispatchEvent({ type: "input" });
       node.dispatchEvent({ type: "change" });
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -983,7 +1017,24 @@ async function openEditor(state, props = {}) {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
   });
-  return { click, text, routes, root, button, input, edit, setHidden, seen };
+  const settle = async (task) => {
+    await act(async () => {
+      task?.();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+  };
+  return {
+    click,
+    text,
+    routes,
+    root,
+    button,
+    input,
+    edit,
+    setHidden,
+    seen,
+    settle,
+  };
 }
 
 test("editor treats a lost delete as deleted without writing again", async () => {
@@ -1111,5 +1162,78 @@ test("editor keeps save recovery and repeated edits on one screen", async () => 
     2,
   );
   assert.equal(view.routes.length, 0);
+  view.root.unmount();
+});
+
+test("hidden editor keeps a late delete result and moves only after it returns", async () => {
+  const state = world();
+  const view = await openEditor(state);
+  await view.click("삭제 전 확인");
+  state.lose = true;
+  await view.click("확인 후 처리");
+  state.lose = false;
+  assert.equal(
+    writes(state).filter((query) => query.kind === "delete").length,
+    1,
+  );
+  assert.equal(view.routes.length, 0);
+  const held = pause(state, ["select"]);
+  const before = writes(state).length;
+  await view.click("삭제 결과 다시 확인");
+  assert.equal(held.seen, 1);
+  await view.setHidden(true);
+  assert.deepEqual(view.routes, []);
+  assert.equal(writes(state).length, before);
+  await view.settle(() => held.release());
+  assert.deepEqual(view.routes, []);
+  assert.equal(writes(state).length, before);
+  assert.equal(
+    writes(state).filter((query) => query.kind === "delete").length,
+    1,
+  );
+  await view.setHidden(false);
+  assert.deepEqual(view.routes, ["/admin/classes?result=deleted"]);
+  assert.equal(view.text().includes("이 클래스는 삭제되었습니다."), true);
+  assert.equal(writes(state).length, before);
+  await view.setHidden(true);
+  await view.setHidden(false);
+  assert.deepEqual(view.routes, ["/admin/classes?result=deleted"]);
+  assert.equal(writes(state).length, before);
+  view.root.unmount();
+});
+
+test("hidden editor keeps a late create result and moves only after it returns", async () => {
+  const state = world();
+  const view = await openEditor(state, { initial: null });
+  await view.edit(view.input("title"), "테스트 늦은신규");
+  await view.edit(view.input("description"), "늦은 응답 설명");
+  await view.edit(view.input("field"), "saju");
+  await view.click("저장 전 확인");
+  const held = pause(state, ["insert"]);
+  const before = writes(state).length;
+  await view.click("확인 후 처리");
+  assert.equal(held.seen, 1);
+  assert.equal(
+    writes(state).filter((query) => query.kind === "insert").length,
+    before + 1,
+  );
+  const saved = state.classes.find((row) => row.title === "테스트 늦은신규");
+  assert.ok(saved);
+  await view.setHidden(true);
+  assert.deepEqual(view.routes, []);
+  assert.equal(writes(state).length, before + 1);
+  await view.settle(() => held.release());
+  assert.deepEqual(view.routes, []);
+  assert.equal(writes(state).length, before + 1);
+  await view.setHidden(false);
+  assert.deepEqual(view.routes, [`/admin/classes/${saved.id}?result=saved`]);
+  assert.equal(writes(state).length, before + 1);
+  await view.setHidden(true);
+  await view.setHidden(false);
+  assert.deepEqual(view.routes, [`/admin/classes/${saved.id}?result=saved`]);
+  assert.equal(
+    writes(state).filter((query) => query.kind === "insert").length,
+    before + 1,
+  );
   view.root.unmount();
 });

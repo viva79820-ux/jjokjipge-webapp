@@ -67,15 +67,25 @@ export function ClassEditor({
   const baseline = useRef(initial);
   const leaving = useRef(false);
   const createdNavigate = useRef(false);
+  const visible = useRef(true);
+  const pendingHref = useRef<string | null>(null);
   const reloadRef = useRef<HTMLDivElement>(null);
   const statusRef = useRef<HTMLParagraphElement>(null);
   const prefix = useId();
   const router = useRouter();
+  const routerRef = useRef(router);
   const listHref = classListUrl(true, page, status);
   const control =
     "mt-1 w-full min-w-0 min-h-11 rounded-input border border-border bg-surface p-3 text-body";
   useLayoutEffect(() => {
+    visible.current = true;
+    const href = pendingHref.current;
+    if (href) {
+      pendingHref.current = null;
+      routerRef.current.replace(href);
+    }
     return () => {
+      visible.current = false;
       setModal(null);
       if (!createdNavigate.current) return;
       createdNavigate.current = false;
@@ -182,6 +192,16 @@ export function ClassEditor({
     attemptRef.current = null;
     setAttemptMode("");
   }
+  // Activity로 숨겨진 동안에는 결과만 남기고, 다시 보일 때 한 번만 이동한다.
+  function replaceWhenShown(href: string) {
+    routerRef.current = router;
+    if (!visible.current) {
+      pendingHref.current = href;
+      return;
+    }
+    pendingHref.current = null;
+    router.replace(href);
+  }
   function finish(result: Result) {
     setModal(null);
     setErrors(result.errors || {});
@@ -192,7 +212,7 @@ export function ClassEditor({
       setConflict(false);
       setUncertain(false);
       focusStatus();
-      router.replace(classListUrl(true, page, status, "deleted"));
+      replaceWhenShown(classListUrl(true, page, status, "deleted"));
       return;
     }
     if (result.state === "saved" && result.row) {
@@ -204,7 +224,7 @@ export function ClassEditor({
         setConflict(false);
         setUncertain(false);
         focusStatus();
-        router.replace(classEditUrl(result.row.id, page, status, "saved"));
+        replaceWhenShown(classEditUrl(result.row.id, page, status, "saved"));
         return;
       }
       applyRow(result.row);

@@ -77,6 +77,8 @@ let listDelay = 0;
 let writeDelay = 0;
 let writes = 0;
 let classGets = 0;
+let writeGate = null;
+let readGate = null;
 let seq = 0;
 const stamp = () =>
   `2026-11-18T04:00:00.${String(++seq).padStart(6, "0")}+00:00`;
@@ -132,6 +134,33 @@ function sortRows(rows, order) {
 }
 function visible(row, role) {
   return role === "admin" || row.is_published === true;
+}
+function armGate(kind) {
+  let resolve;
+  const promise = new Promise((done) => {
+    resolve = done;
+  });
+  const gate = {
+    id: "",
+    count: 0,
+    promise,
+    release() {
+      if (kind === "write") writeGate = null;
+      else readGate = null;
+      resolve();
+    },
+  };
+  if (kind === "write") writeGate = gate;
+  else readGate = gate;
+  return gate;
+}
+async function deliver(res, status, body, count) {
+  if (writeGate) {
+    const gate = writeGate;
+    gate.count += 1;
+    await gate.promise;
+  }
+  send(res, status, body, count);
 }
 function send(res, status, body, count, offset = 0) {
   res.statusCode = status;
@@ -246,7 +275,7 @@ async function handle(req, res) {
         req.socket.destroy();
         return;
       }
-      send(res, 201, [created], 1);
+      await deliver(res, 201, [created], 1);
       return;
     }
     const selected = classes.filter((row) => matches(row, url.searchParams));
@@ -261,7 +290,7 @@ async function handle(req, res) {
       req.socket.destroy();
       return;
     }
-    send(res, 200, selected, selected.length);
+    await deliver(res, 200, selected, selected.length);
     return;
   }
   if (req.method === "GET" || req.method === "HEAD") classGets += 1;
@@ -277,6 +306,11 @@ async function handle(req, res) {
     res.setHeader("Content-Range", `*/${count}`);
     res.end();
     return;
+  }
+  if (readGate && readGate.id && url.search.includes(readGate.id)) {
+    const gate = readGate;
+    gate.count += 1;
+    await gate.promise;
   }
   send(res, 200, selected, count, offset);
 }
@@ -324,15 +358,24 @@ try {
   };
   page = await browser();
   const documentRequests = [];
+  const networkRequests = new Map();
+  let postCount = 0;
   await page.call("Network.enable");
   for (const socket of sockets)
     socket.addEventListener("message", (event) => {
       const message = JSON.parse(event.data);
+      if (message.method === "Network.requestWillBeSent") {
+        networkRequests.set(message.params.requestId, message.params.request);
+        if (message.params.type === "Document")
+          documentRequests.push(message.params.request.url);
+      }
       if (
-        message.method === "Network.requestWillBeSent" &&
-        message.params?.type === "Document"
-      )
-        documentRequests.push(message.params.request.url);
+        message.method === "Network.loadingFinished" ||
+        message.method === "Network.loadingFailed"
+      ) {
+        const request = networkRequests.get(message.params.requestId);
+        if (request?.method === "POST") postCount += 1;
+      }
     });
   const text = (value) =>
     until(
@@ -976,6 +1019,131 @@ try {
     false,
   );
   assert.equal(writes, beforeDraft);
+  const lateDelete = await createClass("테스트 늦은삭제");
+  loseResponse = true;
+  const beforeLateDelete = writes;
+  await page.button("삭제 전 확인");
+  await confirm();
+  await text("삭제 결과를 확인하지 못했습니다. 다시 확인해 주세요.");
+  assert.equal(writes, beforeLateDelete + 1);
+  assert.equal(
+    classes.some((row) => row.id === lateDelete.id),
+    false,
+  );
+  const readGate = armGate("read");
+  readGate.id = lateDelete.id;
+  const beforeLateRead = writes;
+  await page.button("삭제 결과 다시 확인");
+  await until(() => readGate.count === 1, "held delete read");
+  await clickLink("사이트 보기");
+  await until(
+    () => page.evaluate("location.pathname === '/'"),
+    "left during delete read",
+  );
+  const postsAtDelete = postCount;
+  readGate.release();
+  await until(() => postCount > postsAtDelete, "delete action finished");
+  const deleteWatch = Date.now();
+  while (Date.now() - deleteWatch < 1000) {
+    assert.equal(await page.evaluate("location.pathname"), "/");
+    await delay(100);
+  }
+  assert.equal(writes, beforeLateRead);
+  await absent("클래스를 삭제했습니다.");
+  await page.evaluate("history.back()");
+  await until(
+    () =>
+      page.evaluate(
+        "location.pathname === '/admin/classes' || document.body.innerText.includes('강의를 찾을 수 없습니다.') || document.body.innerText.includes('이 클래스는 삭제되었습니다.')",
+      ),
+    "delete page restored",
+  );
+  assert.equal(writes, beforeLateRead);
+  if (
+    await page.evaluate(
+      "location.pathname === '/admin/classes' && location.search.includes('result=deleted')",
+    )
+  ) {
+    await text("클래스를 삭제했습니다.");
+    const deletedHref = await page.evaluate(
+      "location.pathname + location.search",
+    );
+    await clickLink("사이트 보기");
+    await until(
+      () => page.evaluate("location.pathname === '/'"),
+      "left deleted list",
+    );
+    await page.evaluate("history.back()");
+    await until(
+      () =>
+        page.evaluate(
+          `location.pathname + location.search === ${JSON.stringify(deletedHref)}`,
+        ),
+      "delete navigation stayed consumed",
+    );
+    assert.equal(writes, beforeLateRead);
+  }
+  if (!(await page.evaluate("location.pathname === '/admin/classes'"))) {
+    await clickLink("클래스");
+    await until(
+      () => page.evaluate("location.pathname === '/admin/classes'"),
+      "class list after late delete",
+    );
+  }
+  await clickLink("클래스 등록");
+  await text("클래스 등록");
+  await page.fill("title", "테스트 늦은신규");
+  await page.fill("description", "늦은 응답 설명");
+  await choose("field", "saju");
+  const writeGate = armGate("write");
+  const beforeLateCreate = writes;
+  await page.button("저장 전 확인");
+  await page.button("확인 후 처리");
+  await until(() => writeGate.count === 1, "held create");
+  assert.equal(writes, beforeLateCreate + 1);
+  const createdLate = classes.find((row) => row.title === "테스트 늦은신규");
+  assert.ok(createdLate);
+  await clickLink("사이트 보기");
+  await until(
+    () => page.evaluate("location.pathname === '/'"),
+    "left during create",
+  );
+  const postsAtCreate = postCount;
+  writeGate.release();
+  await until(() => postCount > postsAtCreate, "create action finished");
+  const createWatch = Date.now();
+  while (Date.now() - createWatch < 1000) {
+    assert.equal(await page.evaluate("location.pathname"), "/");
+    await delay(100);
+  }
+  assert.equal(writes, beforeLateCreate + 1);
+  await page.evaluate("history.back()");
+  await until(
+    () =>
+      page.evaluate(
+        `location.pathname === ${JSON.stringify(`/admin/classes/${createdLate.id}`)} && location.search.includes('result=saved')`,
+      ),
+    "restored create navigation",
+  );
+  await text("클래스를 저장했습니다.");
+  assert.equal(writes, beforeLateCreate + 1);
+  const createdHref = await page.evaluate(
+    "location.pathname + location.search",
+  );
+  await clickLink("사이트 보기");
+  await until(
+    () => page.evaluate("location.pathname === '/'"),
+    "left saved editor",
+  );
+  await page.evaluate("history.back()");
+  await until(
+    () =>
+      page.evaluate(
+        `location.pathname + location.search === ${JSON.stringify(createdHref)}`,
+      ),
+    "create navigation stayed consumed",
+  );
+  assert.equal(writes, beforeLateCreate + 1);
   const widths = [
     [360, false, 16],
     [390, false, 16],
