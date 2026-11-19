@@ -203,6 +203,7 @@ export async function browser(visible = false) {
     return {
       ...page,
       openTab,
+      debugPort: port,
       close: async () => {
         try {
           await page.call("Browser.close");
