@@ -400,3 +400,44 @@ Storage 검사는 SELECT·INSERT·UPDATE 메타데이터 SQL·정책·버킷 설
 3. 사전 검사와 롤백 확인이 모두 성공한 뒤에만 마이그레이션을 반영한다. 검사는 실제 계정·profile을 만들거나 수정하지 않는다. 일반 회원 profile이 없으면 프로필 없는 비관리자 인증 역할로 DB RLS만 검사하며 실제 일반 회원 로그인 검증과 구분한다.
 
 `node --test tests/classes-contents-schema.test.mjs`는 마이그레이션·사전 검사 본문 동기화와 안전 조건을 정적으로 확인한다. `node tests/classes-contents-schema.model.mjs`는 준비된 PGlite에서 CHECK·RLS·GRANT·성공 예외·전체 롤백을 실제 SQL로 실행한다. 격리 검사는 실제 Supabase Data API나 실제 로그인 세션을 검증하지 않는다.
+
+## 11. 타로샵 상품
+
+마이그레이션은 `supabase/migrations/20261119010000_shop_products_schema.sql`이다. 옵션 없는 단일 실물 상품과 관리자의 수동 공개·품절 설정만 준비한다. 실제 상품·사진·운영용 샘플은 넣지 않으며 주문·장바구니·배송비·결제·재고 수량·자동 차감·SKU는 다음 단계다.
+
+### public.products
+
+| 컬럼                   | 타입·기본값                | 제약·의미                                                                    |
+| ---------------------- | -------------------------- | ---------------------------------------------------------------------------- |
+| id                     | uuid PK, gen_random_uuid() | 필수                                                                         |
+| name                   | text                       | 필수, 공백만 불가, 최대 100자                                                |
+| description            | text                       | 필수, 공백만 불가, 최대 5000자                                               |
+| price                  | numeric                    | 필수, 소수부 없는 원화 정수, 1~2,147,483,647원                               |
+| image_path             | text null                  | 대표 사진 1장, `products/<소문자 UUID>.<jpg 또는 jpeg 또는 png 또는 webp>`   |
+| image_alt              | text null                  | 선택 대체 설명, 값이 있으면 공백만 불가·최대 200자. image_path가 있으면 필수 |
+| is_published           | boolean, false             | 필수, 고객 공개 여부                                                         |
+| is_sold_out            | boolean, false             | 필수, 관리자가 직접 정하는 품절 여부                                         |
+| sort_order             | integer, 0                 | 필수, 0 이상의 정수                                                          |
+| created_at, updated_at | timestamptz, now()         | 필수, 기존 `private.set_updated_at()` 트리거로 수정 시 갱신                  |
+
+- PostgreSQL의 `integer` 열은 `1.5` 같은 numeric 입력을 반올림해 받을 수 있다. 가격은 `numeric`과 `price = trunc(price)` CHECK를 함께 사용해 소수 입력을 실제로 거부하고, 기존 32비트 정수 범위와 같은 상한을 둔다.
+- 이미지 DB 값은 `public-images` 버킷 안의 상대 경로만 저장한다. 빈 문자열·전체 URL·버킷 접두사·다른 폴더·상위 경로·대문자 UUID·다른 확장자는 거부한다. 실제 파일 존재·MIME·크기는 후속 관리자 업로드 기능에서 Storage API로 다시 검증한다.
+- 기존 `public-images` 버킷의 관리자 정책은 특정 폴더가 아니라 버킷 전체에 적용되므로 `products/` 업로드도 포함한다. 이번 마이그레이션은 버킷·Storage 정책·객체를 변경하지 않는다.
+
+### 공개·품절·정렬·권한
+
+- 공개와 품절은 독립 값이다. 비공개 상품은 고객에게 보이지 않고, 공개 상품은 판매 가능과 품절 모두 목록·상세에 표시할 수 있다. 품절 전환이 공개 값을 자동으로 바꾸지 않는다.
+- 품절 상품 주문은 후속 주문 생성 서버 코드가 상품을 다시 조회해 차단해야 한다. DB 표시값만 믿거나 브라우저가 보낸 가격·품절 값을 사용하지 않는다. 동시 주문·결제·배송 정책은 주문 설계에서 별도로 정한다.
+- 목록 정렬은 `sort_order ASC, created_at DESC, id DESC`다. 공개 여부와 정렬 열을 묶은 인덱스 하나를 둔다.
+- RLS를 켠다. `anon`과 일반 `authenticated`는 공개 상품만 SELECT할 수 있다. 관리자는 본인 인증 세션과 기존 `private.is_admin()` 판정으로 비공개 포함 SELECT와 INSERT·UPDATE·DELETE가 가능하며 UPDATE에는 `USING`과 `WITH CHECK`를 모두 둔다.
+- 테이블 권한은 PUBLIC·`anon`·`authenticated`·`service_role`의 기본 권한을 모두 회수한다. `anon`에는 SELECT만, `authenticated`에는 SELECT·INSERT·UPDATE·DELETE만 부여하고 실제 쓰기는 RLS가 관리자에게만 허용한다. TRUNCATE·REFERENCES·TRIGGER 권한은 부여하지 않는다. 새 비밀 키·SECURITY DEFINER 함수·공개 RPC는 만들지 않는다.
+
+### SQL 사전 검사와 롤백 확인
+
+1. 승인본 코드 검토 뒤 운영 DB의 다른 작업이 없는 새 SQL Editor에서 `supabase/tests/shop_products_preflight.sql` 전체를 실행한다. 마지막 SQLSTATE P0001의 `SHOP_PRODUCTS_PREFLIGHT_OK`만 성공이며 DETAIL의 baseline JSON을 별도로 보관한다.
+2. `supabase/tests/shop_products_rollback_check.sql`을 복사한 실행본에서만 `baseline jsonb := null`을 DETAIL 원본으로 바꾸고 전체를 별도로 실행한다. `SHOP_PRODUCTS_ROLLBACK_OK`를 확인한다. 저장소 원본은 null로 유지하고 실행 결과를 커밋하지 않는다.
+3. 두 검사가 성공한 뒤에만 마이그레이션을 반영한다. 검사는 실제 계정·profile·기존 업무 행·Storage 객체를 만들거나 수정하지 않는다. 일반 회원 profile이 없으면 프로필 없는 비관리자 인증 역할로 DB RLS만 검사하며 실제 일반 회원 로그인 검증과 구분한다.
+
+baseline은 기존 10개 업무 테이블(profiles, stores, counselors, consult_products, reservations, faqs, inquiries, notices, classes, contents)의 행 개수·해시와 카탈로그, 인증 사용자·Storage의 개수·해시, 기존 정책·함수·기본 권한 상태만 담는다. 실제 행 내용과 인증 정보는 출력하지 않는다.
+
+`node --test tests/shop-products-schema.test.mjs`는 기존 마이그레이션 보존, 상품 마이그레이션·사전 검사 본문 동기화와 null baseline을 정적으로 확인한다. `node tests/shop-products-schema.model.mjs`는 준비된 PGlite에서 CHECK·RLS·GRANT·관리자 CRUD·원자적 실패·성공 예외·전체 롤백을 실제 SQL로 실행한다. 격리 검사는 실제 Supabase Data API·Storage API·실제 로그인·파일 존재·MIME·크기·후속 주문 차단을 검증하지 않는다.
