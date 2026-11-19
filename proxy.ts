@@ -27,6 +27,18 @@ export async function proxy(request: NextRequest) {
     },
   });
   await supabase.auth.getClaims();
+  const path = request.nextUrl.pathname;
+  if (
+    path === "/mypage" ||
+    path.startsWith("/mypage/") ||
+    path === "/login" ||
+    path === "/signup" ||
+    path === "/forgot-password" ||
+    path === "/auth" ||
+    path.startsWith("/auth/")
+  ) {
+    response.headers.set("Cache-Control", "private, no-store");
+  }
   return response;
 }
 export const config = {

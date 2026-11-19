@@ -1,5 +1,6 @@
 import { Suspense } from "react";
-import { BottomTabsGate, SiteHeaderGate } from "@/components/site-chrome";
+import { SiteHeaderGate } from "@/components/site-chrome";
+import { SiteBottomNav } from "@/components/member-auth/site-bottom-nav";
 import { appMainClass, appShellClass } from "@/lib/app-frame";
 
 export default function SiteLayout({
@@ -14,7 +15,7 @@ export default function SiteLayout({
       </Suspense>
       <main className={appMainClass}>{children}</main>
       <Suspense fallback={null}>
-        <BottomTabsGate />
+        <SiteBottomNav />
       </Suspense>
     </div>
   );
