@@ -42,6 +42,7 @@ let chrome;
 let ws;
 const env = { ...process.env };
 delete env.VERCEL;
+delete env.VERCEL_ENV;
 delete env.VERCEL_URL;
 delete env.VERCEL_BRANCH_URL;
 delete env.VERCEL_PROJECT_PRODUCTION_URL;

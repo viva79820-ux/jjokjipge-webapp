@@ -1,11 +1,15 @@
+import {
+  httpsHost,
+  legacyProductionHost,
+  productionOrigin,
+} from "@/lib/site-origin";
+
 const localOrigins = [
   "http://localhost:3001",
   "http://127.0.0.1:3001",
   "http://localhost:4333",
   "http://127.0.0.1:4333",
 ] as const;
-
-const serviceOrigins = ["https://jjokjipge-webapp.vercel.app"] as const;
 
 const allowedNext = new Set([
   "/login",
@@ -14,27 +18,16 @@ const allowedNext = new Set([
   "/auth/verify",
 ]);
 
-function httpsHost(value: string | undefined) {
-  if (!value || !/^[a-z0-9.-]+$/i.test(value)) return null;
-  if (
-    value.includes("..") ||
-    value.startsWith("-") ||
-    value.endsWith("-") ||
-    value.startsWith(".") ||
-    value.endsWith(".")
-  ) {
-    return null;
-  }
-  return `https://${value}`;
-}
-
 export function trustedOrigins(env: NodeJS.ProcessEnv = process.env) {
-  const origins = [
-    ...serviceOrigins,
-    httpsHost(env.VERCEL_URL),
-    httpsHost(env.VERCEL_PROJECT_PRODUCTION_URL),
-    httpsHost(env.VERCEL_BRANCH_URL),
-  ].filter((origin): origin is string => Boolean(origin));
+  const origins = [productionOrigin];
+  if (env.VERCEL_ENV !== "production") {
+    for (const origin of [
+      httpsHost(env.VERCEL_URL),
+      httpsHost(env.VERCEL_BRANCH_URL),
+    ]) {
+      if (origin) origins.push(origin);
+    }
+  }
   if (!env.VERCEL) origins.push(...localOrigins);
   return origins;
 }
@@ -60,12 +53,12 @@ export function resolveTrustedOrigin(
       ? "http"
       : "https");
   const preferHost =
-    hostProto === "https" &&
-    serviceOrigins.some((origin) => origin === `${hostProto}://${host}`);
+    hostProto === "https" && `${hostProto}://${host}` === productionOrigin;
   const candidates = (
     preferHost ? [host, forwardedHost] : [forwardedHost, host]
   ).filter((value): value is string => Boolean(value));
   for (const candidate of candidates) {
+    if (candidate === legacyProductionHost) continue;
     const proto =
       forwardedProto ??
       (candidate.startsWith("localhost") || candidate.startsWith("127.0.0.1")

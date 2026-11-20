@@ -1,3 +1,4 @@
+import { publicAbsoluteOrigin } from "@/lib/site-origin";
 import { siteConfig } from "@/lib/site-config";
 import type { Metadata } from "next";
 import localFont from "next/font/local";
@@ -9,7 +10,9 @@ const pretendard = localFont({
   display: "swap",
   variable: "--font-pretendard",
 });
+const absoluteOrigin = publicAbsoluteOrigin();
 export const metadata: Metadata = {
+  ...(absoluteOrigin ? { metadataBase: new URL(absoluteOrigin) } : {}),
   title: siteConfig.name,
   description: `${siteConfig.name} 상담 안내`,
 };

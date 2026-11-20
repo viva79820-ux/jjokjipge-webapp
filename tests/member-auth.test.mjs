@@ -211,6 +211,7 @@ function harness(options = {}) {
   const restored = [];
   const env = {
     VERCEL: undefined,
+    VERCEL_ENV: undefined,
     VERCEL_URL: undefined,
     VERCEL_PROJECT_PRODUCTION_URL: undefined,
     VERCEL_BRANCH_URL: undefined,
@@ -387,7 +388,7 @@ test("signup and recovery prefer the production host over a trusted Vercel alias
     VERCEL_URL: "member-preview.vercel.app",
     VERCEL_BRANCH_URL: "branch-preview.vercel.app",
   };
-  headerState.host = "jjokjipge-webapp.vercel.app";
+  headerState.host = "angelsaju.com";
   headerState.forwardedHost = "member-preview.vercel.app";
   headerState.forwardedProto = "https";
   const auth = harness({ env: vercelEnv });
@@ -397,7 +398,7 @@ test("signup and recovery prefer the production host over a trusted Vercel alias
     assert.equal(
       auth.calls.find((call) => call[0] === "signUp")[1].options
         .emailRedirectTo,
-      "https://jjokjipge-webapp.vercel.app/auth/callback?next=%2Fmypage",
+      "https://angelsaju.com/auth/callback?next=%2Fmypage",
     );
 
     const recovery = await settle(
@@ -409,7 +410,7 @@ test("signup and recovery prefer the production host over a trusted Vercel alias
     assert.equal(recovery.state.status, "accepted");
     assert.equal(
       auth.calls.find((call) => call[0] === "reset")[2].redirectTo,
-      "https://jjokjipge-webapp.vercel.app/auth/callback?next=%2Fauth%2Fupdate-password",
+      "https://angelsaju.com/auth/callback?next=%2Fauth%2Fupdate-password",
     );
   } finally {
     auth.restore();
@@ -468,6 +469,71 @@ test("signup and recovery prefer the production host over a trusted Vercel alias
   } finally {
     rejected.restore();
     Object.assign(headerState, savedHeaders);
+  }
+});
+
+test("production signup and recovery stay on the apex host", async () => {
+  const savedHeaders = { ...headerState };
+  const productionEnv = {
+    VERCEL: "1",
+    VERCEL_ENV: "production",
+    VERCEL_URL: "jjokjipge-webapp-deploy.vercel.app",
+    VERCEL_PROJECT_PRODUCTION_URL: "www.angelsaju.com",
+    VERCEL_BRANCH_URL: "jjokjipge-webapp-git-main.vercel.app",
+  };
+  headerState.host = "angelsaju.com";
+  headerState.forwardedHost = "jjokjipge-webapp-deploy.vercel.app";
+  headerState.forwardedProto = "https";
+  const auth = harness({ env: productionEnv });
+  try {
+    const signup = await settle(auth.signUp({}, signupForm()));
+    assert.equal(signup.redirect, "/auth/verify");
+    assert.equal(
+      auth.calls.find((call) => call[0] === "signUp")[1].options
+        .emailRedirectTo,
+      "https://angelsaju.com/auth/callback?next=%2Fmypage",
+    );
+    const recovery = await settle(
+      auth.requestPasswordReset(
+        {},
+        form([["email", "member@example.invalid"]]),
+      ),
+    );
+    assert.equal(recovery.state.status, "accepted");
+    assert.equal(
+      auth.calls.find((call) => call[0] === "reset")[2].redirectTo,
+      "https://angelsaju.com/auth/callback?next=%2Fauth%2Fupdate-password",
+    );
+  } finally {
+    auth.restore();
+    Object.assign(headerState, savedHeaders);
+  }
+
+  for (const host of ["www.angelsaju.com", "jjokjipge-webapp.vercel.app"]) {
+    headerState.host = host;
+    headerState.forwardedHost = "jjokjipge-webapp-deploy.vercel.app";
+    headerState.forwardedProto = "https";
+    const refused = harness({ env: productionEnv });
+    try {
+      const signup = await settle(refused.signUp({}, signupForm()));
+      assert.match(signup.state.message, /서비스 주소 설정/);
+      const recovery = await settle(
+        refused.requestPasswordReset(
+          {},
+          form([["email", "member@example.invalid"]]),
+        ),
+      );
+      assert.match(recovery.state.message, /서비스 주소 설정/);
+      assert.equal(
+        refused.calls.some(
+          (call) => call[0] === "signUp" || call[0] === "reset",
+        ),
+        false,
+      );
+    } finally {
+      refused.restore();
+      Object.assign(headerState, savedHeaders);
+    }
   }
 });
 
@@ -649,23 +715,39 @@ test("password update and reset do not claim success when the provider refuses",
 test("callback and redirect allow only trusted origins and internal paths", async () => {
   const redirect = load("../lib/member-auth/redirect.ts", {});
   const callback = load("../lib/member-auth/callback.ts", {});
-  const productionOrigin = "https://jjokjipge-webapp.vercel.app";
+  const site = load("../lib/site-origin.ts", {});
+  const productionOrigin = "https://angelsaju.com";
   const saved = {
     VERCEL: process.env.VERCEL,
+    VERCEL_ENV: process.env.VERCEL_ENV,
     VERCEL_URL: process.env.VERCEL_URL,
     VERCEL_BRANCH_URL: process.env.VERCEL_BRANCH_URL,
     VERCEL_PROJECT_PRODUCTION_URL: process.env.VERCEL_PROJECT_PRODUCTION_URL,
   };
   delete process.env.VERCEL;
+  delete process.env.VERCEL_ENV;
   delete process.env.VERCEL_URL;
   delete process.env.VERCEL_BRANCH_URL;
   delete process.env.VERCEL_PROJECT_PRODUCTION_URL;
   try {
+    assert.equal(site.productionOrigin, productionOrigin);
+    assert.equal(
+      redirect.resolveTrustedOrigin({
+        get: (name) => (name === "host" ? "angelsaju.com" : null),
+      }),
+      productionOrigin,
+    );
     assert.equal(
       redirect.resolveTrustedOrigin({
         get: (name) => (name === "host" ? "jjokjipge-webapp.vercel.app" : null),
       }),
-      productionOrigin,
+      null,
+    );
+    assert.equal(
+      redirect.resolveTrustedOrigin({
+        get: (name) => (name === "host" ? "www.angelsaju.com" : null),
+      }),
+      null,
     );
     assert.equal(
       redirect.resolveTrustedOrigin({
@@ -701,7 +783,18 @@ test("callback and redirect allow only trusted origins and internal paths", asyn
     process.env.VERCEL_BRANCH_URL = "branch-preview.vercel.app";
     assert.equal(
       redirect.resolveTrustedOrigin({
-        get: (name) => (name === "host" ? "jjokjipge-webapp.vercel.app" : null),
+        get: (name) => (name === "host" ? "angelsaju.com" : null),
+      }),
+      productionOrigin,
+    );
+    assert.equal(
+      redirect.resolveTrustedOrigin({
+        get(name) {
+          if (name === "x-forwarded-host") return "member-preview.vercel.app";
+          if (name === "x-forwarded-proto") return "https";
+          if (name === "host") return "angelsaju.com";
+          return null;
+        },
       }),
       productionOrigin,
     );
@@ -754,6 +847,146 @@ test("callback and redirect allow only trusted origins and internal paths", asyn
       }),
       null,
     );
+
+    process.env.VERCEL_ENV = "production";
+    process.env.VERCEL_URL = "jjokjipge-webapp-deploy.vercel.app";
+    process.env.VERCEL_PROJECT_PRODUCTION_URL = "www.angelsaju.com";
+    assert.equal(
+      redirect.resolveTrustedOrigin({
+        get(name) {
+          if (name === "x-forwarded-host")
+            return "jjokjipge-webapp-deploy.vercel.app";
+          if (name === "x-forwarded-proto") return "https";
+          if (name === "host") return "angelsaju.com";
+          return null;
+        },
+      }),
+      productionOrigin,
+    );
+    assert.equal(
+      redirect.resolveTrustedOrigin({
+        get(name) {
+          if (name === "x-forwarded-host") return "www.angelsaju.com";
+          if (name === "x-forwarded-proto") return "https";
+          if (name === "host") return "jjokjipge-webapp.vercel.app";
+          return null;
+        },
+      }),
+      null,
+    );
+    assert.equal(
+      site.publicAbsoluteOrigin({
+        VERCEL_ENV: "production",
+        VERCEL_URL: "jjokjipge-webapp-deploy.vercel.app",
+      }),
+      productionOrigin,
+    );
+    assert.equal(
+      site.publicAbsoluteOrigin({
+        VERCEL: "1",
+        VERCEL_ENV: "preview",
+        VERCEL_URL: "member-preview.vercel.app",
+        VERCEL_BRANCH_URL: "branch-preview.vercel.app",
+      }),
+      "https://branch-preview.vercel.app",
+    );
+    assert.equal(
+      site.publicAbsoluteOrigin({
+        VERCEL: "1",
+        VERCEL_ENV: "preview",
+        VERCEL_URL: "member-preview.vercel.app",
+      }),
+      "https://member-preview.vercel.app",
+    );
+    assert.equal(site.publicAbsoluteOrigin({}), null);
+    const legacyHost = "jjokjipge-webapp.vercel.app";
+    assert.equal(
+      site.legacyProductionRedirect(
+        legacyHost,
+        new URL(
+          `https://${legacyHost}/auth/callback?next=%2Fauth%2Fupdate-password`,
+        ),
+      ).href,
+      "https://angelsaju.com/auth/callback?next=%2Fauth%2Fupdate-password",
+    );
+    assert.equal(
+      site.legacyProductionRedirect(
+        legacyHost,
+        new URL(`https://${legacyHost}/consult?field=tarot`),
+      ).href,
+      "https://angelsaju.com/consult?field=tarot",
+    );
+    assert.equal(
+      site.legacyProductionRedirect(
+        "www.angelsaju.com",
+        new URL("https://www.angelsaju.com/login?from=home"),
+      ),
+      null,
+    );
+    assert.equal(
+      site.legacyProductionRedirect(
+        "angelsaju.com",
+        new URL("https://angelsaju.com/login"),
+      ),
+      null,
+    );
+    assert.equal(
+      site.legacyProductionRedirect(
+        "branch-preview.vercel.app",
+        new URL("https://branch-preview.vercel.app/login?x=1"),
+      ),
+      null,
+    );
+    assert.equal(
+      site.legacyProductionRedirect(
+        "jjokjipge-webapp.vercel.app.evil.example",
+        new URL("https://jjokjipge-webapp.vercel.app.evil.example/login"),
+      ),
+      null,
+    );
+    assert.equal(
+      site.legacyProductionRedirect(
+        "jjokjipge-webapp.vercel.app, evil.example",
+        new URL(`https://${legacyHost}/login`),
+      ),
+      null,
+    );
+    assert.equal(
+      site.legacyProductionRedirect(
+        " jjokjipge-webapp.vercel.app",
+        new URL(`https://${legacyHost}/login`),
+      ),
+      null,
+    );
+    const projectConfig = JSON.parse(
+      readFileSync(new URL("../vercel.json", import.meta.url), "utf8"),
+    );
+    assert.equal(projectConfig.redirects.length, 1);
+    assert.deepEqual(projectConfig.redirects[0].has, [
+      { type: "host", value: site.legacyProductionHost },
+    ]);
+    assert.equal(
+      projectConfig.redirects[0].destination,
+      `${productionOrigin}/$1`,
+    );
+    assert.equal(projectConfig.redirects[0].permanent, true);
+    assert.equal(
+      JSON.stringify(projectConfig.redirects).includes("www.angelsaju.com"),
+      false,
+    );
+    const layout = readFileSync(
+      new URL("../app/layout.tsx", import.meta.url),
+      "utf8",
+    );
+    const proxy = readFileSync(new URL("../proxy.ts", import.meta.url), "utf8");
+    assert.equal(layout.includes("publicAbsoluteOrigin"), true);
+    assert.equal(layout.includes("jjokjipge-webapp.vercel.app"), false);
+    assert.equal(
+      proxy.indexOf('request.headers.get("host")') <
+        proxy.indexOf("createServerClient("),
+      true,
+    );
+
     assert.equal(
       redirect.callbackUrl(productionOrigin, "/mypage"),
       `${productionOrigin}/auth/callback?next=%2Fmypage`,

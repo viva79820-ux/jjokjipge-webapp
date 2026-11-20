@@ -1,6 +1,12 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { legacyProductionRedirect } from "@/lib/site-origin";
 export async function proxy(request: NextRequest) {
+  const legacyTarget = legacyProductionRedirect(
+    request.headers.get("host"),
+    request.nextUrl,
+  );
+  if (legacyTarget) return NextResponse.redirect(legacyTarget, 308);
   // Server layouts cannot read the URL directly. Always replace untrusted input.
   request.headers.set("x-admin-path", request.nextUrl.pathname);
   let response = NextResponse.next({ request });
