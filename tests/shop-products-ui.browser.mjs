@@ -710,6 +710,7 @@ try {
   );
   await text("상품을 저장했습니다.");
   assert.equal(writes, beforeCreate + 1);
+  await absent("사진 정리 다시 시도");
   const createdPath = await page.evaluate("location.pathname");
   const createdId = createdPath.split("/").at(-1);
   const updatedAt = () =>
@@ -975,6 +976,136 @@ try {
   );
   await text("상품을 저장했습니다.");
   assert.equal(writes, beforeLate + 1);
+  await go("/admin/shop-products/new");
+  await text("상품 등록");
+  await page.fill("name", "테스트 없는업로드");
+  await page.fill("description", "없는 업로드 설명");
+  await page.fill("price", "4100");
+  await page.fill("image_alt", "다시 올릴 사진");
+  await selectImage("retry.png", "#112233", 20, 16);
+  const pathsBeforeRetry = new Set(files.keys());
+  const writesBeforeRetry = writes;
+  const removesBeforeRetry = storageRemoves;
+  dropWrite = true;
+  await page.button("저장 전 확인");
+  await confirm();
+  await text("결과를 확인하지 못했습니다.");
+  const pathRetry = [...files.keys()].find((key) => !pathsBeforeRetry.has(key));
+  assert.ok(pathRetry);
+  assert.equal(
+    products.some((row) => row.name === "테스트 없는업로드"),
+    false,
+  );
+  assert.equal(writes, writesBeforeRetry);
+  assert.equal(storageRemoves, removesBeforeRetry);
+  files.delete(pathRetry);
+  await page.button("저장 결과 다시 확인");
+  await text(
+    "저장은 반영되지 않았습니다. 입력은 유지됩니다. 다시 저장할 수 있습니다.",
+  );
+  assert.equal(writes, writesBeforeRetry);
+  assert.equal(storageRemoves, removesBeforeRetry);
+  assert.equal(files.has(pathRetry), false);
+  assert.equal(await visibleValue("name"), "테스트 없는업로드");
+  assert.equal(await visibleValue("description"), "없는 업로드 설명");
+  assert.equal(await visibleValue("price"), "4100");
+  assert.equal(await visibleValue("image_alt"), "다시 올릴 사진");
+  assert.equal(
+    await page.evaluate(
+      `(() => {
+        const input = [...document.querySelectorAll('input[type=file]')].find((node) => node.checkVisibility());
+        return input?.files?.[0]?.name === "retry.png";
+      })()`,
+    ),
+    true,
+  );
+  const pathsBeforeSecond = new Set(files.keys());
+  await page.button("저장 전 확인");
+  await confirm();
+  await text("상품을 저장했습니다.");
+  const pathSecond = [...files.keys()].find(
+    (key) => !pathsBeforeSecond.has(key),
+  );
+  const createdRetry = products.find((row) => row.name === "테스트 없는업로드");
+  assert.ok(pathSecond);
+  assert.notEqual(pathSecond, pathRetry);
+  assert.ok(createdRetry);
+  assert.equal(createdRetry.image_path, pathSecond);
+  assert.equal(files.has(pathSecond), true);
+  assert.equal(writes, writesBeforeRetry + 1);
+  assert.equal(storageRemoves, removesBeforeRetry);
+  assert.equal(
+    await page.evaluate("location.pathname"),
+    `/admin/shop-products/${createdRetry.id}`,
+  );
+  await absent("사진 정리 다시 시도");
+  await go("/admin/shop-products/new");
+  await text("상품 등록");
+  await page.fill("name", "테스트 정리유지");
+  await page.fill("description", "정리 유지 설명");
+  await page.fill("price", "4200");
+  await page.fill("image_alt", "사진 비");
+  await selectImage("a-orphan.png", "#441122", 22, 14);
+  const pathsBeforeOrphan = new Set(files.keys());
+  const writesBeforeOrphan = writes;
+  const removesBeforeOrphan = storageRemoves;
+  dropWrite = true;
+  await page.button("저장 전 확인");
+  await confirm();
+  await text("결과를 확인하지 못했습니다.");
+  const pathOrphan = [...files.keys()].find(
+    (key) => !pathsBeforeOrphan.has(key),
+  );
+  assert.ok(pathOrphan);
+  assert.equal(files.has(pathOrphan), true);
+  assert.equal(writes, writesBeforeOrphan);
+  assert.equal(storageRemoves, removesBeforeOrphan);
+  await page.button("저장 결과 다시 확인");
+  await text("입력은 유지됩니다");
+  assert.equal(writes, writesBeforeOrphan);
+  assert.equal(storageRemoves, removesBeforeOrphan);
+  assert.equal(files.has(pathOrphan), true);
+  await selectImage("b-kept.png", "#226644", 26, 18);
+  const pathsBeforeKept = new Set(files.keys());
+  await page.button("저장 전 확인");
+  await confirm();
+  const pathKept = [...files.keys()].find((key) => !pathsBeforeKept.has(key));
+  const createdKeep = products.find((row) => row.name === "테스트 정리유지");
+  assert.ok(pathKept);
+  assert.notEqual(pathKept, pathOrphan);
+  assert.ok(createdKeep);
+  assert.equal(createdKeep.image_path, pathKept);
+  assert.equal(files.has(pathOrphan), true);
+  assert.equal(files.has(pathKept), true);
+  assert.equal(writes, writesBeforeOrphan + 1);
+  assert.equal(storageRemoves, removesBeforeOrphan);
+  await until(
+    () =>
+      page.evaluate(
+        `location.pathname === ${JSON.stringify(`/admin/shop-products/${createdKeep.id}`)}`,
+      ),
+    "cleanup handoff editor",
+  );
+  await text("이전 사진은 사진 정리 버튼으로만 지웁니다");
+  await page.button("사진 정리 다시 시도");
+  await text("사진 정리를 마쳤습니다.");
+  assert.equal(
+    await page.evaluate("location.pathname"),
+    `/admin/shop-products/${createdKeep.id}`,
+  );
+  assert.equal(files.has(pathOrphan), false);
+  assert.equal(files.has(pathKept), true);
+  assert.equal(
+    products.find((row) => row.id === createdKeep.id)?.image_path,
+    pathKept,
+  );
+  assert.equal(
+    products.some((row) => row.id === createdKeep.id),
+    true,
+  );
+  assert.equal(writes, writesBeforeOrphan + 1);
+  assert.equal(storageRemoves, removesBeforeOrphan + 1);
+  await absent("사진 정리 다시 시도");
   const widths = [
     [360, false, 16],
     [390, false, 16],

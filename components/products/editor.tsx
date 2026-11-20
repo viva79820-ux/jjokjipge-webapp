@@ -1,5 +1,12 @@
 "use client";
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { formatTime } from "@/lib/admin/reservation-rules";
@@ -40,6 +47,45 @@ const fields = [
   "sort_order",
 ] as const;
 
+// 신규 등록 화면이 바뀐 뒤에도 이전 업로드만 정리할 수 있게 함수를 넘긴다.
+let pendingCreateCleanup: {
+  productId: string;
+  job: () => Promise<boolean>;
+} | null = null;
+const createCleanupListeners = new Set<() => void>();
+
+function notifyCreateCleanup() {
+  for (const listener of createCleanupListeners) listener();
+}
+
+function subscribeCreateCleanup(listener: () => void) {
+  createCleanupListeners.add(listener);
+  return () => {
+    createCleanupListeners.delete(listener);
+  };
+}
+
+function readCreateCleanup(productId?: string) {
+  if (!productId || pendingCreateCleanup?.productId !== productId) return null;
+  return pendingCreateCleanup;
+}
+
+function rememberCreateCleanup(productId: string, job: () => Promise<boolean>) {
+  pendingCreateCleanup = { productId, job };
+  notifyCreateCleanup();
+}
+
+function forgetCreateCleanup(productId?: string, job?: () => Promise<boolean>) {
+  if (
+    !pendingCreateCleanup ||
+    (pendingCreateCleanup.job !== job &&
+      pendingCreateCleanup.productId !== productId)
+  )
+    return;
+  pendingCreateCleanup = null;
+  notifyCreateCleanup();
+}
+
 export function ProductEditor({
   initial,
   page,
@@ -53,6 +99,11 @@ export function ProductEditor({
   initialMessage: string;
   initialCleanup?: (expected?: FormData) => Promise<boolean>;
 }) {
+  const handed = useSyncExternalStore(
+    subscribeCreateCleanup,
+    () => readCreateCleanup(initial?.id),
+    () => null,
+  );
   const [original, setOriginal] = useState(initial);
   const [draftId, setDraftId] = useState("");
   const [name, setName] = useState(initial?.name || "");
@@ -151,6 +202,8 @@ export function ProductEditor({
       uploadToken.current = null;
       confirmToken.current = null;
       setDraftId("");
+      cleanupRef.current = undefined;
+      setCleanupPending(false);
     };
   }, []);
   useEffect(() => {
@@ -310,6 +363,9 @@ export function ProductEditor({
       else if (!result.row.image_path) originalCleanup.current = undefined;
       keepCleanup(result.cleanup);
       if (!baseline.current) {
+        if (cleanupRef.current)
+          rememberCreateCleanup(result.row.id, cleanupRef.current);
+        else forgetCreateCleanup(result.row.id);
         createdNavigate.current = true;
         applyRow(result.row);
         leaving.current = true;
@@ -574,11 +630,17 @@ export function ProductEditor({
       forgetAttempt();
       setUncertain(false);
       if (checked.state === "conflict") setConflict(true);
-      if (checked.missing && mode === "create")
+      if (checked.missing && mode === "create") {
+        if (photo === "missing") {
+          uploaded.current = null;
+          uploadedFile.current = null;
+          uploadToken.current = null;
+          confirmToken.current = null;
+        }
         setMessage(
           "저장은 반영되지 않았습니다. 입력은 유지됩니다. 다시 저장할 수 있습니다.",
         );
-      else if (checked.state === "conflict" || checked.missing)
+      } else if (checked.state === "conflict" || checked.missing)
         setMessage(
           photoNote ? `${checked.message} ${photoNote}` : checked.message,
         );
@@ -604,12 +666,13 @@ export function ProductEditor({
     }
   }
   async function retryCleanup() {
-    const job = cleanupRef.current;
+    const job = cleanupRef.current ?? handed?.job;
     if (!job || lock.current || leaving.current) return;
     lock.current = true;
     setBusy(true);
     try {
       if (await job()) {
+        forgetCreateCleanup(original?.id, job);
         clearCleanup();
         setMessage(
           removed ? "상품을 삭제했습니다." : "사진 정리를 마쳤습니다.",
@@ -980,7 +1043,11 @@ export function ProductEditor({
         aria-live="polite"
         className="text-body text-brand outline-none"
       >
-        {busy ? "처리 중…" : message}
+        {busy
+          ? "처리 중…"
+          : handed
+            ? "상품을 저장했습니다. 이전 사진은 사진 정리 버튼으로만 지웁니다."
+            : message}
       </p>
       {uncertain && (
         <Button disabled={busy} onClick={reconcile}>
@@ -989,7 +1056,7 @@ export function ProductEditor({
             : "저장 결과 다시 확인"}
         </Button>
       )}
-      {cleanupPending && !removed && (
+      {(cleanupPending || Boolean(handed)) && !removed && (
         <Button
           disabled={busy || uncertain}
           variant="secondary"
