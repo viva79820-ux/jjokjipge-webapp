@@ -1106,6 +1106,241 @@ try {
   assert.equal(writes, writesBeforeOrphan + 1);
   assert.equal(storageRemoves, removesBeforeOrphan + 1);
   await absent("사진 정리 다시 시도");
+  const editorStatus = () =>
+    page.evaluate(
+      `document.querySelector('[role=status][tabindex="-1"]')?.textContent?.trim() ?? ""`,
+    );
+  const openAdminPath = async (href) => {
+    await until(
+      () =>
+        page.evaluate(
+          `[...document.querySelectorAll("a")].some((item) => item.checkVisibility() && item.getAttribute("href") === ${JSON.stringify(href)})`,
+        ),
+      href,
+    );
+    await page.evaluate(
+      `[...document.querySelectorAll("a")].find((item) => item.checkVisibility() && item.getAttribute("href") === ${JSON.stringify(href)}).click()`,
+    );
+  };
+  const waitPath = async (path, label) => {
+    await until(
+      () => page.evaluate(`location.pathname === ${JSON.stringify(path)}`),
+      label,
+    );
+  };
+  const waitValue = async (name, value) => {
+    await until(
+      () =>
+        page.evaluate(
+          `[...document.querySelectorAll('[name=${name}]')].some((node) => node.checkVisibility() && node.value === ${JSON.stringify(value)})`,
+        ),
+      `${name}=${value}`,
+    );
+  };
+  const registerOrphanProduct = async ({
+    name,
+    description,
+    price,
+    alt,
+    orphanName,
+    orphanColor,
+    keptName,
+    keptColor,
+  }) => {
+    await text("새 상품은 비공개로 시작합니다.");
+    await page.fill("name", name);
+    await page.fill("description", description);
+    await page.fill("price", price);
+    await page.fill("image_alt", alt);
+    await selectImage(orphanName, orphanColor, 22, 14);
+    const pathsBefore = new Set(files.keys());
+    const writesBefore = writes;
+    const removesBefore = storageRemoves;
+    dropWrite = true;
+    await page.button("저장 전 확인");
+    await confirm();
+    await text("결과를 확인하지 못했습니다.");
+    const orphan = [...files.keys()].find((key) => !pathsBefore.has(key));
+    assert.ok(orphan);
+    assert.equal(files.has(orphan), true);
+    assert.equal(writes, writesBefore);
+    assert.equal(storageRemoves, removesBefore);
+    await page.button("저장 결과 다시 확인");
+    await text("입력은 유지됩니다");
+    assert.equal(files.has(orphan), true);
+    await selectImage(keptName, keptColor, 26, 18);
+    const pathsBeforeKept = new Set(files.keys());
+    await page.button("저장 전 확인");
+    await confirm();
+    const kept = [...files.keys()].find((key) => !pathsBeforeKept.has(key));
+    const created = products.find((row) => row.name === name);
+    assert.ok(kept);
+    assert.notEqual(kept, orphan);
+    assert.ok(created);
+    assert.equal(created.image_path, kept);
+    assert.equal(files.has(orphan), true);
+    assert.equal(files.has(kept), true);
+    await waitPath(`/admin/shop-products/${created.id}`, `${name} editor`);
+    await text("상품을 저장했습니다.");
+    assert.equal(await editorStatus(), "상품을 저장했습니다.");
+    await text("이전 사진은 사진 정리 버튼으로만 지웁니다");
+    return { id: created.id, orphan, kept };
+  };
+  await go("/admin/shop-products/new");
+  const firstCleanup = await registerOrphanProduct({
+    name: "테스트 정리하나",
+    description: "첫째 정리 설명",
+    price: "4300",
+    alt: "첫째 사진",
+    orphanName: "first-orphan.png",
+    orphanColor: "#551133",
+    keptName: "first-kept.png",
+    keptColor: "#225577",
+  });
+  await clickLink("상품 목록으로");
+  await waitPath("/admin/shop-products", "list after first");
+  await openAdminPath("/admin/shop-products/new");
+  await waitPath("/admin/shop-products/new", "second new");
+  const secondCleanup = await registerOrphanProduct({
+    name: "테스트 정리둘",
+    description: "둘째 정리 설명",
+    price: "4400",
+    alt: "둘째 사진",
+    orphanName: "second-orphan.png",
+    orphanColor: "#334411",
+    keptName: "second-kept.png",
+    keptColor: "#663322",
+  });
+  assert.notEqual(secondCleanup.id, firstCleanup.id);
+  assert.equal(files.has(firstCleanup.orphan), true);
+  assert.equal(files.has(secondCleanup.orphan), true);
+  await clickLink("상품 목록으로");
+  await waitPath("/admin/shop-products", "list after second");
+  await openAdminPath(`/admin/shop-products/${firstCleanup.id}`);
+  await waitPath(
+    `/admin/shop-products/${firstCleanup.id}`,
+    "return first editor",
+  );
+  await waitValue("name", "테스트 정리하나");
+  await text("이전 사진은 사진 정리 버튼으로만 지웁니다");
+  assert.equal(await editorStatus(), "");
+  await selectImage("follow-orphan.png", "#772244", 21, 15);
+  const pathsBeforeFollow = new Set(files.keys());
+  const writesBeforeFollow = writes;
+  dropWrite = true;
+  await page.button("저장 전 확인");
+  await confirm();
+  await text("결과를 확인하지 못했습니다.");
+  const followOrphan = [...files.keys()].find(
+    (key) => !pathsBeforeFollow.has(key),
+  );
+  assert.ok(followOrphan);
+  assert.equal(files.has(followOrphan), true);
+  assert.equal(files.has(firstCleanup.orphan), true);
+  assert.equal(writes, writesBeforeFollow);
+  await page.button("저장 결과 다시 확인");
+  await text("수정 전 버전 그대로");
+  assert.match(await editorStatus(), /수정 전 버전 그대로/);
+  assert.equal(
+    (await editorStatus()).includes(
+      "이전 사진은 사진 정리 버튼으로만 지웁니다",
+    ),
+    false,
+  );
+  await text("이전 사진은 사진 정리 버튼으로만 지웁니다");
+  assert.equal(files.has(followOrphan), true);
+  assert.equal(files.has(firstCleanup.orphan), true);
+  await selectImage("follow-kept.png", "#117755", 29, 17);
+  const pathsBeforeFollowKept = new Set(files.keys());
+  await page.button("저장 전 확인");
+  await confirm();
+  await text("상품을 저장했습니다.");
+  const followKept = [...files.keys()].find(
+    (key) => !pathsBeforeFollowKept.has(key),
+  );
+  assert.ok(followKept);
+  assert.equal(
+    products.find((row) => row.id === firstCleanup.id)?.image_path,
+    followKept,
+  );
+  assert.equal(files.has(followOrphan), true);
+  assert.equal(files.has(firstCleanup.orphan), true);
+  assert.equal(files.has(secondCleanup.orphan), true);
+  assert.equal(files.has(followKept), true);
+  await text("이전 사진은 사진 정리 버튼으로만 지웁니다");
+  const conflictRow = products.find((row) => row.id === firstCleanup.id);
+  conflictRow.updated_at = stamp();
+  const writesBeforeConflict = writes;
+  const removesBeforeConflict = storageRemoves;
+  await page.fill("name", "테스트 정리충돌");
+  await page.button("저장 전 확인");
+  await confirm();
+  await text("다른 작업으로 상품이 변경됐습니다. 최신 내용을 확인해 주세요.");
+  assert.equal(
+    await editorStatus(),
+    "다른 작업으로 상품이 변경됐습니다. 최신 내용을 확인해 주세요.",
+  );
+  await text("이전 사진은 사진 정리 버튼으로만 지웁니다");
+  assert.equal(await visibleValue("name"), "테스트 정리충돌");
+  assert.equal(writes, writesBeforeConflict);
+  assert.equal(storageRemoves, removesBeforeConflict);
+  assert.equal(files.has(followOrphan), true);
+  assert.equal(files.has(firstCleanup.orphan), true);
+  assert.equal(files.has(secondCleanup.orphan), true);
+  assert.equal(files.has(followKept), true);
+  await page.button("사진 정리 다시 시도");
+  await until(() => files.has(followOrphan) === false, "follow-up cleaned");
+  await text("사진 정리를 마쳤습니다.");
+  assert.equal(files.has(firstCleanup.orphan), true);
+  assert.equal(files.has(secondCleanup.orphan), true);
+  assert.equal(files.has(followKept), true);
+  await text("이전 사진은 사진 정리 버튼으로만 지웁니다");
+  await text("사진 정리 다시 시도");
+  await page.button("사진 정리 다시 시도");
+  await until(
+    () => files.has(firstCleanup.orphan) === false,
+    "first orphan cleaned",
+  );
+  await text("사진 정리를 마쳤습니다.");
+  await absent("사진 정리 다시 시도");
+  await absent("이전 사진은 사진 정리 버튼으로만 지웁니다");
+  assert.equal(files.has(secondCleanup.orphan), true);
+  assert.equal(files.has(followKept), true);
+  assert.equal(files.has(secondCleanup.kept), true);
+  assert.equal(
+    products.find((row) => row.id === firstCleanup.id)?.image_path,
+    followKept,
+  );
+  await clickLink("상품 목록으로");
+  await text("저장하지 않은 입력");
+  await page.button("목록으로 이동");
+  await waitPath("/admin/shop-products", "list after conflict");
+  await openAdminPath(`/admin/shop-products/${secondCleanup.id}`);
+  await waitPath(
+    `/admin/shop-products/${secondCleanup.id}`,
+    "return second editor",
+  );
+  await waitValue("name", "테스트 정리둘");
+  await text("이전 사진은 사진 정리 버튼으로만 지웁니다");
+  const writesBeforeSecondCleanup = writes;
+  await page.button("사진 정리 다시 시도");
+  await until(
+    () => files.has(secondCleanup.orphan) === false,
+    "second orphan cleaned",
+  );
+  await text("사진 정리를 마쳤습니다.");
+  await absent("사진 정리 다시 시도");
+  assert.equal(files.has(secondCleanup.kept), true);
+  assert.equal(files.has(followKept), true);
+  assert.equal(
+    products.find((row) => row.id === secondCleanup.id)?.image_path,
+    secondCleanup.kept,
+  );
+  assert.equal(
+    products.some((row) => row.id === secondCleanup.id),
+    true,
+  );
+  assert.equal(writes, writesBeforeSecondCleanup);
   const widths = [
     [360, false, 16],
     [390, false, 16],

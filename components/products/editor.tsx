@@ -47,11 +47,12 @@ const fields = [
   "sort_order",
 ] as const;
 
-// 신규 등록 화면이 바뀐 뒤에도 이전 업로드만 정리할 수 있게 함수를 넘긴다.
-let pendingCreateCleanup: {
-  productId: string;
-  job: () => Promise<boolean>;
-} | null = null;
+// 신규 등록 화면이 바뀐 뒤에도 이전 업로드를 정리할 수 있게 함수를 남긴다.
+// 대기 작업은 상품마다 두고, 끝난 작업만 뺀다.
+const pendingCreateCleanups = new Map<
+  string,
+  ReadonlyArray<() => Promise<boolean>>
+>();
 const createCleanupListeners = new Set<() => void>();
 
 function notifyCreateCleanup() {
@@ -66,23 +67,25 @@ function subscribeCreateCleanup(listener: () => void) {
 }
 
 function readCreateCleanup(productId?: string) {
-  if (!productId || pendingCreateCleanup?.productId !== productId) return null;
-  return pendingCreateCleanup;
+  if (!productId) return null;
+  const jobs = pendingCreateCleanups.get(productId);
+  return jobs?.length ? jobs : null;
 }
 
 function rememberCreateCleanup(productId: string, job: () => Promise<boolean>) {
-  pendingCreateCleanup = { productId, job };
+  const current = pendingCreateCleanups.get(productId) ?? [];
+  if (current.includes(job)) return;
+  pendingCreateCleanups.set(productId, [...current, job]);
   notifyCreateCleanup();
 }
 
 function forgetCreateCleanup(productId?: string, job?: () => Promise<boolean>) {
-  if (
-    !pendingCreateCleanup ||
-    (pendingCreateCleanup.job !== job &&
-      pendingCreateCleanup.productId !== productId)
-  )
-    return;
-  pendingCreateCleanup = null;
+  if (!productId || !job) return;
+  const current = pendingCreateCleanups.get(productId);
+  if (!current?.includes(job)) return;
+  const next = current.filter((item) => item !== job);
+  if (next.length === 0) pendingCreateCleanups.delete(productId);
+  else pendingCreateCleanups.set(productId, next);
   notifyCreateCleanup();
 }
 
@@ -365,7 +368,6 @@ export function ProductEditor({
       if (!baseline.current) {
         if (cleanupRef.current)
           rememberCreateCleanup(result.row.id, cleanupRef.current);
-        else forgetCreateCleanup(result.row.id);
         createdNavigate.current = true;
         applyRow(result.row);
         leaving.current = true;
@@ -666,7 +668,7 @@ export function ProductEditor({
     }
   }
   async function retryCleanup() {
-    const job = cleanupRef.current ?? handed?.job;
+    const job = cleanupRef.current ?? handed?.[0];
     if (!job || lock.current || leaving.current) return;
     lock.current = true;
     setBusy(true);
@@ -1043,12 +1045,13 @@ export function ProductEditor({
         aria-live="polite"
         className="text-body text-brand outline-none"
       >
-        {busy
-          ? "처리 중…"
-          : handed
-            ? "상품을 저장했습니다. 이전 사진은 사진 정리 버튼으로만 지웁니다."
-            : message}
+        {busy ? "처리 중…" : message}
       </p>
+      {handed?.length ? (
+        <p className="text-body text-brand">
+          이전 사진은 사진 정리 버튼으로만 지웁니다.
+        </p>
+      ) : null}
       {uncertain && (
         <Button disabled={busy} onClick={reconcile}>
           {attemptMode === "delete"
@@ -1056,7 +1059,7 @@ export function ProductEditor({
             : "저장 결과 다시 확인"}
         </Button>
       )}
-      {(cleanupPending || Boolean(handed)) && !removed && (
+      {(cleanupPending || Boolean(handed?.length)) && !removed && (
         <Button
           disabled={busy || uncertain}
           variant="secondary"
