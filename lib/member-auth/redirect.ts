@@ -5,6 +5,8 @@ const localOrigins = [
   "http://127.0.0.1:4333",
 ] as const;
 
+const serviceOrigins = ["https://jjokjipge-webapp.vercel.app"] as const;
+
 const allowedNext = new Set([
   "/login",
   "/mypage",
@@ -28,6 +30,7 @@ function httpsHost(value: string | undefined) {
 
 export function trustedOrigins(env: NodeJS.ProcessEnv = process.env) {
   const origins = [
+    ...serviceOrigins,
     httpsHost(env.VERCEL_URL),
     httpsHost(env.VERCEL_PROJECT_PRODUCTION_URL),
     httpsHost(env.VERCEL_BRANCH_URL),

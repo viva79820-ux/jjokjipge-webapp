@@ -380,6 +380,63 @@ test("signup does not claim mail was sent for duplicates, limits, or failures", 
   }
 });
 
+test("signup and recovery use the confirmed production origin without Vercel aliases", async () => {
+  const savedHeaders = { ...headerState };
+  headerState.host = "jjokjipge-webapp.vercel.app";
+  headerState.forwardedHost = null;
+  headerState.forwardedProto = "https";
+  const auth = harness();
+  try {
+    const signup = await settle(auth.signUp({}, signupForm()));
+    assert.equal(signup.redirect, "/auth/verify");
+    assert.equal(
+      auth.calls.find((call) => call[0] === "signUp")[1].options
+        .emailRedirectTo,
+      "https://jjokjipge-webapp.vercel.app/auth/callback?next=%2Fmypage",
+    );
+
+    const recovery = await settle(
+      auth.requestPasswordReset(
+        {},
+        form([["email", "member@example.invalid"]]),
+      ),
+    );
+    assert.equal(recovery.state.status, "accepted");
+    assert.equal(
+      auth.calls.find((call) => call[0] === "reset")[2].redirectTo,
+      "https://jjokjipge-webapp.vercel.app/auth/callback?next=%2Fauth%2Fupdate-password",
+    );
+  } finally {
+    auth.restore();
+    Object.assign(headerState, savedHeaders);
+  }
+
+  headerState.host = "attacker.example";
+  headerState.forwardedHost = "forged.example";
+  headerState.forwardedProto = "https";
+  const rejected = harness();
+  try {
+    const signup = await settle(rejected.signUp({}, signupForm()));
+    assert.match(signup.state.message, /서비스 주소 설정/);
+    const recovery = await settle(
+      rejected.requestPasswordReset(
+        {},
+        form([["email", "member@example.invalid"]]),
+      ),
+    );
+    assert.match(recovery.state.message, /서비스 주소 설정/);
+    assert.equal(
+      rejected.calls.some(
+        (call) => call[0] === "signUp" || call[0] === "reset",
+      ),
+      false,
+    );
+  } finally {
+    rejected.restore();
+    Object.assign(headerState, savedHeaders);
+  }
+});
+
 test("login checks the confirmed user and keeps members out of admin", async () => {
   const failed = harness({ signInError: authError("invalid_credentials") });
   try {
@@ -558,6 +615,7 @@ test("password update and reset do not claim success when the provider refuses",
 test("callback and redirect allow only trusted origins and internal paths", async () => {
   const redirect = load("../lib/member-auth/redirect.ts", {});
   const callback = load("../lib/member-auth/callback.ts", {});
+  const productionOrigin = "https://jjokjipge-webapp.vercel.app";
   const saved = {
     VERCEL: process.env.VERCEL,
     VERCEL_URL: process.env.VERCEL_URL,
@@ -569,6 +627,12 @@ test("callback and redirect allow only trusted origins and internal paths", asyn
   delete process.env.VERCEL_BRANCH_URL;
   delete process.env.VERCEL_PROJECT_PRODUCTION_URL;
   try {
+    assert.equal(
+      redirect.resolveTrustedOrigin({
+        get: (name) => (name === "host" ? "jjokjipge-webapp.vercel.app" : null),
+      }),
+      productionOrigin,
+    );
     assert.equal(
       redirect.resolveTrustedOrigin({
         get: (name) => (name === "host" ? "127.0.0.1:4333" : null),
@@ -603,6 +667,12 @@ test("callback and redirect allow only trusted origins and internal paths", asyn
     process.env.VERCEL_BRANCH_URL = "branch-preview.vercel.app";
     assert.equal(
       redirect.resolveTrustedOrigin({
+        get: (name) => (name === "host" ? "jjokjipge-webapp.vercel.app" : null),
+      }),
+      productionOrigin,
+    );
+    assert.equal(
+      redirect.resolveTrustedOrigin({
         get(name) {
           if (name === "x-forwarded-host") return "evil.example";
           if (name === "x-forwarded-proto") return "https";
@@ -624,9 +694,28 @@ test("callback and redirect allow only trusted origins and internal paths", asyn
     );
     assert.equal(
       redirect.resolveTrustedOrigin({
+        get(name) {
+          if (name === "x-forwarded-host") return "forged.example";
+          if (name === "x-forwarded-proto") return "https";
+          if (name === "host") return "attacker.example";
+          return null;
+        },
+      }),
+      null,
+    );
+    assert.equal(
+      redirect.resolveTrustedOrigin({
         get: (name) => (name === "host" ? "127.0.0.1:4333" : null),
       }),
       null,
+    );
+    assert.equal(
+      redirect.callbackUrl(productionOrigin, "/mypage"),
+      `${productionOrigin}/auth/callback?next=%2Fmypage`,
+    );
+    assert.equal(
+      redirect.callbackUrl(productionOrigin, "/admin"),
+      `${productionOrigin}/auth/callback?next=%2Fmypage`,
     );
 
     const code = "auth-code-secret";
