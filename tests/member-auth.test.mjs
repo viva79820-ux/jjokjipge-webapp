@@ -380,12 +380,18 @@ test("signup does not claim mail was sent for duplicates, limits, or failures", 
   }
 });
 
-test("signup and recovery use the confirmed production origin without Vercel aliases", async () => {
+test("signup and recovery prefer the production host over a trusted Vercel alias", async () => {
   const savedHeaders = { ...headerState };
   headerState.host = "jjokjipge-webapp.vercel.app";
-  headerState.forwardedHost = null;
+  headerState.forwardedHost = "member-preview.vercel.app";
   headerState.forwardedProto = "https";
-  const auth = harness();
+  const auth = harness({
+    env: {
+      VERCEL: "1",
+      VERCEL_URL: "member-preview.vercel.app",
+      VERCEL_BRANCH_URL: "branch-preview.vercel.app",
+    },
+  });
   try {
     const signup = await settle(auth.signUp({}, signupForm()));
     assert.equal(signup.redirect, "/auth/verify");
