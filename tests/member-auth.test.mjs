@@ -382,16 +382,15 @@ test("signup does not claim mail was sent for duplicates, limits, or failures", 
 
 test("signup and recovery prefer the production host over a trusted Vercel alias", async () => {
   const savedHeaders = { ...headerState };
+  const vercelEnv = {
+    VERCEL: "1",
+    VERCEL_URL: "member-preview.vercel.app",
+    VERCEL_BRANCH_URL: "branch-preview.vercel.app",
+  };
   headerState.host = "jjokjipge-webapp.vercel.app";
   headerState.forwardedHost = "member-preview.vercel.app";
   headerState.forwardedProto = "https";
-  const auth = harness({
-    env: {
-      VERCEL: "1",
-      VERCEL_URL: "member-preview.vercel.app",
-      VERCEL_BRANCH_URL: "branch-preview.vercel.app",
-    },
-  });
+  const auth = harness({ env: vercelEnv });
   try {
     const signup = await settle(auth.signUp({}, signupForm()));
     assert.equal(signup.redirect, "/auth/verify");
@@ -414,6 +413,35 @@ test("signup and recovery prefer the production host over a trusted Vercel alias
     );
   } finally {
     auth.restore();
+    Object.assign(headerState, savedHeaders);
+  }
+
+  headerState.host = "member-preview.vercel.app";
+  headerState.forwardedHost = "branch-preview.vercel.app";
+  headerState.forwardedProto = "https";
+  const preview = harness({ env: vercelEnv });
+  try {
+    const signup = await settle(preview.signUp({}, signupForm()));
+    assert.equal(signup.redirect, "/auth/verify");
+    assert.equal(
+      preview.calls.find((call) => call[0] === "signUp")[1].options
+        .emailRedirectTo,
+      "https://branch-preview.vercel.app/auth/callback?next=%2Fmypage",
+    );
+
+    const recovery = await settle(
+      preview.requestPasswordReset(
+        {},
+        form([["email", "member@example.invalid"]]),
+      ),
+    );
+    assert.equal(recovery.state.status, "accepted");
+    assert.equal(
+      preview.calls.find((call) => call[0] === "reset")[2].redirectTo,
+      "https://branch-preview.vercel.app/auth/callback?next=%2Fauth%2Fupdate-password",
+    );
+  } finally {
+    preview.restore();
     Object.assign(headerState, savedHeaders);
   }
 
@@ -687,6 +715,17 @@ test("callback and redirect allow only trusted origins and internal paths", asyn
         },
       }),
       "https://member-preview.vercel.app",
+    );
+    assert.equal(
+      redirect.resolveTrustedOrigin({
+        get(name) {
+          if (name === "x-forwarded-host") return "branch-preview.vercel.app";
+          if (name === "x-forwarded-proto") return "https";
+          if (name === "host") return "member-preview.vercel.app";
+          return null;
+        },
+      }),
+      "https://branch-preview.vercel.app",
     );
     assert.equal(
       redirect.resolveTrustedOrigin({

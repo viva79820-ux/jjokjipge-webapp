@@ -54,9 +54,17 @@ export function resolveTrustedOrigin(
   const forwardedHost = singleHeader(headers.get("x-forwarded-host"));
   const host = singleHeader(headers.get("host"));
   const forwardedProto = singleHeader(headers.get("x-forwarded-proto"));
-  const candidates = [host, forwardedHost].filter((value): value is string =>
-    Boolean(value),
-  );
+  const hostProto =
+    forwardedProto ??
+    (host?.startsWith("localhost") || host?.startsWith("127.0.0.1")
+      ? "http"
+      : "https");
+  const preferHost =
+    hostProto === "https" &&
+    serviceOrigins.some((origin) => origin === `${hostProto}://${host}`);
+  const candidates = (
+    preferHost ? [host, forwardedHost] : [forwardedHost, host]
+  ).filter((value): value is string => Boolean(value));
   for (const candidate of candidates) {
     const proto =
       forwardedProto ??
