@@ -1,5 +1,18 @@
 import { bucket, imageKind, imagePath, maxBytes } from "./rules";
 
+export function uploadLookupMessage(state: string) {
+  if (state === "missing") return "업로드된 파일이 없습니다.";
+  if (state === "forbidden")
+    return "사진 조회 권한이 없습니다. 파일은 지우지 않습니다.";
+  if (state === "unavailable")
+    return "사진 저장소를 일시적으로 확인하지 못했습니다. 파일은 지우지 않습니다.";
+  if (state === "unknown")
+    return "사진 조회 응답을 확인하지 못했습니다. 파일은 지우지 않습니다.";
+  if (state === "rejected")
+    return "업로드 사진의 크기·형식을 확인하지 못했습니다. 파일은 지우지 않습니다.";
+  return "";
+}
+
 export async function inspectImage(file: File) {
   if (file.size === 0 || file.size > maxBytes)
     throw Error("사진은 5MiB 이하의 빈 파일이 아닌 파일을 선택해 주세요.");

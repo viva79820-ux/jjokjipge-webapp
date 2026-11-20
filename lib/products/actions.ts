@@ -6,6 +6,7 @@ import { requireAdmin } from "@/lib/admin/auth";
 import { versionValid } from "@/lib/admin/support-rules";
 import { createClient } from "@/lib/supabase/server";
 import {
+  classifyStorageInfo,
   cleanupAction,
   confirmUploadAction,
   removeUnreferenced,
@@ -13,7 +14,6 @@ import {
 import {
   bucket,
   columns,
-  imageMetadataValid,
   imagePath,
   parseProduct,
   productMatches,
@@ -108,8 +108,8 @@ function savedResult(
   };
 }
 
-function deletedResult(id: string): Result {
-  invalidate(id);
+function deletedResult(): Result {
+  // 확인 중에는 편집 화면을 다시 그리지 않는다. 상품이 없으면 복구 버튼이 사라진다.
   return {
     state: "saved",
     message: "상품을 삭제했습니다.",
@@ -212,13 +212,24 @@ export async function saveProduct(form: FormData): Promise<Result> {
           state: "rejected",
           message: "다른 상품의 사진 경로를 사용할 수 없습니다.",
         };
-      const info = await db.storage.from(bucket).info(path);
-      if (info.error || !info.data) return unknown;
-      if (!imageMetadataValid(info.data))
+      let looked: ReturnType<typeof classifyStorageInfo>;
+      try {
+        looked = classifyStorageInfo(await db.storage.from(bucket).info(path));
+      } catch {
+        return unknown;
+      }
+      if (looked === "missing")
+        return {
+          state: "rejected",
+          message:
+            "업로드한 사진을 찾지 못했습니다. 상품 정보는 바꾸지 않았습니다.",
+        };
+      if (looked === "rejected")
         return {
           state: "rejected",
           message: "업로드 사진의 크기·형식을 확인하지 못했습니다.",
         };
+      if (looked !== "present") return unknown;
     }
     const payload = parsed
       ? {
@@ -320,7 +331,7 @@ export async function confirmProduct(
     const row = asProduct(read.data);
     if (read.data && !row) return unknown;
     if (mode === "delete") {
-      if (!row) return deletedResult(id);
+      if (!row) return deletedResult();
       if (row.updated_at === version)
         return {
           state: "rejected",
@@ -342,16 +353,50 @@ export async function confirmProduct(
           : undefined,
       };
     }
-    if (!row) return missing;
+    if (!row)
+      return mode === "create"
+        ? {
+            state: "rejected",
+            missing: true,
+            message:
+              "저장은 반영되지 않았습니다. 입력은 유지됩니다. 다시 저장할 수 있습니다.",
+          }
+        : {
+            state: "rejected",
+            missing: true,
+            message:
+              "상품이 없습니다. 과거 저장 요청이 성공했는지는 알 수 없습니다.",
+          };
+    const recovery = row.image_path
+      ? cleanupAction(row.image_path, admin.userId, undefined, row)
+      : undefined;
+    if (mode === "create") {
+      if (!productMatches(row, form))
+        return {
+          state: "conflict",
+          message:
+            "이미 다른 내용으로 저장된 상품입니다. 최신 내용을 확인해 주세요.",
+          row,
+          recovery,
+        };
+      return savedResult(row, admin.userId);
+    }
+    if (row.updated_at === version)
+      return {
+        state: "rejected",
+        message:
+          "저장은 반영되지 않았습니다. 상품은 수정 전 버전 그대로입니다. 다시 저장할 수 있습니다.",
+        unchanged: true,
+        row,
+        recovery,
+      };
     if (!productMatches(row, form))
       return {
         state: "conflict",
         message:
-          "현재 저장 내용과 일치하지 않습니다. 최신 내용을 확인하거나 다시 저장해 주세요.",
+          "현재 상품은 이 요청과 다른 내용입니다. 과거 저장 요청이 성공했는지는 알 수 없습니다. 최신 내용을 확인해 주세요.",
         row,
-        recovery: row.image_path
-          ? cleanupAction(row.image_path, admin.userId, undefined, row)
-          : undefined,
+        recovery,
       };
     return savedResult(row, admin.userId);
   } catch {

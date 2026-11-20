@@ -140,8 +140,27 @@ function memory(world) {
         return {
           async info(path) {
             world.storageReads.push(path);
+            if (world.storageThrow) {
+              world.storageThrow = false;
+              throw Error("socket");
+            }
+            if (world.storageStatus) {
+              const status = world.storageStatus;
+              world.storageStatus = 0;
+              return {
+                data: null,
+                error: {
+                  message: "storage",
+                  status,
+                  statusCode: String(status),
+                },
+              };
+            }
             if (bucket !== "public-images" || !world.files.has(path))
-              return { data: null, error: { message: "missing" } };
+              return {
+                data: null,
+                error: { message: "missing", status: 404, statusCode: "404" },
+              };
             return {
               data: { size: 1200, contentType: "image/png" },
               error: null,
@@ -258,6 +277,8 @@ function harness(state) {
     storageReads: [],
     storageRemoves: [],
     cleanupFail: false,
+    storageStatus: 0,
+    storageThrow: false,
     lose: false,
     readError: null,
     writeError: null,
@@ -482,7 +503,9 @@ test("관리자 권한과 조건부 저장과 연속 저장과 읽기 전용 재
       version: cleared.row.updated_at,
     }),
   );
-  assert.equal(checked.state, "saved");
+  assert.equal(checked.unchanged, true);
+  assert.equal(checked.state, "rejected");
+  assert.match(checked.message, /수정 전 버전 그대로/);
   assert.equal(api.world.writes, beforeConfirm);
   api.world.lose = true;
   const lost = await api.saveProduct(
@@ -521,7 +544,42 @@ test("사진 교체 실패는 기존 사진을 남기고 정리 실패는 삭제
       is_published: "true",
     }),
   );
-  assert.equal(missingFile.state, "unknown");
+  assert.equal(missingFile.state, "rejected");
+  assert.match(missingFile.message, /사진을 찾지 못했습니다/);
+  assert.equal(api.world.products[0].image_path, photo);
+  assert.equal(api.world.writes, 0);
+  assert.equal(api.world.storageRemoves.length, 0);
+  api.world.files.add(otherPhoto);
+  api.world.storageStatus = 403;
+  const forbidden = await api.saveProduct(
+    form({
+      image_path: otherPhoto,
+      image_alt: "권한 사진",
+      is_published: "true",
+    }),
+  );
+  assert.equal(forbidden.state, "unknown");
+  assert.equal(api.world.products[0].image_path, photo);
+  assert.equal(api.world.writes, 0);
+  api.world.storageStatus = 503;
+  const unavailable = await api.saveProduct(
+    form({
+      image_path: otherPhoto,
+      image_alt: "장애 사진",
+      is_published: "true",
+    }),
+  );
+  assert.equal(unavailable.state, "unknown");
+  assert.equal(api.world.writes, 0);
+  api.world.storageThrow = true;
+  const lostLookup = await api.saveProduct(
+    form({
+      image_path: otherPhoto,
+      image_alt: "유실 사진",
+      is_published: "true",
+    }),
+  );
+  assert.equal(lostLookup.state, "unknown");
   assert.equal(api.world.products[0].image_path, photo);
   assert.equal(api.world.storageRemoves.length, 0);
   api.world.files.add(otherPhoto);
@@ -588,13 +646,129 @@ test("사진 교체 실패는 기존 사진을 남기고 정리 실패는 삭제
   assert.equal(lostDelete.state, "unknown");
   assert.equal(api.world.products.length, 0);
   const deletes = api.world.writes;
+  const removes = api.world.storageRemoves.length;
   const confirmed = await api.confirmProduct(
     productId,
     form({ mode: "delete", version }),
   );
   assert.equal(confirmed.deleted, true);
   assert.equal(api.world.writes, deletes);
+  assert.equal(api.world.storageRemoves.length, removes);
   assert.equal(api.world.files.has(photo), true);
+});
+
+test("저장소 조회와 수정 버전을 구분하고 재확인은 사진을 지우지 않는다", async () => {
+  const api = harness({
+    products: [
+      row({ image_path: photo, image_alt: "기존 사진", is_published: true }),
+    ],
+  });
+  assert.equal(
+    api.cleanup.classifyStorageInfo({
+      data: null,
+      error: { status: 404 },
+    }),
+    "missing",
+  );
+  assert.equal(
+    api.cleanup.classifyStorageInfo({
+      data: null,
+      error: { status: 403, statusCode: "403" },
+    }),
+    "forbidden",
+  );
+  assert.equal(
+    api.cleanup.classifyStorageInfo({
+      data: null,
+      error: { statusCode: "503" },
+    }),
+    "unavailable",
+  );
+  assert.equal(
+    api.cleanup.classifyStorageInfo({
+      data: null,
+      error: { message: "lost" },
+    }),
+    "unknown",
+  );
+  assert.equal(
+    api.cleanup.classifyStorageInfo({
+      data: { size: 1200, contentType: "image/png" },
+      error: null,
+    }),
+    "present",
+  );
+  const reserved = await api.prepareProductUpload("png");
+  api.world.files.delete(reserved.path);
+  assert.equal(await reserved.confirm(), "missing");
+  api.world.storageStatus = 403;
+  assert.equal(await reserved.confirm(), "forbidden");
+  api.world.storageStatus = 503;
+  assert.equal(await reserved.confirm(), "unavailable");
+  api.world.storageThrow = true;
+  assert.equal(await reserved.confirm(), "unknown");
+  api.world.files.add(reserved.path);
+  assert.equal(await reserved.confirm(), "present");
+  const sameVersion = await api.confirmProduct(
+    productId,
+    form({
+      image_path: photo,
+      image_alt: "바꾼 설명",
+      is_published: "true",
+      version,
+    }),
+  );
+  assert.equal(sameVersion.unchanged, true);
+  assert.match(sameVersion.message, /수정 전 버전 그대로/);
+  assert.equal(api.world.products[0].image_alt, "기존 사진");
+  assert.equal(api.world.writes, 0);
+  assert.equal(api.world.storageRemoves.length, 0);
+  api.world.products[0].name = "테스트 다른버전";
+  api.world.products[0].updated_at = "2026-11-20T02:00:00.000001+00:00";
+  const drifted = await api.confirmProduct(
+    productId,
+    form({
+      image_path: otherPhoto,
+      image_alt: "새 사진",
+      is_published: "true",
+      version,
+    }),
+  );
+  assert.equal(drifted.state, "conflict");
+  assert.match(drifted.message, /성공했는지는 알 수 없습니다/);
+  assert.equal(drifted.message.includes("반영되지 않았습니다"), false);
+  assert.equal(drifted.message.includes("저장했습니다"), false);
+  assert.equal(api.world.writes, 0);
+  assert.equal(api.world.storageRemoves.length, 0);
+  api.world.products[0].name = "테스트 카드";
+  api.world.products[0].image_path = otherPhoto;
+  api.world.products[0].image_alt = "새 사진";
+  api.world.products[0].updated_at = "2026-11-20T03:00:00.000001+00:00";
+  const writes = api.world.writes;
+  const removes = api.world.storageRemoves.length;
+  const matched = await api.confirmProduct(
+    productId,
+    form({
+      image_path: otherPhoto,
+      image_alt: "새 사진",
+      is_published: "true",
+      version,
+    }),
+  );
+  assert.equal(matched.state, "saved");
+  assert.equal(matched.row.image_path, otherPhoto);
+  assert.equal(api.world.writes, writes);
+  assert.equal(api.world.storageRemoves.length, removes);
+  assert.equal(api.world.files.has(photo), true);
+  const cleanup = api.cleanup.cleanupAction(
+    photo,
+    "99999999-9999-4999-8999-999999999999",
+  );
+  assert.equal(await cleanup(), true);
+  assert.equal(api.world.writes, writes);
+  assert.equal(api.world.files.has(photo), false);
+  assert.equal(api.world.files.has(otherPhoto), true);
+  assert.equal(api.world.products[0].image_path, otherPhoto);
 });
 
 test("고객 화면 문구에 구매 버튼을 만들지 않는다", () => {
@@ -611,6 +785,19 @@ test("고객 화면 문구에 구매 버튼을 만들지 않는다", () => {
   assert.equal(pages.includes("결제하기"), false);
   assert.match(editor, /삭제 결과 다시 확인/);
   assert.match(editor, /사진 정리 다시 시도/);
+  assert.match(editor, /사진 정리 버튼으로만 지웁니다/);
+  assert.match(editor, /업로드된 파일이 없습니다/);
+  assert.equal(editor.includes("저장된 상품은 바꾸지 않았습니다"), false);
+  assert.equal(editor.includes("await remaining()"), false);
+  assert.equal(
+    editor.includes("if (uploaded.current) return uploaded.current"),
+    false,
+  );
+  const lookup = readFileSync(new URL("lib/products/upload.ts", root), "utf8");
+  assert.match(lookup, /사진 조회 권한이 없습니다/);
+  assert.match(lookup, /일시적으로 확인하지 못했습니다/);
+  assert.match(lookup, /사진 조회 응답을 확인하지 못했습니다/);
+  assert.match(lookup, /업로드된 파일이 없습니다/);
   assert.match(
     readFileSync(new URL("components/admin/menu-tabs.tsx", root), "utf8"),
     /타로샵 상품/,

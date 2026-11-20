@@ -93,6 +93,9 @@ let admin = true;
 let listFail = false;
 let customerEmpty = false;
 let loseResponse = false;
+let dropWrite = false;
+let storageRemoves = 0;
+let storageInfoMode = "";
 let writeDelay = 0;
 let writes = 0;
 let writeGate = null;
@@ -215,12 +218,26 @@ async function handle(req, res) {
     const path = decodeURIComponent(
       url.pathname.split("/public-images/")[1] || "",
     );
-    if (!path.startsWith("products/")) {
+    const bucketDelete =
+      req.method === "DELETE" &&
+      url.pathname.replace(/\/$/, "").endsWith("/object/public-images");
+    if (!bucketDelete && !path.startsWith("products/")) {
       res.writeHead(400);
       res.end(JSON.stringify({ message: "path" }));
       return;
     }
     if (url.pathname.includes("/object/info/")) {
+      if (storageInfoMode) {
+        const mode = storageInfoMode;
+        storageInfoMode = "";
+        if (mode === "close") {
+          req.socket.destroy();
+          return;
+        }
+        res.writeHead(Number(mode));
+        res.end(JSON.stringify({ message: mode, statusCode: mode }));
+        return;
+      }
       if (role !== "admin" || !files.has(path)) {
         res.writeHead(404);
         res.end("{}");
@@ -245,11 +262,16 @@ async function handle(req, res) {
         res.end(JSON.stringify({ message: "exists" }));
         return;
       }
-      files.set(path, raw);
+      const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+      const imageStart = raw.indexOf(png);
+      const image = imageStart >= 0 ? raw.subarray(imageStart) : raw;
+      const imageEnd = image.indexOf("\r\n--");
+      files.set(path, imageEnd >= 0 ? image.subarray(0, imageEnd) : image);
       res.end(JSON.stringify({ Key: path }));
       return;
     }
     if (req.method === "DELETE") {
+      storageRemoves += 1;
       if (role !== "admin") {
         res.writeHead(401);
         res.end("{}");
@@ -264,6 +286,7 @@ async function handle(req, res) {
       res.end("[]");
       return;
     }
+    if (files.has(path)) res.setHeader("Content-Type", "image/png");
     res.writeHead(files.has(path) ? 200 : 404);
     res.end(files.get(path) || "");
     return;
@@ -302,6 +325,11 @@ async function handle(req, res) {
     return;
   }
   if (["POST", "PATCH", "DELETE"].includes(req.method || "")) {
+    if (dropWrite) {
+      dropWrite = false;
+      req.socket.destroy();
+      return;
+    }
     if (writeDelay) await delay(writeDelay);
     writes += 1;
     const body = JSON.parse(raw.toString() || "{}");
@@ -773,6 +801,144 @@ try {
   await go(`/shop/${createdId}`);
   await text("상품을 찾을 수 없습니다.");
   await absent("응답 유실 설명");
+  const selectImage = async (name, color, width, height) => {
+    await page.evaluate(
+      `(async()=>{const c=document.createElement('canvas');c.width=${width};c.height=${height};const x=c.getContext('2d');x.fillStyle=${JSON.stringify(color)};x.fillRect(0,0,c.width,c.height);const blob=await new Promise(r=>c.toBlob(r,'image/png'));const data=new DataTransfer();data.items.add(new File([blob],${JSON.stringify(name)},{type:'image/png'}));const el=Array.from(document.querySelectorAll('input[type=file]')).find(e=>e.checkVisibility()&&!e.disabled);el.files=data.files;el.dispatchEvent(new Event('change',{bubbles:true}));})()`,
+    );
+    await until(
+      () =>
+        page.evaluate(
+          `(()=>{const input=Array.from(document.querySelectorAll('input[type=file]')).find(e=>e.checkVisibility());const image=document.querySelector('[data-product-photo] img');return input?.files?.[0]?.name===${JSON.stringify(name)}&&image?.src.startsWith('blob:')&&image.naturalWidth===${width}&&image.naturalHeight===${height}})()`,
+        ),
+      `preview ${name}`,
+    );
+  };
+  await go(`/admin/shop-products/${plainId}`);
+  await text("상품 편집");
+  await selectImage("a.png", "#224466", 24, 24);
+  await page.fill("image_alt", "사진 가");
+  const pathsBeforeA = new Set(files.keys());
+  const writesBeforeA = writes;
+  const removesBeforeA = storageRemoves;
+  await page.button("저장 전 확인");
+  dropWrite = true;
+  await confirm();
+  await text("결과를 확인하지 못했습니다.");
+  const pathA = [...files.keys()].find((key) => !pathsBeforeA.has(key));
+  assert.ok(pathA);
+  assert.equal(products.find((row) => row.id === plainId).image_path, null);
+  assert.equal(writes, writesBeforeA);
+  assert.equal(storageRemoves, removesBeforeA);
+  storageInfoMode = "403";
+  await page.button("저장 결과 다시 확인");
+  await text("수정 전 버전 그대로");
+  await text("사진 조회 권한이 없습니다");
+  assert.equal(writes, writesBeforeA);
+  assert.equal(storageRemoves, removesBeforeA);
+  assert.equal(files.has(pathA), true);
+  assert.equal(products.find((row) => row.id === plainId).image_path, null);
+  await selectImage("b.png", "#884422", 30, 18);
+  const pathsBeforeB = new Set(files.keys());
+  await page.button("저장 전 확인");
+  await confirm();
+  await text("상품을 저장했습니다.");
+  const pathB = [...files.keys()].find((key) => !pathsBeforeB.has(key));
+  assert.ok(pathB);
+  assert.notEqual(pathB, pathA);
+  assert.equal(products.find((row) => row.id === plainId).image_path, pathB);
+  assert.equal(
+    files.get(pathB)?.subarray(0, 8).toString("hex"),
+    "89504e470d0a1a0a",
+  );
+  await until(
+    () =>
+      page.evaluate(
+        `(()=>{const image=document.querySelector('[data-product-photo] img');return image?.src.includes(${JSON.stringify(pathB)})&&image.naturalWidth===30&&image.naturalHeight===18})()`,
+      ),
+    "saved preview B",
+  );
+  assert.equal(files.has(pathA), true);
+  assert.equal(files.has(pathB), true);
+  const writesAfterB = writes;
+  await page.button("사진 정리 다시 시도");
+  await text("사진 정리를 마쳤습니다.");
+  assert.equal(files.has(pathA), false);
+  assert.equal(files.has(pathB), true);
+  assert.equal(writes, writesAfterB);
+  assert.equal(storageRemoves, removesBeforeA + 1);
+  const photoId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+  const oldPath = "products/dddddddd-dddd-4ddd-8ddd-dddddddddddd.png";
+  products.push({
+    id: photoId,
+    name: "테스트 사진정리",
+    description: "사진 정리 설명",
+    price: 6000,
+    image_path: oldPath,
+    image_alt: "기존 사진",
+    is_published: false,
+    is_sold_out: false,
+    sort_order: 0,
+    created_at: stamp(),
+    updated_at: stamp(),
+  });
+  files.set(oldPath, Buffer.from("old-photo"));
+  await go(`/admin/shop-products/${photoId}`);
+  await text("상품 편집");
+  await selectImage("c.png", "#336633", 28, 20);
+  const pathsBeforeC = new Set(files.keys());
+  const removesBeforeReplace = storageRemoves;
+  loseResponse = true;
+  const writesBeforeReplace = writes;
+  await page.button("저장 전 확인");
+  await confirm();
+  await text("결과를 확인하지 못했습니다.");
+  const pathC = [...files.keys()].find((key) => !pathsBeforeC.has(key));
+  assert.ok(pathC);
+  assert.equal(products.find((row) => row.id === photoId).image_path, pathC);
+  assert.equal(writes, writesBeforeReplace + 1);
+  assert.equal(storageRemoves, removesBeforeReplace);
+  assert.equal(files.has(oldPath), true);
+  assert.equal(files.has(pathC), true);
+  await page.button("저장 결과 다시 확인");
+  await text("사진 정리 버튼으로만 지웁니다");
+  assert.equal(writes, writesBeforeReplace + 1);
+  assert.equal(storageRemoves, removesBeforeReplace);
+  assert.equal(files.has(oldPath), true);
+  await page.button("사진 정리 다시 시도");
+  await text("사진 정리를 마쳤습니다.");
+  assert.equal(files.has(oldPath), false);
+  assert.equal(files.has(pathC), true);
+  assert.equal(writes, writesBeforeReplace + 1);
+  assert.equal(storageRemoves, removesBeforeReplace + 1);
+  loseResponse = true;
+  await page.button("삭제 전 확인");
+  await confirm();
+  await text("삭제 결과를 확인하지 못했습니다.");
+  const writesAfterDelete = writes;
+  const removesAfterDelete = storageRemoves;
+  assert.equal(
+    products.some((row) => row.id === photoId),
+    false,
+  );
+  assert.equal(files.has(pathC), true);
+  await page.button("삭제 결과 다시 확인");
+  await text("사진 정리 버튼으로만 지웁니다");
+  assert.equal(
+    await page.evaluate("location.pathname"),
+    `/admin/shop-products/${photoId}`,
+  );
+  assert.equal(writes, writesAfterDelete);
+  assert.equal(storageRemoves, removesAfterDelete);
+  assert.equal(files.has(pathC), true);
+  await page.button("사진 정리 다시 시도");
+  await until(
+    () => page.evaluate("location.pathname === '/admin/shop-products'"),
+    "photo delete list",
+  );
+  await text("상품을 삭제했습니다.");
+  assert.equal(files.has(pathC), false);
+  assert.equal(writes, writesAfterDelete);
+  assert.equal(storageRemoves, removesAfterDelete + 1);
   await go("/admin/shop-products/new");
   await page.fill("name", "테스트 늦은신규");
   await page.fill("description", "늦은 응답 설명");

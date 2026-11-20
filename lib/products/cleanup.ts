@@ -11,6 +11,31 @@ import {
   type ProductRecord,
 } from "./rules";
 
+export type UploadLookup =
+  "present" | "missing" | "rejected" | "forbidden" | "unavailable" | "unknown";
+
+function storageStatus(error: unknown) {
+  if (!error || typeof error !== "object") return null;
+  const record = error as { status?: unknown; statusCode?: unknown };
+  const raw = record.status ?? record.statusCode;
+  const status = typeof raw === "number" ? raw : Number(raw);
+  return Number.isInteger(status) ? status : null;
+}
+
+// 파일 부재는 조회 오류와 다르다. 권한·일시 장애·응답 유실은 부재로 보지 않는다.
+export function classifyStorageInfo(result: {
+  data: { size?: number; contentType?: string | null } | null;
+  error: unknown;
+}): UploadLookup {
+  if (!result.error && result.data)
+    return imageMetadataValid(result.data) ? "present" : "rejected";
+  const status = storageStatus(result.error);
+  if (status === 400 || status === 404) return "missing";
+  if (status === 401 || status === 403) return "forbidden";
+  if (status === 408 || status === 429 || status === 503) return "unavailable";
+  return "unknown";
+}
+
 // 지울 경로는 서버가 발급한 값만 닫아 둔다. 브라우저가 보낸 경로는 쓰지 않는다.
 export function cleanupAction(
   path: string,
@@ -69,8 +94,7 @@ export function confirmUploadAction(path: string, user: string) {
     if (!admin || admin.userId !== user || !imagePath(path)) return "rejected";
     try {
       const info = await (await createClient()).storage.from(bucket).info(path);
-      if (info.error || !info.data) return "missing";
-      return imageMetadataValid(info.data) ? "present" : "rejected";
+      return classifyStorageInfo(info);
     } catch {
       return "unknown";
     }

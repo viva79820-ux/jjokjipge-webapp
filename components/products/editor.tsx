@@ -14,7 +14,11 @@ import {
   type Result,
 } from "@/lib/products/actions";
 import { submitProductAttempt } from "@/lib/products/submit";
-import { inspectImage, uploadImage } from "@/lib/products/upload";
+import {
+  inspectImage,
+  uploadImage,
+  uploadLookupMessage,
+} from "@/lib/products/upload";
 import {
   formatWon,
   parseProduct,
@@ -84,11 +88,20 @@ export function ProductEditor({
   const visible = useRef(true);
   const pendingHref = useRef<string | null>(null);
   const uploaded = useRef<string | null>(null);
+  const uploadedFile = useRef<File | null>(null);
   const uploadToken = useRef<
     ((expected?: FormData) => Promise<boolean>) | null
   >(null);
   const confirmToken = useRef<
-    (() => Promise<"present" | "missing" | "rejected" | "unknown">) | null
+    | (() => Promise<
+        | "present"
+        | "missing"
+        | "rejected"
+        | "forbidden"
+        | "unavailable"
+        | "unknown"
+      >)
+    | null
   >(null);
   const originalCleanup = useRef(initialCleanup);
   const cleanupRef = useRef<(() => Promise<boolean>) | undefined>(undefined);
@@ -134,6 +147,7 @@ export function ProductEditor({
       setAttemptMode("");
       attemptRef.current = null;
       uploaded.current = null;
+      uploadedFile.current = null;
       uploadToken.current = null;
       confirmToken.current = null;
       setDraftId("");
@@ -201,6 +215,7 @@ export function ProductEditor({
     setSortOrder(String(row.sort_order));
     setFile(null);
     uploaded.current = null;
+    uploadedFile.current = null;
     uploadToken.current = null;
     confirmToken.current = null;
     if (fileRef.current) fileRef.current.value = "";
@@ -282,7 +297,7 @@ export function ProductEditor({
       keepCleanup(result.cleanup);
       setMessage(
         result.cleanup
-          ? "상품은 삭제됐습니다. 사진 정리는 끝내지 못했습니다. 정리만 다시 시도해 주세요."
+          ? "상품 삭제를 확인했습니다. 사진은 사진 정리 버튼으로만 지웁니다."
           : result.message,
       );
       focusStatus();
@@ -300,7 +315,7 @@ export function ProductEditor({
         leaving.current = true;
         setMessage(
           result.cleanup
-            ? "상품을 저장했습니다. 이전 사진 정리가 남았습니다."
+            ? "상품을 저장했습니다. 이전 사진은 사진 정리 버튼으로만 지웁니다."
             : result.message,
         );
         setConflict(false);
@@ -312,7 +327,7 @@ export function ProductEditor({
       applyRow(result.row);
       setMessage(
         result.cleanup
-          ? "상품을 저장했습니다. 이전 사진 정리는 끝내지 못했습니다. 정리만 다시 시도해 주세요."
+          ? "상품을 저장했습니다. 이전 사진은 사진 정리 버튼으로만 지웁니다."
           : result.message,
       );
       setConflict(false);
@@ -363,7 +378,8 @@ export function ProductEditor({
       const attempt = await submitProductAttempt(
         {
           upload: async () => {
-            if (uploaded.current) return uploaded.current;
+            if (uploaded.current && uploadedFile.current === file)
+              return uploaded.current;
             let ext = "";
             try {
               ext = (await inspectImage(file!)).ext;
@@ -379,14 +395,28 @@ export function ProductEditor({
                 Error("관리자 업로드 권한을 확인해 주세요."),
                 { definite: true },
               );
+            const previousCleanup = uploadToken.current;
+            const replacing = Boolean(
+              uploaded.current && uploadedFile.current !== file,
+            );
             uploadToken.current = reserved.cleanup;
             confirmToken.current = reserved.confirm;
             uploaded.current = reserved.path;
+            uploadedFile.current = file;
+            if (replacing && previousCleanup) {
+              const retire = previousCleanup;
+              keepCleanup(() => retire());
+            }
             try {
               return await uploadImage(createClient(), file!, reserved.path);
             } catch (error) {
-              let uploadState: "present" | "missing" | "rejected" | "unknown" =
-                "unknown";
+              let uploadState:
+                | "present"
+                | "missing"
+                | "rejected"
+                | "forbidden"
+                | "unavailable"
+                | "unknown" = "unknown";
               try {
                 uploadState = await reserved.confirm();
               } catch {
@@ -394,6 +424,9 @@ export function ProductEditor({
               }
               if (uploadState === "missing") {
                 uploaded.current = null;
+                uploadedFile.current = null;
+                uploadToken.current = null;
+                confirmToken.current = null;
                 throw Object.assign(Error("사진 업로드에 실패했습니다."), {
                   definite: true,
                 });
@@ -413,6 +446,7 @@ export function ProductEditor({
         Boolean(file),
       );
       uploaded.current = attempt.uploaded;
+      if (!attempt.uploaded) uploadedFile.current = null;
       const savedForm = form(
         baseline.current ? "update" : "create",
         attempt.uploaded || path,
@@ -450,50 +484,30 @@ export function ProductEditor({
     lock.current = true;
     setBusy(true);
     try {
+      let photo = "";
       if (uploaded.current && confirmToken.current && mode !== "delete") {
-        let uploadState: "present" | "missing" | "rejected" | "unknown" =
-          "unknown";
         try {
-          uploadState = await confirmToken.current();
+          photo = await confirmToken.current();
         } catch {
-          uploadState = "unknown";
-        }
-        if (uploadState === "unknown") {
-          setMessage(
-            "업로드 결과를 아직 확인하지 못했습니다. 파일은 삭제하지 않습니다.",
-          );
-          focusStatus();
-          return;
-        }
-        if (uploadState === "missing") {
-          uploaded.current = null;
-          setUncertain(false);
-          setMessage(
-            "업로드된 파일을 찾지 못했습니다. 저장된 상품은 바꾸지 않았습니다.",
-          );
-          focusStatus();
-          return;
+          photo = "unknown";
         }
       }
       const checked = await confirmProduct(id, attempt);
+      const photoNote =
+        photo && photo !== "present" ? uploadLookupMessage(photo) : "";
       if (checked.state === "unknown") {
-        setMessage(
+        const base =
           mode === "delete"
             ? "삭제 결과를 확인하지 못했습니다. 다시 확인해 주세요."
-            : checked.message,
-        );
+            : "저장 결과를 확인하지 못했습니다. 입력은 유지하고 다시 확인해 주세요.";
+        setMessage(photoNote ? `${photoNote} ${base}` : base);
         focusStatus();
         return;
       }
       if (mode === "delete") {
         if (checked.deleted) {
           const pending = originalCleanup.current;
-          let remaining = pending ? () => pending(attempt) : undefined;
-          try {
-            if (remaining && (await remaining())) remaining = undefined;
-          } catch {
-            /* 상품 삭제를 다시 보내지 않고 정리만 남긴다. */
-          }
+          const remaining = pending ? () => pending(attempt) : undefined;
           finish({ ...checked, cleanup: remaining });
           return;
         }
@@ -510,8 +524,33 @@ export function ProductEditor({
         focusStatus();
         return;
       }
-      if (checked.state === "rejected" && !checked.missing) {
-        setMessage(checked.message);
+      if (checked.unchanged) {
+        forgetAttempt();
+        setUncertain(false);
+        setConflict(false);
+        if (photo === "missing") {
+          uploaded.current = null;
+          uploadedFile.current = null;
+          uploadToken.current = null;
+          confirmToken.current = null;
+          setMessage(
+            "업로드된 파일이 없습니다. 상품은 수정 전 버전 그대로입니다. 다시 저장할 수 있습니다.",
+          );
+        } else
+          setMessage(
+            photoNote ? `${checked.message} ${photoNote}` : checked.message,
+          );
+        focusStatus();
+        return;
+      }
+      if (
+        checked.state === "rejected" &&
+        !checked.missing &&
+        !checked.unchanged
+      ) {
+        setMessage(
+          photoNote ? `${checked.message} ${photoNote}` : checked.message,
+        );
         focusStatus();
         return;
       }
@@ -521,30 +560,34 @@ export function ProductEditor({
           previous && previous !== checked.row.image_path
             ? originalCleanup.current
             : undefined;
-        let remaining = pending ? () => pending(attempt) : undefined;
-        try {
-          if (remaining && (await remaining())) remaining = undefined;
-        } catch {
-          /* 정리 실패는 저장 확인과 구분한다. */
-        }
+        const remaining = pending ? () => pending(attempt) : undefined;
         if (checked.recovery) originalCleanup.current = checked.recovery;
         finish({
           ...checked,
           cleanup: remaining,
-          message: "저장 결과를 확인했습니다.",
+          message: photoNote
+            ? `저장 결과를 확인했습니다. ${photoNote}`
+            : "저장 결과를 확인했습니다.",
         });
         return;
       }
       forgetAttempt();
       setUncertain(false);
       if (checked.state === "conflict") setConflict(true);
-      setMessage(
-        checked.missing
-          ? "저장은 반영되지 않았습니다. 입력은 유지됩니다. 다시 저장할 수 있습니다."
-          : uploaded.current
-            ? "저장은 반영되지 않았습니다. 업로드한 사진은 보존했습니다. 다시 저장할 수 있습니다."
+      if (checked.missing && mode === "create")
+        setMessage(
+          "저장은 반영되지 않았습니다. 입력은 유지됩니다. 다시 저장할 수 있습니다.",
+        );
+      else if (checked.state === "conflict" || checked.missing)
+        setMessage(
+          photoNote ? `${checked.message} ${photoNote}` : checked.message,
+        );
+      else
+        setMessage(
+          uploaded.current
+            ? `${checked.message} 업로드한 사진은 보존했습니다.`
             : checked.message,
-      );
+        );
       focusStatus();
     } catch {
       setMessage(
@@ -799,11 +842,16 @@ export function ProductEditor({
                 variant="secondary"
                 className="mt-3"
                 onClick={() => {
+                  const retire = uploadToken.current;
+                  const hadUpload = uploaded.current;
                   setFile(null);
                   setPath("");
                   uploaded.current = null;
+                  uploadedFile.current = null;
                   uploadToken.current = null;
                   confirmToken.current = null;
+                  if (hadUpload && retire && !uncertain)
+                    keepCleanup(() => retire());
                   if (fileRef.current) fileRef.current.value = "";
                 }}
               >
@@ -942,7 +990,11 @@ export function ProductEditor({
         </Button>
       )}
       {cleanupPending && !removed && (
-        <Button disabled={busy} variant="secondary" onClick={retryCleanup}>
+        <Button
+          disabled={busy || uncertain}
+          variant="secondary"
+          onClick={retryCleanup}
+        >
           사진 정리 다시 시도
         </Button>
       )}
