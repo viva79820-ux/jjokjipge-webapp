@@ -10,7 +10,7 @@ export function SiteHeaderGate() {
   return <SiteHeader />;
 }
 
-export function BottomTabsGate() {
+export function BottomTabsGate({ signedIn }: { signedIn: boolean }) {
   if (isCounselorDetailPath(usePathname())) return null;
-  return <BottomTabs />;
+  return <BottomTabs signedIn={signedIn} />;
 }
