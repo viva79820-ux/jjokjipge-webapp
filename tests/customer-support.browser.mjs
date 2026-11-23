@@ -550,7 +550,7 @@ try {
     await evaluate(
       "document.querySelector('header > div > a').innerText.replace(/\\s+/g,' ').trim()",
     ),
-    "쪽집게천사 운명나라 · 동성로 사주·타로·작명",
+    "쪽집게천사 운세통",
   );
   assert.equal(
     await evaluate(
