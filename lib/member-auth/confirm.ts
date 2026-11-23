@@ -1,6 +1,6 @@
 import { safeNext } from "./redirect";
 
-const tokenPattern = /^[0-9a-f]{32,128}$/i;
+const tokenPattern = /^(?:pkce_)?[0-9a-fA-F]{32,128}$/;
 
 const paths = {
   email: "/mypage",

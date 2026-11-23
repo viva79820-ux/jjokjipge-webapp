@@ -1191,9 +1191,10 @@ test("a normal member is not an admin and member code does not use the secret ke
   assert.equal(source.includes("exchangeCodeForSession"), true);
 });
 
-test("email confirmation keeps the token until the confirm button and rejects reuse or bad redirects", async () => {
+test("email confirmation keeps ordinary and PKCE tokens until the confirm button and rejects reuse or bad redirects", async () => {
   const confirm = load("../lib/member-auth/confirm.ts", {});
   const token = "ab".repeat(28);
+  const pkceToken = `pkce_${token}`;
   const preview = confirm.readConfirmLink({
     tokenHashes: [token],
     types: ["email"],
@@ -1203,12 +1204,12 @@ test("email confirmation keeps the token until the confirm button and rejects re
   assert.equal(preview.tokenHash, token);
   assert.equal(preview.path, "/mypage");
   const recoveryPreview = confirm.readConfirmLink({
-    tokenHashes: [token],
+    tokenHashes: [pkceToken],
     types: ["recovery"],
     nextValues: [],
   });
   assert.equal(recoveryPreview.ok, true);
-  assert.equal(recoveryPreview.tokenHash, token);
+  assert.equal(recoveryPreview.tokenHash, pkceToken);
   assert.equal(recoveryPreview.path, "/auth/update-password");
 
   const blocked = [
@@ -1245,6 +1246,22 @@ test("email confirmation keeps the token until the confirm button and rejects re
     }).reason,
     "invalid",
   );
+  for (const invalidToken of [
+    `PKCE_${token}`,
+    `pkce_pkce_${token}`,
+    "pkce_",
+    `pkce_${"ab".repeat(15)}`,
+    `pkce_${"ab".repeat(65)}`,
+  ]) {
+    assert.equal(
+      confirm.readConfirmLink({
+        tokenHashes: [invalidToken],
+        types: ["email"],
+        nextValues: ["/mypage"],
+      }).reason,
+      "invalid",
+    );
+  }
 
   const signup = harness();
   try {
@@ -1279,16 +1296,21 @@ test("email confirmation keeps the token until the confirm button and rejects re
       recovery.confirmEmail(
         {},
         form([
-          ["token_hash", token],
+          ["token_hash", pkceToken],
           ["type", "recovery"],
         ]),
       ),
     );
     assert.equal(result.redirect, "/auth/update-password");
-    assert.equal(
-      recovery.calls.find((call) => call[0] === "verifyOtp")[1].type,
-      "recovery",
+    assert.deepEqual(
+      recovery.calls.find((call) => call[0] === "verifyOtp")[1],
+      {
+        token_hash: pkceToken,
+        type: "recovery",
+      },
     );
+    assert.equal(JSON.stringify(recovery.logs).includes(pkceToken), false);
+    assert.equal(JSON.stringify(result).includes(pkceToken), false);
   } finally {
     recovery.restore();
   }
@@ -1321,7 +1343,7 @@ test("email confirmation keeps the token until the confirm button and rejects re
       expired.confirmEmail(
         {},
         form([
-          ["token_hash", token],
+          ["token_hash", pkceToken],
           ["type", "email"],
           ["next", "/mypage"],
         ]),
@@ -1331,7 +1353,7 @@ test("email confirmation keeps the token until the confirm button and rejects re
       expired.confirmEmail(
         {},
         form([
-          ["token_hash", token],
+          ["token_hash", pkceToken],
           ["type", "email"],
           ["next", "/mypage"],
         ]),
@@ -1344,7 +1366,7 @@ test("email confirmation keeps the token until the confirm button and rejects re
       expired.calls.filter((call) => call[0] === "verifyOtp").length,
       2,
     );
-    assert.equal(JSON.stringify(expired.logs).includes(token), false);
+    assert.equal(JSON.stringify(expired.logs).includes(pkceToken), false);
   } finally {
     expired.restore();
   }
