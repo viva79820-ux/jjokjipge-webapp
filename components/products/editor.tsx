@@ -1190,7 +1190,30 @@ export function ProductDeletedCleanup({
     "상품 삭제를 확인했습니다. 사진은 사진 정리 버튼으로만 지웁니다.",
   );
   const router = useRouter();
+  const routerRef = useRef(router);
+  const visible = useRef(true);
+  const pendingHref = useRef<string | null>(null);
   const listHref = productListUrl(true, page, status);
+  useLayoutEffect(() => {
+    visible.current = true;
+    const href = pendingHref.current;
+    if (href) {
+      pendingHref.current = null;
+      routerRef.current.replace(href);
+    }
+    return () => {
+      visible.current = false;
+    };
+  }, []);
+  function replaceWhenShown(href: string) {
+    routerRef.current = router;
+    if (!visible.current) {
+      pendingHref.current = href;
+      return;
+    }
+    pendingHref.current = null;
+    router.replace(href);
+  }
   if (!jobs?.length) return <ProductMissing admin />;
   return (
     <div className="space-y-4" data-product-editor="removed">
@@ -1216,7 +1239,7 @@ export function ProductDeletedCleanup({
                 return;
               }
               setMessage("상품을 삭제했습니다.");
-              router.replace(productListUrl(true, page, status, "deleted"));
+              replaceWhenShown(productListUrl(true, page, status, "deleted"));
             } else {
               setMessage(
                 "상품 삭제는 반영됐습니다. 사진 정리만 다시 시도해 주세요.",

@@ -97,6 +97,7 @@ let dropWrite = false;
 let storageRemoves = 0;
 let productDeletes = 0;
 let cleanupFail = false;
+let storageGate = null;
 let storageInfoMode = "";
 let writeDelay = 0;
 let writes = 0;
@@ -147,6 +148,21 @@ function sortRows(rows, order) {
     }
     return 0;
   });
+}
+function armStorageGate() {
+  let resolve;
+  const promise = new Promise((done) => {
+    resolve = done;
+  });
+  storageGate = {
+    count: 0,
+    promise,
+    release() {
+      storageGate = null;
+      resolve();
+    },
+  };
+  return storageGate;
 }
 function armGate() {
   let resolve;
@@ -283,6 +299,11 @@ async function handle(req, res) {
         res.writeHead(503);
         res.end(JSON.stringify({ message: "cleanup", statusCode: "503" }));
         return;
+      }
+      if (storageGate) {
+        const gate = storageGate;
+        gate.count += 1;
+        await gate.promise;
       }
       const paths = JSON.parse(raw.toString() || "{}").prefixes || [];
       for (const item of paths) {
@@ -1433,6 +1454,56 @@ try {
   assert.equal(writes, writesBeforePendingDelete + 1);
   assert.equal(productDeletes, deletesBeforePending + 1);
   assert.equal(storageRemoves, removesBeforePendingDelete + 2);
+  await go("/admin/shop-products/new");
+  const lateCleanup = await registerOrphanProduct({
+    name: "테스트 늦은정리",
+    description: "늦은 정리 설명",
+    price: "4600",
+    alt: "늦은 정리 사진",
+    orphanName: "late-orphan.png",
+    orphanColor: "#553311",
+    keptName: "late-kept.png",
+    keptColor: "#113355",
+  });
+  const deletesBeforeLate = productDeletes;
+  await page.button("삭제 전 확인");
+  await confirm();
+  await until(
+    () =>
+      page.evaluate(
+        `document.querySelector('[data-product-editor="removed"]')?.checkVisibility() === true`,
+      ),
+    "late cleanup screen",
+  );
+  await text("사진은 사진 정리 버튼으로만 지웁니다");
+  assert.equal(productDeletes, deletesBeforeLate + 1);
+  assert.equal(files.has(lateCleanup.orphan), true);
+  assert.equal(files.has(lateCleanup.kept), false);
+  const lateGate = armStorageGate();
+  const postsBeforeLate = postCount;
+  await page.button("사진 정리 다시 시도");
+  await until(() => lateGate.count === 1, "held last cleanup");
+  await clickLink("예약 관리");
+  await until(
+    () => page.evaluate("location.pathname === '/admin/reservations'"),
+    "left during cleanup",
+  );
+  lateGate.release();
+  await until(() => postCount > postsBeforeLate, "cleanup action finished");
+  await until(
+    () => files.has(lateCleanup.orphan) === false,
+    "late orphan cleaned",
+  );
+  const lateWatch = Date.now();
+  while (Date.now() - lateWatch < 1000) {
+    assert.equal(
+      await page.evaluate("location.pathname"),
+      "/admin/reservations",
+    );
+    await delay(100);
+  }
+  assert.equal(productDeletes, deletesBeforeLate + 1);
+  assert.equal(files.has(lateCleanup.kept), false);
   const widths = [
     [360, false, 16],
     [390, false, 16],
