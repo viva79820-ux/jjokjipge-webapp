@@ -511,6 +511,24 @@ test("lookup files stay inside the reservation module and do not cache personal 
   );
   assert.match(result, /bookingConfig/);
   assert.doesNotMatch(result, /000-0000-0000|예시은행|자동 취소|메일을 보냈/);
+  for (const text of [
+    "예약 정보 입력",
+    "예약 상태 안내",
+    "예약번호를 잊으셨나요?",
+    "로그인",
+    "매장 문의",
+  ])
+    assert.match(form, new RegExp(text));
+  for (const status of [
+    "pending_payment",
+    "confirmed",
+    "completed",
+    "cancelled",
+  ])
+    assert.match(form, new RegExp(`status: "${status}"`));
+  assert.match(form, /statusLabels\[status\]/);
+  assert.match(form, /href="\/login"/);
+  assert.match(form, /href=\{`tel:\$\{siteConfig\.phone\}`\}/);
   assert.doesNotMatch(
     `${form}\n${result}\n${page}`,
     /localStorage|sessionStorage|document\.cookie|searchParams|dangerouslySetInnerHTML/,
