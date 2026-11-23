@@ -782,7 +782,11 @@ test("고객 화면 문구에 구매 버튼을 만들지 않는다", () => {
     new URL("components/products/editor.tsx", root),
     "utf8",
   );
-  assert.match(pages, /href="\/shop\/cart"/);
+  assert.match(
+    pages +
+      readFileSync(new URL("components/products/cart-link.tsx", root), "utf8"),
+    /href="\/shop\/cart"/,
+  );
   assert.equal(pages.includes("구매하기"), false);
   assert.equal(pages.includes("결제하기"), false);
   assert.equal(pages.includes("구매 기능 준비 중"), false);

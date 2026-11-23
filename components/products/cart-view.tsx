@@ -42,12 +42,14 @@ function CartHeader() {
 function QuantityControls({
   line,
   disabled,
+  quantityLocked,
   error,
   onSubmit,
   onRemove,
 }: {
   line: CartLine;
   disabled: boolean;
+  quantityLocked: boolean;
   error: string;
   onSubmit: (line: CartLine, value: string) => void;
   onRemove: (line: CartLine) => void;
@@ -57,6 +59,7 @@ function QuantityControls({
       className="flex flex-wrap items-center gap-2"
       onSubmit={(event) => {
         event.preventDefault();
+        if (quantityLocked) return;
         const quantity = new FormData(event.currentTarget).get("quantity");
         onSubmit(line, typeof quantity === "string" ? quantity : "");
       }}
@@ -73,11 +76,15 @@ function QuantityControls({
         inputMode="numeric"
         autoComplete="off"
         defaultValue={String(line.quantity)}
-        disabled={disabled}
+        disabled={disabled || quantityLocked}
         aria-invalid={error ? true : undefined}
         className="min-h-11 w-20 min-w-0 rounded-input border border-border bg-surface px-3 text-body disabled:opacity-60"
       />
-      <Button type="submit" variant="secondary" disabled={disabled}>
+      <Button
+        type="submit"
+        variant="secondary"
+        disabled={disabled || quantityLocked}
+      >
         수량 변경
       </Button>
       <Button
@@ -228,12 +235,13 @@ export function CartView() {
     setFieldError(null);
     setRetryToken((value) => value + 1);
   }
-  const controls = (line: CartLine) => (
+  const controls = (line: CartLine, quantityLocked = false) => (
     <div className="space-y-2">
       <QuantityControls
         key={`${line.id}-${line.quantity}`}
         line={line}
         disabled={busy}
+        quantityLocked={quantityLocked}
         error={fieldError?.id === line.id ? fieldError.text : ""}
         onSubmit={change}
         onRemove={remove}
@@ -305,7 +313,10 @@ export function CartView() {
                     금액 {formatWon(row.lineTotal)}
                   </p>
                 )}
-                {controls({ id: row.id, quantity: row.quantity })}
+                {controls(
+                  { id: row.id, quantity: row.quantity },
+                  row.kind === "sold-out",
+                )}
               </article>
             ))}
           </div>

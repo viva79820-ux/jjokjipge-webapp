@@ -629,7 +629,7 @@ try {
   );
   assert.equal(
     await page.evaluate(
-      `[...document.querySelectorAll("a")].find((node) => node.checkVisibility() && node.textContent.trim() === "장바구니").getAttribute("href")`,
+      `[...document.querySelectorAll("a")].find((node) => node.checkVisibility() && (node.getAttribute("aria-label") || "").startsWith("장바구니")).getAttribute("href")`,
     ),
     "/shop/cart",
   );

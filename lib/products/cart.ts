@@ -19,6 +19,7 @@ export const cartMessages = {
   loading: "장바구니를 확인하고 있습니다.",
   checkout: "주문과 결제는 준비 중입니다.",
   soldOutNote: "품절 상품은 합계에 포함되지 않습니다.",
+  soldOutAdd: "품절 상품은 장바구니에 담을 수 없습니다.",
   held: "담긴 상품",
 } as const;
 
@@ -40,7 +41,8 @@ export type CartStorage = {
   setItem(key: string, value: string): void;
 };
 
-export type CartRejectReason = "id" | "quantity" | "full" | "missing";
+export type CartRejectReason =
+  "id" | "quantity" | "full" | "missing" | "sold-out";
 
 type StoredRead =
   | { state: "empty" }
@@ -148,19 +150,29 @@ export function writeCart(storage: CartStorage, lines: CartLine[]) {
   }
 }
 
-export function addCartProduct(lines: CartLine[], id: string) {
+export function cartUnits(lines: CartLine[]) {
+  return lines.reduce((sum, line) => sum + line.quantity, 0);
+}
+
+export function addCartProduct(
+  lines: CartLine[],
+  id: string,
+  amount: unknown = 1,
+) {
   if (!uuid(id)) return { ok: false as const, reason: "id" as const };
+  const add = cartQuantity(amount);
+  if (add === null) return { ok: false as const, reason: "quantity" as const };
   const index = lines.findIndex((line) => line.id === id);
   if (index < 0) {
     if (lines.length >= maxCartLines)
       return { ok: false as const, reason: "full" as const };
     return {
       ok: true as const,
-      lines: [...lines, { id, quantity: 1 }],
-      quantity: 1,
+      lines: [...lines, { id, quantity: add }],
+      quantity: add,
     };
   }
-  const quantity = lines[index].quantity + 1;
+  const quantity = lines[index].quantity + add;
   if (cartQuantity(quantity) === null)
     return { ok: false as const, reason: "quantity" as const };
   const next = lines.slice();
@@ -189,12 +201,22 @@ export function removeCartProduct(lines: CartLine[], id: string) {
   return lines.filter((line) => line.id !== id);
 }
 
-export function storeAddedProduct(storage: CartStorage | null, id: string) {
+export function storeAddedProduct(
+  storage: CartStorage | null,
+  id: string,
+  amount: unknown = 1,
+  options?: { soldOut?: boolean },
+) {
+  if (!uuid(id)) return { state: "rejected" as const, reason: "id" as const };
+  if (cartQuantity(amount) === null)
+    return { state: "rejected" as const, reason: "quantity" as const };
+  if (options?.soldOut)
+    return { state: "rejected" as const, reason: "sold-out" as const };
   const current = readCart(storage);
   if (current.state === "storage-error")
     return { state: "storage-error" as const };
   const lines = current.state === "ready" ? current.lines : [];
-  const added = addCartProduct(lines, id);
+  const added = addCartProduct(lines, id, amount);
   if (!added.ok) return { state: "rejected" as const, reason: added.reason };
   if (!storage || !writeCart(storage, added.lines))
     return { state: "storage-error" as const };

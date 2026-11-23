@@ -67,10 +67,18 @@ function row(extra = {}) {
 
 function execute(world, query) {
   if (world.readError) return { data: null, error: world.readError };
-  const rows = world.products.filter((item) =>
+  let rows = world.products.filter((item) =>
     query.filters.every(([column, value]) => item[column] === value),
   );
-  return { data: rows[0] ?? null, error: null };
+  if (query.in) {
+    const [column, values] = query.in;
+    rows = rows.filter((item) => values.includes(item[column]));
+  }
+  if (query.single) return { data: rows[0] ?? null, error: null };
+  return {
+    data: rows.slice().sort((a, b) => (a.id < b.id ? 1 : -1)),
+    error: null,
+  };
 }
 
 function shop(world) {
@@ -102,7 +110,12 @@ function shop(world) {
                 query.filters.push([column, value]);
                 return api;
               },
+              in(column, values) {
+                query.in = [column, values];
+                return api;
+              },
               maybeSingle() {
+                query.single = true;
                 return api;
               },
               then(resolve, reject) {
@@ -347,7 +360,78 @@ test("저장된 이름과 가격은 읽지 않고 현재 가격으로 합계를 
   assert.equal(cart.readCart(saved).lines[0].quantity, 2);
 });
 
-test("장바구니 조회는 공개 상품 상세를 다시 읽고 실패해도 항목을 남긴다", async () => {
+test("선택 수량만큼 담고 품절 추가는 막으며 배지 수량을 갱신한다", () => {
+  const saved = storage();
+  const added = cart.storeAddedProduct(saved, openId, 3);
+  assert.equal(added.state, "added");
+  assert.equal(added.quantity, 3);
+  assert.equal(cart.cartUnits(added.lines), 3);
+  const more = cart.storeAddedProduct(saved, openId, "2");
+  assert.equal(more.quantity, 5);
+  const other = cart.storeAddedProduct(
+    saved,
+    "55555555-5555-4555-8555-555555555555",
+    1,
+  );
+  assert.equal(cart.cartUnits(other.lines), 6);
+  assert.equal(cart.cartUnits(cart.readCart(saved).lines), 6);
+  const blocked = cart.storeAddedProduct(saved, soldId, 4, { soldOut: true });
+  assert.equal(blocked.state, "rejected");
+  assert.equal(blocked.reason, "sold-out");
+  assert.equal(
+    JSON.stringify(cart.readCart(saved).lines).includes(soldId),
+    false,
+  );
+  const held = cart.storeAddedProduct(saved, openId, 1, { soldOut: true });
+  assert.equal(held.reason, "sold-out");
+  assert.equal(cart.readCart(saved).lines[0].quantity, 5);
+  assert.equal(saved.getItem(cart.cartStorageKey).includes("price"), false);
+  const before = saved.getItem(cart.cartStorageKey);
+  cart.storeAddedProduct(saved, soldId, 2);
+  assert.equal(cart.cartUnits(cart.readCart(saved).lines), 8);
+  const removed = cart.storeRemovedProduct(saved, soldId);
+  assert.equal(removed.state, "ready");
+  assert.equal(
+    removed.lines.some((line) => line.id === soldId),
+    false,
+  );
+  assert.equal(cart.cartUnits(removed.lines), 6);
+  const again = cart.storeRemovedProduct(saved, soldId);
+  assert.equal(again.state, "rejected");
+  assert.equal(cart.readCart(saved).lines[0].quantity, 5);
+  const capped = cart.storeAddedProduct(saved, openId, 95);
+  assert.equal(capped.reason, "quantity");
+  assert.equal(saved.getItem(cart.cartStorageKey).includes(soldId), false);
+  assert.equal(saved.getItem(cart.cartStorageKey), before);
+  const link = readFileSync(
+    new URL("components/products/cart-link.tsx", root),
+    "utf8",
+  );
+  assert.match(link, /cartUnits/);
+  assert.match(link, /useSyncExternalStore/);
+  assert.match(link, /ShoppingCart/);
+  assert.match(link, /href="\/shop\/cart"/);
+  assert.match(link, /장바구니/);
+  const add = readFileSync(
+    new URL("components/products/add-to-cart.tsx", root),
+    "utf8",
+  );
+  assert.match(add, /수량 줄이기/);
+  assert.match(add, /수량 늘리기/);
+  assert.match(add, /soldOut/);
+  assert.match(add, /cartMessages\.soldOutAdd/);
+  assert.match(add, /storeAddedProduct\(/);
+  const view = readFileSync(
+    new URL("components/products/cart-view.tsx", root),
+    "utf8",
+  );
+  assert.match(view, /quantityLocked/);
+  assert.match(view, /row\.kind === "sold-out"/);
+  assert.match(view, /삭제/);
+  assert.match(view, /disabled=\{disabled\}/);
+});
+
+test("장바구니 조회는 공개 상품을 한 번에 다시 읽고 실패해도 항목을 남긴다", async () => {
   const saved = storage();
   cart.storeAddedProduct(saved, openId);
   cart.storeAddedProduct(saved, openId);
@@ -359,14 +443,20 @@ test("장바구니 조회는 공개 상품 상세를 다시 읽고 실패해도 
   const api = shop(world);
   const loaded = await api.loadCartProducts(lines.map((line) => line.id));
   assert.equal(loaded.ok, true);
-  assert.equal(world.calls.length, 4);
-  for (const call of world.calls) {
-    assert.equal(call.columns, rules.publicDetailColumns);
-    assert.equal(
-      call.filters.find(([column]) => column === "is_published")[1],
-      true,
-    );
-  }
+  assert.equal(world.calls.length, 1);
+  assert.equal(world.publicClients, 1);
+  assert.equal(world.calls[0].columns, rules.publicDetailColumns);
+  assert.deepEqual(world.calls[0].in, ["id", lines.map((line) => line.id)]);
+  assert.equal(
+    world.calls[0].filters.find(([column]) => column === "is_published")[1],
+    true,
+  );
+  assert.equal(loaded.products[0].id, openId);
+  assert.equal(loaded.products[0].price, 12000);
+  assert.equal(loaded.products[1].id, soldId);
+  assert.equal(loaded.products[1].is_sold_out, true);
+  assert.equal(loaded.products[2], null);
+  assert.equal(loaded.products[3], null);
   const viewed = cart.cartLookupState(lines, loaded);
   assert.equal(viewed.total, 24000);
   assert.equal(viewed.rows[1].kind, "sold-out");
@@ -409,8 +499,10 @@ test("장바구니 조회는 공개 상품 상세를 다시 읽고 실패해도 
     source.indexOf("export async function publicCartProducts"),
     source.indexOf("export async function adminProductList"),
   );
-  assert.match(body, /publicProductDetail\(/);
-  assert.equal(body.includes(".from("), false);
+  assert.equal(body.includes("publicProductDetail("), false);
+  assert.equal((body.match(/\.from\(/g) || []).length, 1);
+  assert.match(body, /\.in\(/);
+  assert.match(body, /\.eq\("is_published", true\)/);
 });
 
 test("화면은 담기 합계와 세 가지 안내를 나누고 결제 버튼을 만들지 않는다", () => {
@@ -438,7 +530,10 @@ test("화면은 담기 합계와 세 가지 안내를 나누고 결제 버튼을
     "utf8",
   );
   assert.match(detail, /ProductCartActions/);
-  assert.match(list, /href="\/shop\/cart"/);
+  assert.match(detail, /soldOut=\{row\.is_sold_out\}/);
+  assert.match(list, /ShopCartLink/);
+  assert.match(list, /grid-cols-2/);
+  assert.match(list, /admin \? "grid gap-3" : "grid grid-cols-2 gap-3"/);
   assert.match(list, /!admin &&/);
   assert.equal(list.includes("ProductCartActions"), false);
   assert.match(add, /장바구니 담기/);

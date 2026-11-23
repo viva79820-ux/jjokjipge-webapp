@@ -11,6 +11,7 @@ import {
   ProductEditor,
 } from "@/components/products/editor";
 import { ProductCartActions } from "@/components/products/add-to-cart";
+import { ShopCartLink } from "@/components/products/cart-link";
 import { ProductPhoto } from "@/components/products/photo";
 import { cartMessages } from "@/lib/products/cart";
 import { cleanupAction } from "@/lib/products/cleanup";
@@ -45,7 +46,7 @@ function ProductCard({
   admin?: boolean;
 }) {
   return (
-    <article className="overflow-hidden rounded-card border border-border bg-surface">
+    <article className="min-w-0 overflow-hidden rounded-card border border-border bg-surface">
       <Link href={href} className="block min-h-11 cursor-pointer">
         <ProductPhoto
           src={publicImageUrl(row.image_path)}
@@ -101,17 +102,15 @@ export async function ProductListPage({
   return (
     <div className="space-y-7 wrap-anywhere">
       <div className="space-y-2">
-        <h1 className="text-display font-extrabold">타로샵</h1>
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-display font-extrabold">타로샵</h1>
+          {!admin && <ShopCartLink />}
+        </div>
         <p className="text-body text-muted">
           {admin
             ? "타로카드 상품의 공개와 품절을 관리합니다. 상담 상품과는 따로 저장됩니다."
             : `매장의 타로카드 상품입니다. ${cartMessages.checkout}`}
         </p>
-        {!admin && (
-          <Button href="/shop/cart" variant="secondary">
-            장바구니
-          </Button>
-        )}
       </div>
       {admin && filters.result === "deleted" && (
         <p role="status" className="text-body text-brand">
@@ -132,7 +131,7 @@ export async function ProductListPage({
       )}
       <p className="text-caption text-muted">총 {result.count}건</p>
       {!result.data.length && <p role="status">등록된 상품이 없습니다.</p>}
-      <div className="grid gap-3">
+      <div className={admin ? "grid gap-3" : "grid grid-cols-2 gap-3"}>
         {result.data.map((row) => (
           <ProductCard
             key={row.id}
@@ -207,7 +206,7 @@ export async function ProductDetailPage({
       {row.is_sold_out && (
         <p className="text-body text-muted">{cartMessages.soldOutNote}</p>
       )}
-      <ProductCartActions productId={row.id} />
+      <ProductCartActions productId={row.id} soldOut={row.is_sold_out} />
       <p className="text-body text-muted">{cartMessages.checkout}</p>
     </article>
   );

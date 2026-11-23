@@ -13,6 +13,7 @@ import {
   publicSummary,
   uuid,
   type ProductRecord,
+  type PublicProductDetail,
   type PublicProductSummary,
 } from "./rules";
 
@@ -69,14 +70,32 @@ export async function publicProductDetail(id: string) {
 export async function publicCartProducts(ids: unknown) {
   if (!Array.isArray(ids) || ids.length > maxCartLines)
     return { ok: false as const };
+  const idList: string[] = [];
   const seen = new Set<string>();
   for (const id of ids) {
     if (!uuid(id) || seen.has(id)) return { ok: false as const };
     seen.add(id);
+    idList.push(id);
   }
-  const products: Array<Awaited<ReturnType<typeof publicProductDetail>>> = [];
-  for (const id of ids) products.push(await publicProductDetail(id));
-  return { ok: true as const, products };
+  if (!idList.length) return { ok: true as const, products: [] };
+  const db = createPublicClient();
+  const { data, error } = await db
+    .from("products")
+    .select(publicDetailColumns)
+    .eq("is_published", true)
+    .in("id", idList);
+  if (error || !data) throw Error("상품을 불러오지 못했습니다.");
+  const byId = new Map<string, PublicProductDetail>();
+  for (const item of data) {
+    const row = publicDetail(item);
+    if (!row || !seen.has(row.id) || byId.has(row.id))
+      throw Error("상품을 불러오지 못했습니다.");
+    byId.set(row.id, row);
+  }
+  return {
+    ok: true as const,
+    products: idList.map((id) => byId.get(id) ?? null),
+  };
 }
 
 export async function adminProductList(page: number, status = "") {
