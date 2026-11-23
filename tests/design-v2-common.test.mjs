@@ -78,11 +78,14 @@ test("상단 탭은 지정 순서로 가로 스크롤하고 AI 사주는 준비 
   assert.match(tabs, /px-4/);
   assert.equal(tabs.includes("flex-1"), false);
   const page = read("app/(site)/ai-saju/page.tsx");
-  assert.match(page, /AI 사주는 준비 중입니다/);
+  const form = read("components/ai-saju/input-form.tsx");
   assert.match(page, /title: `AI 사주 \| \$\{siteConfig\.name\}`/);
+  assert.match(form, />\s*준비 중\s*</);
+  assert.match(form, /disabled/);
+  assert.match(form, /예시 결과 보기/);
+  assert.match(form, /href="\/ai-saju\/result"/);
   assert.equal(page.includes("<form"), false);
-  assert.equal(page.includes("<input"), false);
-  assert.equal(page.includes("<textarea"), false);
+  assert.equal(form.includes("<form"), false);
 });
 
 test("하단 탭 동작과 PC 560px 틀은 유지된다", () => {
