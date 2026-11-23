@@ -88,6 +88,10 @@ export function AiSajuInputForm() {
           height={450}
           className="pointer-events-none absolute -right-4 -bottom-3.5 w-36 opacity-25"
         />
+        <p className="relative m-0 text-body text-on-brand">
+          AI 사주는 준비 중이에요. 실제 정보를 입력하지 않고 예시 결과를 볼 수
+          있어요.
+        </p>
         <Badge tone="halo" icon={Sparkles} className="relative self-start">
           AI 사주
         </Badge>
@@ -96,9 +100,6 @@ export function AiSajuInputForm() {
           <br />
           나의 사주 풀이
         </h1>
-        <p className="relative m-0 max-w-60 text-label text-brand-soft">
-          태어난 날과 시간을 넣으면 AI가 타고난 성향과 올해 흐름을 풀어 드려요.
-        </p>
       </section>
 
       <section aria-label="풀이 항목" className="grid grid-cols-4 gap-2">
@@ -207,11 +208,7 @@ export function AiSajuInputForm() {
             type="checkbox"
             className="mt-px size-5.5 shrink-0 accent-brand"
           />
-          <span>
-            <span className="font-bold text-pink">(필수)</span> 입력한
-            생년월일·시간을 사주 풀이에만 쓰는 데 동의해요.{" "}
-            <span className="text-muted underline">자세히</span>
-          </span>
+          <span>동의 안내는 서비스 연결 후 제공돼요.</span>
         </label>
         <button
           type="button"
@@ -234,8 +231,8 @@ export function AiSajuInputForm() {
       <aside className="flex gap-2.5 rounded-card border border-border bg-surface p-3.5 text-caption text-muted">
         <Info size={18} aria-hidden="true" className="shrink-0 text-brand" />
         <p className="m-0">
-          AI 풀이는 참고용이에요. 더 깊은 이야기는 쪽집게천사 선생님과
-          전화상담으로 나눠 보세요.
+          사주 풀이는 아직 제공되지 않아요. 상담은 쪽집게천사 선생님과
+          전화상담으로 나눌 수 있어요.
         </p>
       </aside>
     </div>

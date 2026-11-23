@@ -59,8 +59,13 @@ test("입력은 화면에만 있고 예시 결과와 상담 연결은 고정 경
   }
   assert.match(form, /음력 윤달이에요/);
   assert.match(form, /태어난 시간을 몰라요/);
-  assert.match(form, /\(필수\)/);
-  assert.match(form, /사주 풀이에만 쓰는 데 동의해요/);
+  assert.match(
+    form,
+    /AI 사주는 준비 중이에요\. 실제 정보를 입력하지 않고 예시 결과를 볼 수\s*있어요\./,
+  );
+  assert.equal(form.includes("풀어 드려요"), false);
+  assert.equal(form.includes("자세히"), false);
+  assert.match(form, /동의 안내는 서비스 연결 후 제공돼요/);
   assert.match(form, /type="button"[\s\S]*disabled[\s\S]*준비 중/);
   assert.match(form, /href="\/ai-saju\/result"/);
   assert.equal(form.includes("<form"), false);
