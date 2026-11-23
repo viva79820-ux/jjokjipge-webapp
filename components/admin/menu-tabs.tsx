@@ -11,6 +11,7 @@ const menus = [
   ["공지사항", "/admin/notices"],
   ["클래스", "/admin/classes"],
   ["콘텐츠", "/admin/contents"],
+  ["타로샵 상품", "/admin/shop-products"],
   ["상담사상품", "/admin/counselors"],
   ["매장", "/admin/stores"],
 ] as const;
