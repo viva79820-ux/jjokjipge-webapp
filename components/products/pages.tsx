@@ -10,7 +10,10 @@ import {
   ProductDeletedCleanup,
   ProductEditor,
 } from "@/components/products/editor";
+import { ProductCartActions } from "@/components/products/add-to-cart";
+import { ShopCartLink } from "@/components/products/cart-link";
 import { ProductPhoto } from "@/components/products/photo";
+import { cartMessages } from "@/lib/products/cart";
 import { cleanupAction } from "@/lib/products/cleanup";
 import {
   adminProductDetail,
@@ -43,7 +46,7 @@ function ProductCard({
   admin?: boolean;
 }) {
   return (
-    <article className="overflow-hidden rounded-card border border-border bg-surface">
+    <article className="min-w-0 overflow-hidden rounded-card border border-border bg-surface">
       <Link href={href} className="block min-h-11 cursor-pointer">
         <ProductPhoto
           src={publicImageUrl(row.image_path)}
@@ -99,11 +102,14 @@ export async function ProductListPage({
   return (
     <div className="space-y-7 wrap-anywhere">
       <div className="space-y-2">
-        <h1 className="text-display font-extrabold">타로샵</h1>
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-display font-extrabold">타로샵</h1>
+          {!admin && <ShopCartLink />}
+        </div>
         <p className="text-body text-muted">
           {admin
             ? "타로카드 상품의 공개와 품절을 관리합니다. 상담 상품과는 따로 저장됩니다."
-            : "매장의 타로카드 상품입니다. 구매와 결제는 준비 중입니다."}
+            : `매장의 타로카드 상품입니다. ${cartMessages.checkout}`}
         </p>
       </div>
       {admin && filters.result === "deleted" && (
@@ -125,7 +131,7 @@ export async function ProductListPage({
       )}
       <p className="text-caption text-muted">총 {result.count}건</p>
       {!result.data.length && <p role="status">등록된 상품이 없습니다.</p>}
-      <div className="grid gap-3">
+      <div className={admin ? "grid gap-3" : "grid grid-cols-2 gap-3"}>
         {result.data.map((row) => (
           <ProductCard
             key={row.id}
@@ -197,7 +203,11 @@ export async function ProductDetailPage({
       <p className="text-body wrap-anywhere whitespace-pre-wrap break-all">
         {row.description}
       </p>
-      <p className="text-body text-muted">구매 기능 준비 중</p>
+      {row.is_sold_out && (
+        <p className="text-body text-muted">{cartMessages.soldOutNote}</p>
+      )}
+      <ProductCartActions productId={row.id} soldOut={row.is_sold_out} />
+      <p className="text-body text-muted">{cartMessages.checkout}</p>
     </article>
   );
 }
