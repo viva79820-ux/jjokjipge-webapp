@@ -518,7 +518,8 @@ try {
     0,
   );
   const link = await page.evaluate(`(() => {
-    const el = Array.from(document.querySelectorAll("a")).find((item) => item.checkVisibility() && item.textContent.includes("인스타그램에서 보기"));
+    const article = Array.from(document.querySelectorAll("article")).find((item) => item.checkVisibility() && item.textContent.includes("인스타 공개글"));
+    const el = article.querySelector("a");
     return { href: el.href, target: el.target, rel: el.rel, text: el.textContent };
   })()`);
   assert.equal(link.href, "https://example.com/instagram/post");
@@ -604,14 +605,14 @@ try {
   listFail = true;
   await go("/contents");
   await text("콘텐츠 목록을 불러오지 못했습니다.");
-  await absent("등록된 콘텐츠가 없습니다.");
+  await absent("아직 올라온 소식이 없어요.");
   await screenshot("customer-error.png");
   listFail = false;
   await page.button("다시 시도");
   await text("총 22건");
   forceEmpty = true;
   await go("/contents");
-  await text("등록된 콘텐츠가 없습니다.");
+  await text("아직 올라온 소식이 없어요.");
   await absent("선택한 채널의 콘텐츠가 없습니다.");
   await screenshot("customer-empty.png");
   forceEmpty = false;
@@ -619,7 +620,7 @@ try {
   await go("/contents?channel=youtube");
   await text("선택한 채널의 콘텐츠가 없습니다.");
   await absent("SECRET_PRIVATE_TITLE");
-  await absent("등록된 콘텐츠가 없습니다.");
+  await absent("아직 올라온 소식이 없어요.");
   await screenshot("customer-filter-empty.png");
   hideYoutube = false;
 
