@@ -411,7 +411,7 @@ try {
   );
   assert.equal(await textIncludes("로그인"), true);
   const beforeEmpty = reads;
-  await button("조회");
+  await button("예약 조회하기");
   await waitText("예약번호를 R-20261102-0001 형식으로 입력해 주세요.");
   assert.equal(
     await evaluate("document.activeElement.id"),
@@ -420,12 +420,12 @@ try {
   assert.equal(reads, beforeEmpty);
   await fill("#lookup-reservationNo", "R-20261112-0000");
   await fill("#lookup-email", email);
-  await button("조회");
+  await button("예약 조회하기");
   await waitText("형식으로 입력해 주세요.");
   assert.equal(reads, beforeEmpty);
   await fill("#lookup-reservationNo", "R-20261112-0001");
   await fill("#lookup-email", "wrong@example.invalid");
-  await button("조회");
+  await button("예약 조회하기");
   await waitText("예약을 조회하고 있습니다.");
   await waitText("예약번호와 이메일을 다시 확인해 주세요.");
   assert.equal(
@@ -434,7 +434,7 @@ try {
   );
   assert.equal(await textIncludes("테스트 비공개상담사"), false);
   await fill("#lookup-email", ` ${email.toUpperCase()} `);
-  await button("조회");
+  await button("예약 조회하기");
   await waitText("입금 대기");
   await waitText("예약 조회가 완료되었습니다.");
   await waitText("테스트 비공개상담사");
@@ -467,12 +467,12 @@ try {
   );
   await fill("#lookup-email", "wrong@example.invalid");
   assert.equal(await textIncludes("테스트 비공개상담사"), false);
-  await button("조회");
+  await button("예약 조회하기");
   await waitText("예약번호와 이메일을 다시 확인해 주세요.");
   assert.equal(await textIncludes("입금 대기"), false);
   fail = true;
   await fill("#lookup-email", email);
-  await button("조회");
+  await button("예약 조회하기");
   await waitText("예약을 조회하지 못했습니다. 잠시 후 다시 시도해 주세요.");
   assert.equal(await textIncludes("SECRET_DB_ERROR"), false);
   assert.equal(await textIncludes("테스트 비공개상담사"), false);
@@ -512,7 +512,7 @@ try {
   ]) {
     await fill("#lookup-reservationNo", number);
     await fill("#lookup-email", email);
-    await button("조회");
+    await button("예약 조회하기");
     await waitText(label);
   }
   assert.equal(
@@ -522,7 +522,7 @@ try {
     "R-20261112-10000",
   );
   await fill("#lookup-reservationNo", "R-20261112-0004");
-  await button("조회");
+  await button("예약 조회하기");
   await waitText("예약 취소");
   await waitText("<b>일반 텍스트</b>");
   assert.equal(

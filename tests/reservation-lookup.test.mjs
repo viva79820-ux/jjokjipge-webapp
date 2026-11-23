@@ -476,6 +476,31 @@ test("Seoul schedule labels and customer-facing status text", () => {
   });
 });
 
+test("temporary store number opens store info and an approved number calls", () => {
+  const site = loadModule("../lib/site-config.ts");
+  const storeInfo = { href: "/stores", label: "매장 정보 보기" };
+  const approved = { href: "tel:0212345678", label: "매장 문의" };
+  assert.equal(site.siteConfig.phone, "010-0000-0000");
+  assert.deepEqual(
+    site.representativeContact(site.siteConfig.phone),
+    storeInfo,
+  );
+  for (const phone of [
+    "",
+    "   ",
+    "010-0000-0000",
+    "01000000000",
+    "javascript:alert(1)",
+    "12345",
+  ])
+    assert.deepEqual(site.representativeContact(phone), storeInfo, phone);
+  assert.deepEqual(site.representativeContact("02-1234-5678"), approved);
+  assert.deepEqual(site.representativeContact("+82 10 1234 5678"), {
+    href: "tel:+821012345678",
+    label: "매장 문의",
+  });
+});
+
 test("lookup files stay inside the reservation module and do not cache personal data", () => {
   const action = readFileSync(
     new URL("../lib/reservations/lookup/actions.ts", import.meta.url),
@@ -516,9 +541,15 @@ test("lookup files stay inside the reservation module and do not cache personal 
     "예약 상태 안내",
     "예약번호를 잊으셨나요?",
     "로그인",
-    "매장 문의",
+    "예약 조회하기",
+    "예약 완료 화면이나 안내 메일에서 예약번호를 확인할 수 있어요.",
+    "회원 이름과 이메일",
+    "bg-halo text-foreground",
+    "bg-brand text-on-brand",
+    "bg-brand-soft text-brand-deep",
+    "bg-surface-muted text-foreground",
   ])
-    assert.match(form, new RegExp(text));
+    assert.equal(form.includes(text), true, text);
   for (const status of [
     "pending_payment",
     "confirmed",
@@ -527,8 +558,14 @@ test("lookup files stay inside the reservation module and do not cache personal 
   ])
     assert.match(form, new RegExp(`status: "${status}"`));
   assert.match(form, /statusLabels\[status\]/);
+  assert.match(form, /representativeContact\(siteConfig\.phone\)/);
+  assert.match(form, /contact\.href/);
+  assert.match(form, /contact\.label/);
   assert.match(form, /href="\/login"/);
-  assert.match(form, /href=\{`tel:\$\{siteConfig\.phone\}`\}/);
+  assert.match(form, /<Search/);
+  assert.match(form, /min-h-11/);
+  assert.doesNotMatch(form, /href=\{`tel:\$\{siteConfig\.phone\}`\}/);
+  assert.doesNotMatch(form, /010-0000-0000/);
   assert.doesNotMatch(
     `${form}\n${result}\n${page}`,
     /localStorage|sessionStorage|document\.cookie|searchParams|dangerouslySetInnerHTML/,
