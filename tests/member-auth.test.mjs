@@ -171,6 +171,32 @@ function harness(options = {}) {
           return { data: { user: null }, error: options.updateError };
         return { data: { user: current }, error: null };
       },
+      async verifyOtp(params) {
+        calls.push(["verifyOtp", params]);
+        if (options.verifyError) {
+          return {
+            data: { user: null, session: null },
+            error: options.verifyError,
+          };
+        }
+        current = {
+          id: userId,
+          email: "member@example.invalid",
+          email_confirmed_at: options.unconfirmedVerify
+            ? null
+            : "2026-11-13T00:00:00.000Z",
+        };
+        return {
+          data: {
+            user: current,
+            session:
+              options.verifySession === false
+                ? null
+                : { access_token: "session" },
+          },
+          error: null,
+        };
+      },
       getSession() {
         calls.push(["getSession"]);
         throw new Error("getSession");
@@ -695,6 +721,35 @@ test("password update and reset do not claim success when the provider refuses",
     weak.restore();
   }
 
+  const same = harness({
+    user: {
+      id: userId,
+      email: "member@example.invalid",
+      email_confirmed_at: "2026-11-13T00:00:00.000Z",
+    },
+    updateError: authError("same_password", 422),
+  });
+  try {
+    const result = await settle(
+      same.updatePassword(
+        {},
+        form([
+          ["password", password],
+          ["passwordConfirm", password],
+        ]),
+      ),
+    );
+    assert.equal(result.redirect, undefined);
+    assert.equal(
+      result.state.errors.password,
+      "이전에 쓰던 비밀번호와 다르게 입력해 주세요.",
+    );
+    assert.equal(JSON.stringify(result.state).includes("raw "), false);
+    assert.equal(JSON.stringify(result.state).includes(password), false);
+  } finally {
+    same.restore();
+  }
+
   const limited = harness({
     resetError: authError("over_request_rate_limit", 429),
   });
@@ -1114,13 +1169,206 @@ test("a normal member is not an admin and member code does not use the secret ke
     "lib/member-auth/actions.ts",
     "lib/member-auth/session.ts",
     "lib/member-auth/callback.ts",
+    "lib/member-auth/confirm.ts",
     "app/(site)/auth/callback/route.ts",
+    "app/(site)/auth/confirm/page.tsx",
   ]
     .map((file) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8"))
     .join("\n");
   assert.equal(source.includes("SUPABASE_SECRET_KEY"), false);
   assert.equal(source.includes("auth.admin"), false);
   assert.equal(source.includes(".update("), false);
+  const confirmPage = readFileSync(
+    new URL("../app/(site)/auth/confirm/page.tsx", import.meta.url),
+    "utf8",
+  );
+  const confirmForm = readFileSync(
+    new URL("../components/member-auth/confirm-form.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.equal(confirmPage.includes("verifyOtp"), false);
+  assert.equal(confirmForm.includes("verifyOtp"), false);
+  assert.equal(source.includes("exchangeCodeForSession"), true);
+});
+
+test("email confirmation keeps the token until the confirm button and rejects reuse or bad redirects", async () => {
+  const confirm = load("../lib/member-auth/confirm.ts", {});
+  const token = "ab".repeat(28);
+  const preview = confirm.readConfirmLink({
+    tokenHashes: [token],
+    types: ["email"],
+    nextValues: ["/mypage"],
+  });
+  assert.equal(preview.ok, true);
+  assert.equal(preview.tokenHash, token);
+  assert.equal(preview.path, "/mypage");
+  const recoveryPreview = confirm.readConfirmLink({
+    tokenHashes: [token],
+    types: ["recovery"],
+    nextValues: [],
+  });
+  assert.equal(recoveryPreview.ok, true);
+  assert.equal(recoveryPreview.tokenHash, token);
+  assert.equal(recoveryPreview.path, "/auth/update-password");
+
+  const blocked = [
+    ["email", "https://evil.example"],
+    ["email", "//evil.example"],
+    ["email", "/admin"],
+    ["email", "/auth/update-password"],
+    ["recovery", "/mypage"],
+    ["recovery", "https://angelsaju.com/auth/update-password"],
+  ];
+  for (const [type, next] of blocked) {
+    const decision = confirm.readConfirmLink({
+      tokenHashes: [token],
+      types: [type],
+      nextValues: [next],
+    });
+    assert.equal(decision.ok, false);
+    assert.equal(decision.reason, "redirect");
+    assert.equal(JSON.stringify(decision).includes(token), false);
+  }
+  assert.equal(
+    confirm.readConfirmLink({
+      tokenHashes: [token, token],
+      types: ["email"],
+      nextValues: ["/mypage"],
+    }).reason,
+    "invalid",
+  );
+  assert.equal(
+    confirm.readConfirmLink({
+      tokenHashes: [token],
+      types: ["signup"],
+      nextValues: ["/mypage"],
+    }).reason,
+    "invalid",
+  );
+
+  const signup = harness();
+  try {
+    const result = await settle(
+      signup.confirmEmail(
+        {},
+        form([
+          ["token_hash", token],
+          ["type", "email"],
+          ["next", "/mypage"],
+        ]),
+      ),
+    );
+    assert.equal(result.redirect, "/mypage");
+    assert.deepEqual(signup.calls.find((call) => call[0] === "verifyOtp")[1], {
+      token_hash: token,
+      type: "email",
+    });
+    assert.equal(
+      signup.calls.filter((call) => call[0] === "verifyOtp").length,
+      1,
+    );
+    assert.equal(JSON.stringify(signup.logs).includes(token), false);
+    assert.equal(JSON.stringify(result).includes(token), false);
+  } finally {
+    signup.restore();
+  }
+
+  const recovery = harness();
+  try {
+    const result = await settle(
+      recovery.confirmEmail(
+        {},
+        form([
+          ["token_hash", token],
+          ["type", "recovery"],
+        ]),
+      ),
+    );
+    assert.equal(result.redirect, "/auth/update-password");
+    assert.equal(
+      recovery.calls.find((call) => call[0] === "verifyOtp")[1].type,
+      "recovery",
+    );
+  } finally {
+    recovery.restore();
+  }
+
+  const wrongTarget = harness();
+  try {
+    const result = await settle(
+      wrongTarget.confirmEmail(
+        {},
+        form([
+          ["token_hash", token],
+          ["type", "email"],
+          ["next", "https://evil.example/mypage"],
+        ]),
+      ),
+    );
+    assert.match(result.state.message, /이동할 주소/);
+    assert.equal(
+      wrongTarget.calls.some((call) => call[0] === "verifyOtp"),
+      false,
+    );
+    assert.equal(JSON.stringify(result.state).includes(token), false);
+  } finally {
+    wrongTarget.restore();
+  }
+
+  const expired = harness({ verifyError: authError("otp_expired", 403) });
+  try {
+    const first = await settle(
+      expired.confirmEmail(
+        {},
+        form([
+          ["token_hash", token],
+          ["type", "email"],
+          ["next", "/mypage"],
+        ]),
+      ),
+    );
+    const second = await settle(
+      expired.confirmEmail(
+        {},
+        form([
+          ["token_hash", token],
+          ["type", "email"],
+          ["next", "/mypage"],
+        ]),
+      ),
+    );
+    assert.equal(first.redirect, undefined);
+    assert.match(first.state.message, /만료됐거나 이미 사용/);
+    assert.match(second.state.message, /만료됐거나 이미 사용/);
+    assert.equal(
+      expired.calls.filter((call) => call[0] === "verifyOtp").length,
+      2,
+    );
+    assert.equal(JSON.stringify(expired.logs).includes(token), false);
+  } finally {
+    expired.restore();
+  }
+
+  const unconfirmed = harness({ unconfirmedVerify: true });
+  try {
+    const result = await settle(
+      unconfirmed.confirmEmail(
+        {},
+        form([
+          ["token_hash", token],
+          ["type", "email"],
+          ["next", "/mypage"],
+        ]),
+      ),
+    );
+    assert.match(result.state.message, /로그인 상태/);
+    assert.deepEqual(
+      unconfirmed.calls.find((call) => call[0] === "signOut")[1],
+      { scope: "local" },
+    );
+  } finally {
+    unconfirmed.restore();
+  }
 });
 
 function signupForm() {

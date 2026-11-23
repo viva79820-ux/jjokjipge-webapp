@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect, unstable_rethrow } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { readConfirmSubmission } from "./confirm";
 import { callbackUrl, resolveTrustedOrigin, safeNext } from "./redirect";
 import { authFailure, logAuthFailure, messages } from "./errors";
 import { getConfirmedUser } from "./session";
@@ -182,6 +183,51 @@ export async function requestPasswordReset(
     return { message: messages.unavailable };
   }
   return { status: "accepted" };
+}
+
+export async function confirmEmail(
+  _previous: FieldState,
+  formData: FormData,
+): Promise<FieldState> {
+  if (!(formData instanceof FormData)) return { message: messages.linkInvalid };
+  const decision = readConfirmSubmission(formData);
+  if (!decision.ok) {
+    return {
+      message:
+        decision.reason === "redirect"
+          ? messages.linkRedirect
+          : messages.linkInvalid,
+    };
+  }
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase.auth.verifyOtp({
+      token_hash: decision.tokenHash,
+      type: decision.otpType,
+    });
+    if (error || !data.session || !data.user) {
+      const failure = authFailure(error);
+      logAuthFailure("member confirm failed", error);
+      if (failure === "expired") return { message: messages.linkExpired };
+      if (failure === "rate") return { message: messages.loginRate };
+      if (failure === "unavailable") return { message: messages.unavailable };
+      return { message: messages.linkInvalid };
+    }
+    const confirmed = await supabase.auth.getUser();
+    const verified = Boolean(
+      !confirmed.error && confirmed.data.user?.email_confirmed_at,
+    );
+    if (!verified) {
+      await supabase.auth.signOut({ scope: "local" });
+      return { message: messages.session };
+    }
+  } catch (error) {
+    unstable_rethrow(error);
+    logAuthFailure("member confirm failed", error);
+    return { message: messages.unavailable };
+  }
+  revalidatePath("/", "layout");
+  redirect(decision.path);
 }
 
 export async function updatePassword(

@@ -18,11 +18,12 @@ export default function Page() {
     <AuthCard title="이메일 인증 안내" focus>
       <div className="space-y-3">
         <p className={statusClass}>
-          가입 요청을 확인했어요. 새 계정이면 메일함에서 인증 링크를 눌러
-          주세요. 메일이 보이지 않으면 스팸함도 확인해 주세요.
+          가입 요청을 확인했어요. 새 계정이면 메일함에서 인증 링크를 연 뒤,
+          화면의 확인 버튼을 눌러 주세요. 메일이 보이지 않으면 스팸함도 확인해
+          주세요.
         </p>
         <p className={statusClass}>
-          인증 링크를 누르기 전에는 가입이 끝난 것이 아니에요. 이미 가입한
+          확인 버튼을 누르기 전에는 가입이 끝난 것이 아니에요. 이미 가입한
           주소라면 로그인하거나 비밀번호 재설정을 이용해 주세요.
         </p>
         <p className={noteClass}>

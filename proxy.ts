@@ -45,6 +45,9 @@ export async function proxy(request: NextRequest) {
   ) {
     response.headers.set("Cache-Control", "private, no-store");
   }
+  if (path === "/auth/confirm") {
+    response.headers.set("Referrer-Policy", "no-referrer");
+  }
   return response;
 }
 export const config = {
