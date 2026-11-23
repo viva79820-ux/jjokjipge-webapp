@@ -10,7 +10,9 @@ import {
   ProductDeletedCleanup,
   ProductEditor,
 } from "@/components/products/editor";
+import { ProductCartActions } from "@/components/products/add-to-cart";
 import { ProductPhoto } from "@/components/products/photo";
+import { cartMessages } from "@/lib/products/cart";
 import { cleanupAction } from "@/lib/products/cleanup";
 import {
   adminProductDetail,
@@ -103,8 +105,13 @@ export async function ProductListPage({
         <p className="text-body text-muted">
           {admin
             ? "타로카드 상품의 공개와 품절을 관리합니다. 상담 상품과는 따로 저장됩니다."
-            : "매장의 타로카드 상품입니다. 구매와 결제는 준비 중입니다."}
+            : `매장의 타로카드 상품입니다. ${cartMessages.checkout}`}
         </p>
+        {!admin && (
+          <Button href="/shop/cart" variant="secondary">
+            장바구니
+          </Button>
+        )}
       </div>
       {admin && filters.result === "deleted" && (
         <p role="status" className="text-body text-brand">
@@ -197,7 +204,11 @@ export async function ProductDetailPage({
       <p className="text-body wrap-anywhere whitespace-pre-wrap break-all">
         {row.description}
       </p>
-      <p className="text-body text-muted">구매 기능 준비 중</p>
+      {row.is_sold_out && (
+        <p className="text-body text-muted">{cartMessages.soldOutNote}</p>
+      )}
+      <ProductCartActions productId={row.id} />
+      <p className="text-body text-muted">{cartMessages.checkout}</p>
     </article>
   );
 }

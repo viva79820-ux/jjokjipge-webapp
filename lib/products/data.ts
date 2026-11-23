@@ -2,6 +2,7 @@ import "server-only";
 import { requireAdmin } from "@/lib/admin/auth";
 import { createPublicClient } from "@/lib/supabase/public";
 import { createClient } from "@/lib/supabase/server";
+import { maxCartLines } from "./cart";
 import {
   columns,
   pageSize,
@@ -63,6 +64,19 @@ export async function publicProductDetail(id: string) {
   const row = publicDetail(data);
   if (!row) throw Error("상품을 불러오지 못했습니다.");
   return row;
+}
+
+export async function publicCartProducts(ids: unknown) {
+  if (!Array.isArray(ids) || ids.length > maxCartLines)
+    return { ok: false as const };
+  const seen = new Set<string>();
+  for (const id of ids) {
+    if (!uuid(id) || seen.has(id)) return { ok: false as const };
+    seen.add(id);
+  }
+  const products: Array<Awaited<ReturnType<typeof publicProductDetail>>> = [];
+  for (const id of ids) products.push(await publicProductDetail(id));
+  return { ok: true as const, products };
 }
 
 export async function adminProductList(page: number, status = "") {
