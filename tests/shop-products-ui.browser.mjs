@@ -95,6 +95,8 @@ let customerEmpty = false;
 let loseResponse = false;
 let dropWrite = false;
 let storageRemoves = 0;
+let productDeletes = 0;
+let cleanupFail = false;
 let storageInfoMode = "";
 let writeDelay = 0;
 let writes = 0;
@@ -277,6 +279,11 @@ async function handle(req, res) {
         res.end("{}");
         return;
       }
+      if (cleanupFail) {
+        res.writeHead(503);
+        res.end(JSON.stringify({ message: "cleanup", statusCode: "503" }));
+        return;
+      }
       const paths = JSON.parse(raw.toString() || "{}").prefixes || [];
       for (const item of paths) {
         if (!String(item).startsWith("products/")) continue;
@@ -351,6 +358,7 @@ async function handle(req, res) {
     }
     const selected = products.filter((row) => matches(row, url.searchParams));
     if (req.method === "DELETE") {
+      productDeletes += 1;
       for (const row of selected) products.splice(products.indexOf(row), 1);
     } else {
       for (const row of selected)
@@ -1341,6 +1349,90 @@ try {
     true,
   );
   assert.equal(writes, writesBeforeSecondCleanup);
+  await go("/admin/shop-products/new");
+  const pendingDelete = await registerOrphanProduct({
+    name: "테스트 삭제정리",
+    description: "삭제 뒤 정리 설명",
+    price: "4500",
+    alt: "삭제 전 사진",
+    orphanName: "delete-orphan.png",
+    orphanColor: "#442255",
+    keptName: "delete-kept.png",
+    keptColor: "#225544",
+  });
+  cleanupFail = true;
+  await page.button("사진 빼기");
+  const writesBeforeRemoval = writes;
+  const removesBeforeRemoval = storageRemoves;
+  await page.button("저장 전 확인");
+  await confirm();
+  await text("이전 사진은 사진 정리 버튼으로만 지웁니다");
+  await text("사진 정리 다시 시도");
+  assert.equal(
+    products.find((row) => row.id === pendingDelete.id)?.image_path,
+    null,
+  );
+  assert.equal(files.has(pendingDelete.kept), true);
+  assert.equal(files.has(pendingDelete.orphan), true);
+  assert.equal(writes, writesBeforeRemoval + 1);
+  assert.equal(storageRemoves, removesBeforeRemoval + 1);
+  cleanupFail = false;
+  const writesBeforePendingDelete = writes;
+  const removesBeforePendingDelete = storageRemoves;
+  const deletesBeforePending = productDeletes;
+  await page.button("삭제 전 확인");
+  await confirm();
+  await until(
+    () =>
+      page.evaluate(
+        `document.querySelector('[data-product-editor="removed"]')?.checkVisibility() === true`,
+      ),
+    "removed editor stays",
+  );
+  await text("상품 삭제를 확인했습니다.");
+  await text("사진은 사진 정리 버튼으로만 지웁니다");
+  await text("사진 정리 다시 시도");
+  assert.equal(
+    await page.evaluate("location.pathname"),
+    `/admin/shop-products/${pendingDelete.id}`,
+  );
+  assert.equal(
+    products.some((row) => row.id === pendingDelete.id),
+    false,
+  );
+  assert.equal(files.has(pendingDelete.kept), true);
+  assert.equal(files.has(pendingDelete.orphan), true);
+  assert.equal(writes, writesBeforePendingDelete + 1);
+  assert.equal(productDeletes, deletesBeforePending + 1);
+  assert.equal(storageRemoves, removesBeforePendingDelete);
+  const pendingPhotos = [pendingDelete.kept, pendingDelete.orphan];
+  await page.button("사진 정리 다시 시도");
+  await until(
+    () => pendingPhotos.filter((item) => files.has(item)).length === 1,
+    "one photo cleaned",
+  );
+  await text("사진 정리를 마쳤습니다.");
+  await text("사진은 사진 정리 버튼으로만 지웁니다");
+  await text("사진 정리 다시 시도");
+  assert.equal(
+    await page.evaluate("location.pathname"),
+    `/admin/shop-products/${pendingDelete.id}`,
+  );
+  assert.equal(pendingPhotos.filter((item) => files.has(item)).length, 1);
+  assert.equal(writes, writesBeforePendingDelete + 1);
+  assert.equal(productDeletes, deletesBeforePending + 1);
+  assert.equal(storageRemoves, removesBeforePendingDelete + 1);
+  await page.button("사진 정리 다시 시도");
+  await until(
+    () => page.evaluate("location.pathname === '/admin/shop-products'"),
+    "last cleanup list",
+  );
+  await text("상품을 삭제했습니다.");
+  assert.equal(files.has(pendingDelete.orphan), false);
+  assert.equal(files.has(pendingDelete.kept), false);
+  assert.equal(writes, writesBeforePendingDelete + 1);
+  assert.equal(productDeletes, deletesBeforePending + 1);
+  assert.equal(storageRemoves, removesBeforePendingDelete + 2);
   const widths = [
     [360, false, 16],
     [390, false, 16],
@@ -1358,6 +1450,7 @@ try {
     assert.equal(box.covered, false, `list covered ${width}`);
     assert.equal(box.controls.length, 0, `list touch ${width} ${box.controls}`);
     assert.equal(box.pad, pad, `list pad ${width}`);
+    assert.equal(box.fine, fine, `list pointer ${width}`);
     if (fine) assert.equal(box.width, 560);
     else if (width >= 1024) assert.equal(box.width, 1024);
     else assert.equal(box.width, width);
@@ -1372,6 +1465,7 @@ try {
       0,
       `detail touch ${width} ${box.controls}`,
     );
+    assert.equal(box.fine, fine, `detail pointer ${width}`);
     await screenshot(`customer-detail-${width}.png`);
     await go(`/admin/shop-products/${soldId}`);
     await text("상품 편집");
@@ -1383,7 +1477,14 @@ try {
       `editor touch ${width} ${box.controls}`,
     );
     assert.equal(box.pad, pad, `editor pad ${width}`);
-    if (fine) assert.equal(box.width, 560);
+    assert.equal(box.fine, fine, `editor pointer ${width}`);
+    if (fine) {
+      assert.equal(box.width, 560);
+      console.log(
+        "SHOP_PC",
+        JSON.stringify({ fine: box.fine, width: box.width, pad: box.pad }),
+      );
+    }
     await screenshot(`admin-editor-${width}.png`);
   }
   console.log("SHOP_BROWSER_OK");

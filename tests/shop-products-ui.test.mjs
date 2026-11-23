@@ -786,6 +786,8 @@ test("고객 화면 문구에 구매 버튼을 만들지 않는다", () => {
   assert.match(editor, /삭제 결과 다시 확인/);
   assert.match(editor, /사진 정리 다시 시도/);
   assert.match(editor, /사진 정리 버튼으로만 지웁니다/);
+  assert.match(editor, /cleanupRemains\(\)/);
+  assert.equal(editor.includes("if (!result.cleanup)"), false);
   assert.match(editor, /업로드된 파일이 없습니다/);
   assert.equal(editor.includes("저장된 상품은 바꾸지 않았습니다"), false);
   assert.equal(editor.includes("await remaining()"), false);

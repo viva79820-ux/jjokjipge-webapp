@@ -34,6 +34,7 @@ import {
   publicImageUrl,
   type ProductRecord,
 } from "@/lib/products/rules";
+import { ProductMissing } from "./missing";
 import { ProductPhoto } from "./photo";
 
 const fields = [
@@ -158,7 +159,7 @@ export function ProductEditor({
     | null
   >(null);
   const originalCleanup = useRef(initialCleanup);
-  const cleanupRef = useRef<(() => Promise<boolean>) | undefined>(undefined);
+  const cleanupJobs = useRef<Array<() => Promise<boolean>>>([]);
   const reloadRef = useRef<HTMLDivElement>(null);
   const statusRef = useRef<HTMLParagraphElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -205,7 +206,7 @@ export function ProductEditor({
       uploadToken.current = null;
       confirmToken.current = null;
       setDraftId("");
-      cleanupRef.current = undefined;
+      cleanupJobs.current = [];
       setCleanupPending(false);
     };
   }, []);
@@ -329,17 +330,27 @@ export function ProductEditor({
     pendingHref.current = null;
     router.replace(href);
   }
-  function keepCleanup(job?: () => Promise<boolean>) {
-    if (!job) return;
-    const previous = cleanupRef.current;
-    cleanupRef.current = previous
-      ? async () => Boolean((await previous()) && (await job()))
-      : job;
+  function cleanupProductId() {
+    return initial?.id || original?.id;
+  }
+  function cleanupRemains() {
+    return (
+      cleanupJobs.current.length > 0 ||
+      Boolean(readCreateCleanup(cleanupProductId())?.length)
+    );
+  }
+  function addCleanup(job?: () => Promise<boolean>) {
+    if (!job || cleanupJobs.current.includes(job)) return;
+    cleanupJobs.current = [...cleanupJobs.current, job];
+    const productId = cleanupProductId();
+    if (productId) rememberCreateCleanup(productId, job);
     setCleanupPending(true);
   }
-  function clearCleanup() {
-    cleanupRef.current = undefined;
-    setCleanupPending(false);
+  function dropCleanup(job: () => Promise<boolean>) {
+    const next = cleanupJobs.current.filter((item) => item !== job);
+    if (next.length === cleanupJobs.current.length) return;
+    cleanupJobs.current = next;
+    if (next.length === 0) setCleanupPending(false);
   }
   function finish(result: Result) {
     setModal(null);
@@ -350,24 +361,25 @@ export function ProductEditor({
       setRemoved(true);
       setConflict(false);
       setUncertain(false);
-      keepCleanup(result.cleanup);
+      addCleanup(result.cleanup);
+      const pending = cleanupRemains();
       setMessage(
-        result.cleanup
+        pending
           ? "상품 삭제를 확인했습니다. 사진은 사진 정리 버튼으로만 지웁니다."
           : result.message,
       );
       focusStatus();
-      if (!result.cleanup)
+      if (!pending)
         replaceWhenShown(productListUrl(true, page, status, "deleted"));
       return;
     }
     if (result.state === "saved" && result.row) {
       if (result.recovery) originalCleanup.current = result.recovery;
       else if (!result.row.image_path) originalCleanup.current = undefined;
-      keepCleanup(result.cleanup);
+      addCleanup(result.cleanup);
       if (!baseline.current) {
-        if (cleanupRef.current)
-          rememberCreateCleanup(result.row.id, cleanupRef.current);
+        for (const job of cleanupJobs.current)
+          rememberCreateCleanup(result.row.id, job);
         createdNavigate.current = true;
         applyRow(result.row);
         leaving.current = true;
@@ -463,7 +475,7 @@ export function ProductEditor({
             uploadedFile.current = file;
             if (replacing && previousCleanup) {
               const retire = previousCleanup;
-              keepCleanup(() => retire());
+              addCleanup(() => retire());
             }
             try {
               return await uploadImage(createClient(), file!, reserved.path);
@@ -668,19 +680,24 @@ export function ProductEditor({
     }
   }
   async function retryCleanup() {
-    const job = cleanupRef.current ?? handed?.[0];
+    const productId = cleanupProductId();
+    const editorJob = cleanupJobs.current[0];
+    const job = editorJob ?? readCreateCleanup(productId)?.[0];
     if (!job || lock.current || leaving.current) return;
     lock.current = true;
     setBusy(true);
     try {
       if (await job()) {
-        forgetCreateCleanup(original?.id, job);
-        clearCleanup();
+        if (editorJob) dropCleanup(editorJob);
+        forgetCreateCleanup(productId, job);
+        const pending = cleanupRemains();
         setMessage(
-          removed ? "상품을 삭제했습니다." : "사진 정리를 마쳤습니다.",
+          removed && !pending
+            ? "상품을 삭제했습니다."
+            : "사진 정리를 마쳤습니다.",
         );
         focusStatus();
-        if (removed)
+        if (removed && !pending)
           replaceWhenShown(productListUrl(true, page, status, "deleted"));
       } else {
         setMessage(
@@ -705,13 +722,19 @@ export function ProductEditor({
     }
   }
   const photoSrc = file ? preview : publicImageUrl(path);
+  const cleanupLeft = cleanupPending || Boolean(handed?.length);
   if (removed)
     return (
       <div className="space-y-4" data-product-editor="removed">
         <p role="status" className="text-body text-brand">
           {message || "이 상품은 삭제되었습니다."}
         </p>
-        {cleanupPending && (
+        {cleanupLeft && !message.includes("사진 정리 버튼으로만 지웁니다") ? (
+          <p className="text-body text-brand">
+            사진은 사진 정리 버튼으로만 지웁니다.
+          </p>
+        ) : null}
+        {cleanupLeft && (
           <Button disabled={busy} onClick={retryCleanup}>
             사진 정리 다시 시도
           </Button>
@@ -916,7 +939,7 @@ export function ProductEditor({
                   uploadToken.current = null;
                   confirmToken.current = null;
                   if (hadUpload && retire && !uncertain)
-                    keepCleanup(() => retire());
+                    addCleanup(() => retire());
                   if (fileRef.current) fileRef.current.value = "";
                 }}
               >
@@ -1144,6 +1167,75 @@ export function ProductEditor({
           )}
         </Modal>
       )}
+    </div>
+  );
+}
+
+export function ProductDeletedCleanup({
+  id,
+  page,
+  status,
+}: {
+  id: string;
+  page: number;
+  status: string;
+}) {
+  const jobs = useSyncExternalStore(
+    subscribeCreateCleanup,
+    () => readCreateCleanup(id),
+    () => null,
+  );
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState(
+    "상품 삭제를 확인했습니다. 사진은 사진 정리 버튼으로만 지웁니다.",
+  );
+  const router = useRouter();
+  const listHref = productListUrl(true, page, status);
+  if (!jobs?.length) return <ProductMissing admin />;
+  return (
+    <div className="space-y-4" data-product-editor="removed">
+      <p role="status" className="text-body text-brand">
+        {busy ? "처리 중…" : message}
+      </p>
+      {!message.includes("사진 정리 버튼으로만 지웁니다") ? (
+        <p className="text-body text-brand">
+          사진은 사진 정리 버튼으로만 지웁니다.
+        </p>
+      ) : null}
+      <Button
+        disabled={busy}
+        onClick={async () => {
+          const job = readCreateCleanup(id)?.[0];
+          if (!job || busy) return;
+          setBusy(true);
+          try {
+            if (await job()) {
+              forgetCreateCleanup(id, job);
+              if (readCreateCleanup(id)?.length) {
+                setMessage("사진 정리를 마쳤습니다.");
+                return;
+              }
+              setMessage("상품을 삭제했습니다.");
+              router.replace(productListUrl(true, page, status, "deleted"));
+            } else {
+              setMessage(
+                "상품 삭제는 반영됐습니다. 사진 정리만 다시 시도해 주세요.",
+              );
+            }
+          } catch {
+            setMessage(
+              "상품 삭제는 반영됐습니다. 사진 정리 응답을 확인하지 못했습니다.",
+            );
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        사진 정리 다시 시도
+      </Button>
+      <Button href={listHref} variant="secondary">
+        상품 목록
+      </Button>
     </div>
   );
 }

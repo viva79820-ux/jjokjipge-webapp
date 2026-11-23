@@ -6,7 +6,10 @@ import { AdminAccessDenied } from "@/components/admin/access-denied";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ProductAdminFilter } from "@/components/products/admin-filter";
-import { ProductEditor } from "@/components/products/editor";
+import {
+  ProductDeletedCleanup,
+  ProductEditor,
+} from "@/components/products/editor";
 import { ProductPhoto } from "@/components/products/photo";
 import { cleanupAction } from "@/lib/products/cleanup";
 import {
@@ -228,9 +231,17 @@ export async function ProductEditorPage({
         initialMessage=""
       />
     );
-  const loaded = await adminProductDetail((await params).id);
+  const productId = (await params).id;
+  const loaded = await adminProductDetail(productId);
   if (!loaded) return <AdminAccessDenied />;
-  if ("missing" in loaded) notFound();
+  if ("missing" in loaded)
+    return (
+      <ProductDeletedCleanup
+        id={productId}
+        page={filters.page}
+        status={filters.status}
+      />
+    );
   if ("error" in loaded) throw Error("상품을 불러오지 못했습니다.");
   return (
     <ProductEditor
