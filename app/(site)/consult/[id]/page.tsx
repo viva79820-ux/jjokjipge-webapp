@@ -46,14 +46,17 @@ async function CounselorContent({ params }: Props) {
   return (
     <CounselorDetailFrame>
       <CounselorDetailHeader />
+      {/* Width-based 20/19 keeps the chin above the card at 360, 390, and PC 560.
+          Wide touch frames would push the name card past the first screen, so
+          those widths keep the same crop and only shorten the frame. */}
       <CounselorPhoto
         src={counselor.imageUrl}
         alt={`${heading} 사진`}
         sizes="100vw"
         imageClassName="object-cover object-[center_12%]"
-        className="h-85 w-full"
+        className="mx-auto aspect-[20/19] w-full @3xl/app:w-[min(100%,calc((100dvh-128px)*20/19))]"
       />
-      <section className="relative z-10 -mt-7 mx-4 flex flex-col gap-2 rounded-card border border-border bg-surface px-4.5 pt-8 pb-4.5 @3xl/app:mx-6">
+      <section className="relative z-10 -mt-4 mx-4 flex flex-col gap-2 rounded-card border border-border bg-surface px-4.5 pt-8 pb-4.5 @3xl/app:mx-6">
         <h1 className="m-0 text-display font-extrabold wrap-anywhere">
           <CounselorName
             name={counselor.name}
