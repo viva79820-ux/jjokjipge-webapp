@@ -404,7 +404,7 @@ try {
   })()`);
   assert.equal(header.row, 60);
   assert.equal(header.logo, 34);
-  assert.equal(header.name, "쪽집게천사 운명나라 · 동성로 사주·타로·작명");
+  assert.equal(header.name, "쪽집게천사 운세통");
   assert.equal(header.loginHref, "/login");
   assert.ok(header.loginWidth >= 44 && header.loginHeight >= 44);
   assert.equal(header.tabHeight, 48);
