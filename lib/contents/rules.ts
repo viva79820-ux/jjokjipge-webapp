@@ -7,11 +7,7 @@ export const channelLabels: Record<Channel, string> = {
   instagram: "인스타그램",
   youtube: "유튜브",
 };
-export const channelLinkLabels: Record<Channel, string> = {
-  blog: "블로그에서 보기",
-  instagram: "인스타그램에서 보기",
-  youtube: "유튜브에서 보기",
-};
+export const publicChannels = ["youtube", "instagram", "blog"] as const;
 
 export type ContentRecord = {
   id: string;
@@ -135,6 +131,17 @@ export function parseExternalUrl(
   )
     return { state: "invalid" };
   return { state: "ok", href };
+}
+
+export function confirmedSocialHref(value: string) {
+  const parsed = parseExternalUrl(value);
+  if (parsed.state !== "ok") return null;
+  const hostname = new URL(parsed.href).hostname
+    .replace(/\.$/, "")
+    .toLowerCase();
+  if (hostname === "example.com" || hostname.endsWith(".example.com"))
+    return null;
+  return parsed.href;
 }
 
 export function publicFilters(query: Query): PublicFilters | null {

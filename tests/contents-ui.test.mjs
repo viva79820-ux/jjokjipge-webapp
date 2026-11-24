@@ -489,6 +489,89 @@ test("권한·충돌·없음·응답 유실에서 조건부 저장을 지킨다"
   assert.equal(refused.paths.length, 0);
 });
 
+test("공식 채널은 확인된 주소만 연결하고 임시 주소는 누르지 않는다", () => {
+  const config = load("lib/site-config.ts");
+  assert.deepEqual(rules.publicChannels, ["youtube", "instagram", "blog"]);
+  assert.equal(
+    rules.confirmedSocialHref(config.siteConfig.social.blog),
+    "https://blog.naver.com/taro93",
+  );
+  assert.equal(
+    rules.confirmedSocialHref(config.siteConfig.social.instagram),
+    "https://www.instagram.com/kjm_chnam/",
+  );
+  assert.equal(
+    rules.confirmedSocialHref(config.siteConfig.social.youtube),
+    "https://www.youtube.com/channel/UCQW1dFMrN1ndpsT77BK-9KA",
+  );
+  for (const url of [
+    "https://example.com/blog",
+    "https://example.com/instagram",
+    "https://example.com/youtube",
+  ]) {
+    assert.equal(rules.confirmedSocialHref(url), null, url);
+  }
+  assert.equal(
+    rules.confirmedSocialHref("https://www.youtube.com/watch?v=abc"),
+    "https://www.youtube.com/watch?v=abc",
+  );
+  assert.equal(
+    rules.confirmedSocialHref("https://blog.example.com/post"),
+    null,
+  );
+  assert.equal(rules.confirmedSocialHref("http://blog.naver.com/sample"), null);
+
+  const pages = read("components/contents/pages.tsx");
+  const channel = read("components/contents/channel.tsx");
+  const start = pages.indexOf("export async function ContentListPage");
+  const end = pages.indexOf("export async function AdminContentListPage");
+  const pub = pages.slice(start, end);
+  const order = [
+    "유튜브, 인스타그램, 블로그 글을 새 창에서 엽니다.",
+    'aria-label="공식 채널"',
+    "publicChannels.map",
+    'aria-label="콘텐츠 채널"',
+    "총 {result.count}건",
+    "logo-angel-mark.png",
+    "아직 올라온 소식이 없어요.",
+    "선택한 채널의 콘텐츠가 없습니다.",
+    "전체 채널 보기",
+    "ContentChannelArt",
+    "ContentChannelBadge",
+    "ContentExternalLink",
+  ];
+  let cursor = -1;
+  for (const marker of order) {
+    const found = pub.indexOf(marker);
+    assert.ok(found > cursor, marker);
+    cursor = found;
+  }
+  assert.equal(pub.includes("created_at"), false);
+  assert.equal(pub.includes("example.com"), false);
+  assert.match(channel, /채널 주소 준비 중/);
+  assert.match(channel, /if \(!href\) return <div/);
+  assert.match(channel, /target="_blank"/);
+  assert.match(channel, /rel="noopener noreferrer"/);
+  assert.match(channel, /새 창으로 열기/);
+  assert.match(channel, /주소를 확인할 수 없어 링크를 표시하지 않습니다/);
+  assert.equal(channel.includes("<iframe"), false);
+  const admin = pages.slice(end);
+  assert.match(admin, /등록된 콘텐츠가 없습니다/);
+  assert.equal(admin.includes("아직 올라온 소식이 없어요"), false);
+
+  const pagePad = 32;
+  const cardPad = 24;
+  const right = 360 - pagePad - cardPad - 88 - 12;
+  assert.ok(right >= 7 * 14 + 16, `link ${right}`);
+  const channelText = 360 - pagePad - cardPad - 44 - 12;
+  assert.ok(channelText >= 9 * 13, `channel ${channelText}`);
+  const tabletCard = (768 - 48 - 16) / 3;
+  const tabletText = tabletCard - cardPad - 44 - 12;
+  assert.ok(tabletText >= 9 * 13, `tablet ${tabletText}`);
+  const pcRight = 560 - pagePad - cardPad - 88 - 12;
+  assert.ok(pcRight >= right, `pc ${pcRight}`);
+});
+
 test("고객 조회 코드는 공개 클라이언트와 공개 조건만 사용한다", () => {
   const data = read("lib/contents/data.ts");
   const actions = read("lib/contents/actions.ts");

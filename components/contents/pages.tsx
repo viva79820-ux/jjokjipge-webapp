@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { connection } from "next/server";
 import { notFound, redirect } from "next/navigation";
@@ -5,6 +6,7 @@ import { requireAdmin } from "@/lib/admin/auth";
 import { AdminAccessDenied } from "@/components/admin/access-denied";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { siteConfig } from "@/lib/site-config";
 import {
   adminContent,
   adminContentList,
@@ -15,16 +17,23 @@ import {
   adminFilters,
   adminListUrl,
   channelLabels,
-  channels,
+  confirmedSocialHref,
   isChannel,
   pageSize,
+  publicChannels,
   publicFilters,
   publicListUrl,
   returnUrl,
   type Query,
 } from "@/lib/contents/rules";
 import { AdminContentFilter, ContentListSettled } from "./admin-filter";
-import { ChannelMark, ContentExternalLink } from "./channel";
+import {
+  ChannelMark,
+  ContentChannelArt,
+  ContentChannelBadge,
+  ContentExternalLink,
+  OfficialChannelCard,
+} from "./channel";
 import { ContentEditor } from "./editor";
 import { ContentRetry } from "./retry";
 
@@ -58,37 +67,61 @@ export async function ContentListPage({
   const emptyCatalog = result.catalogTotal === 0;
   return (
     <div className="space-y-7">
-      <header className="space-y-3">
+      <header className="space-y-2">
         <h1 className="text-display font-extrabold">콘텐츠</h1>
-        <p className="text-caption font-medium text-muted">
-          블로그, 인스타그램, 유튜브 글을 새 창에서 엽니다.
+        <p className="text-body text-muted">
+          유튜브, 인스타그램, 블로그 글을 새 창에서 엽니다.
         </p>
-        <nav aria-label="콘텐츠 채널" className="flex flex-wrap gap-2">
-          <Link
-            href={publicListUrl(1, "")}
-            aria-current={filters.channel === "" ? "page" : undefined}
-            className={`${filterClass} ${filters.channel === "" ? "bg-brand text-on-brand" : "border border-brand bg-surface text-brand"}`}
-          >
-            전체
-          </Link>
-          {channels.map((channel) => (
-            <Link
-              key={channel}
-              href={publicListUrl(1, channel)}
-              aria-current={filters.channel === channel ? "page" : undefined}
-              className={`${filterClass} ${filters.channel === channel ? "bg-brand text-on-brand" : "border border-brand bg-surface text-brand"}`}
-            >
-              {channelLabels[channel]}
-            </Link>
-          ))}
-        </nav>
       </header>
+      <section
+        aria-label="공식 채널"
+        className="grid gap-2 @3xl/app:grid-cols-3"
+      >
+        {publicChannels.map((channel) => (
+          <OfficialChannelCard
+            key={channel}
+            channel={channel}
+            href={confirmedSocialHref(siteConfig.social[channel])}
+          />
+        ))}
+      </section>
+      <nav aria-label="콘텐츠 채널" className="flex flex-wrap gap-2">
+        <Link
+          href={publicListUrl(1, "")}
+          aria-current={filters.channel === "" ? "page" : undefined}
+          className={`${filterClass} ${filters.channel === "" ? "bg-brand text-on-brand" : "border border-brand bg-surface text-brand"}`}
+        >
+          전체
+        </Link>
+        {publicChannels.map((channel) => (
+          <Link
+            key={channel}
+            href={publicListUrl(1, channel)}
+            aria-current={filters.channel === channel ? "page" : undefined}
+            className={`${filterClass} ${filters.channel === channel ? "bg-brand text-on-brand" : "border border-brand bg-surface text-brand"}`}
+          >
+            {channelLabels[channel]}
+          </Link>
+        ))}
+      </nav>
       <div className="space-y-3">
         <p className="text-caption font-medium text-muted">
           총 {result.count}건
         </p>
         {result.count === 0 && emptyCatalog && (
-          <p role="status">등록된 콘텐츠가 없습니다.</p>
+          <div
+            role="status"
+            className="flex flex-col items-center gap-3 rounded-card border border-border bg-surface px-4 py-8 text-center"
+          >
+            <Image
+              src="/images/brand/logo-angel-mark.png"
+              alt=""
+              width={592}
+              height={450}
+              className="h-auto w-24"
+            />
+            <p>아직 올라온 소식이 없어요.</p>
+          </div>
         )}
         {result.count === 0 && !emptyCatalog && (
           <div role="status" className="space-y-3">
@@ -101,18 +134,21 @@ export async function ContentListPage({
         {result.rows.map((row) => (
           <article
             key={row.id}
-            className="min-w-0 space-y-3 rounded-card border border-border bg-surface p-3 @3xl/app:p-4"
+            className="flex min-w-0 items-start gap-3 rounded-card border border-border bg-surface p-3 @3xl/app:p-4"
           >
-            <h2 className="text-subtitle font-bold wrap-anywhere">
-              {row.title}
-            </h2>
-            <ChannelMark channel={row.channel} />
-            {row.description && (
-              <p className="text-body wrap-anywhere whitespace-pre-wrap">
-                {row.description}
-              </p>
-            )}
-            <ContentExternalLink href={row.href} channel={row.channel} />
+            <ContentChannelArt channel={row.channel} />
+            <div className="flex min-w-0 flex-1 flex-col items-start gap-1.5">
+              <ContentChannelBadge channel={row.channel} />
+              <h2 className="text-subtitle font-bold wrap-anywhere">
+                {row.title}
+              </h2>
+              {row.description && (
+                <p className="text-body wrap-anywhere whitespace-pre-wrap">
+                  {row.description}
+                </p>
+              )}
+              <ContentExternalLink href={row.href} channel={row.channel} />
+            </div>
           </article>
         ))}
         <nav
