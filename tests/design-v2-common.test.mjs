@@ -57,7 +57,7 @@ test("공통 헤더는 천사 로고와 20px 한 줄 이름이다", () => {
   assert.match(css, /--text-logo--line-height:\s*24px/);
 });
 
-test("상단 탭은 지정 순서로 가로 스크롤하고 AI 사주는 준비 중으로 간다", () => {
+test("상단 탭은 지정 순서로 두고 넓으면 너비를 채우며 AI 사주는 준비 중으로 간다", () => {
   const tabs = read("components/top-tabs.tsx");
   const found = [...tabs.matchAll(/\["([^"]+)", "([^"]+)"\]/g)].map((match) => [
     match[1],
@@ -74,12 +74,14 @@ test("상단 탭은 지정 순서로 가로 스크롤하고 AI 사주는 준비 
   assert.match(tabs, /overflow-x-auto/);
   assert.match(tabs, /min-w-0/);
   assert.match(tabs, /shrink-0/);
+  assert.match(tabs, /flex-1/);
+  assert.match(tabs, /\bgrow\b/);
   assert.match(tabs, /whitespace-nowrap/);
   assert.match(tabs, /gap-1/);
   assert.match(tabs, /px-2/);
   assert.match(tabs, /px-3/);
   assert.equal(tabs.includes("px-4"), false);
-  assert.equal(tabs.includes("flex-1"), false);
+  assert.equal(tabs.includes("flex-1 shrink-0"), false);
   const page = read("app/(site)/ai-saju/page.tsx");
   const form = read("components/ai-saju/input-form.tsx");
   assert.match(page, /title: `AI 사주 \| \$\{siteConfig\.name\}`/);

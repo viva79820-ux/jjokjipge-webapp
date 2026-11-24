@@ -704,7 +704,98 @@ try {
     );
     const home = await measure();
     await shot(name);
-    results.push({ name, consult, home });
+    const wideTabs = fine || width >= 768;
+    const readMenu = () =>
+      evaluate(`(() => {
+        const nav = document.querySelector('nav[aria-label="주요 메뉴"]');
+        if (!nav) return null;
+        const links = [...nav.querySelectorAll(":scope > a")];
+        const navBox = nav.getBoundingClientRect();
+        const boxes = links.map((link) => {
+          const box = link.getBoundingClientRect();
+          return {
+            label: link.textContent.trim(),
+            left: box.left,
+            right: box.right,
+            width: box.width,
+            fits: link.scrollWidth <= link.clientWidth + 1,
+          };
+        });
+        const visible = (box) =>
+          box.left >= navBox.left - 1 &&
+          box.right <= navBox.right + 1 &&
+          box.width > 0;
+        const first = boxes[0];
+        const last = boxes.at(-1);
+        return {
+          count: boxes.length,
+          first: first ? first.label : "",
+          last: last ? last.label : "",
+          scrolls: nav.scrollWidth > nav.clientWidth + 1,
+          scrollLeft: nav.scrollLeft,
+          firstVisible: Boolean(first && visible(first)),
+          lastVisible: Boolean(last && visible(last)),
+          span: first && last ? last.right - first.left : 0,
+          inner: nav.clientWidth - 16,
+          textFits: boxes.every((box) => box.fits),
+          widthGap:
+            boxes.reduce((gap, box) => Math.max(gap, box.width), 0) -
+            boxes.reduce((gap, box) => Math.min(gap, box.width), Infinity),
+        };
+      })()`);
+    await until(async () => {
+      const menu = await readMenu();
+      return Boolean(
+        menu &&
+        menu.count === 6 &&
+        menu.textFits &&
+        menu.firstVisible &&
+        (wideTabs
+          ? !menu.scrolls && menu.lastVisible && menu.span >= menu.inner - 2
+          : menu.scrolls && !menu.lastVisible),
+      );
+    }, `${name} home tabs`);
+    const homeTabs = await readMenu();
+    assert.equal(homeTabs.first, "전화상담", `${name} first tab`);
+    assert.equal(homeTabs.last, "콘텐츠", `${name} last tab`);
+    assert.equal(homeTabs.textFits, true, `${name} tab text`);
+    assert.equal(homeTabs.firstVisible, true, `${name} first visible`);
+    if (wideTabs) {
+      assert.equal(homeTabs.scrolls, false, `${name} tabs fit`);
+      assert.equal(homeTabs.lastVisible, true, `${name} last visible`);
+      assert.ok(
+        homeTabs.span >= homeTabs.inner - 2,
+        `${name} span ${homeTabs.span} inner ${homeTabs.inner}`,
+      );
+      if (!fine)
+        assert.ok(homeTabs.widthGap <= 1, `${name} even ${homeTabs.widthGap}`);
+    } else {
+      assert.equal(homeTabs.scrolls, true, `${name} tabs scroll`);
+      assert.equal(homeTabs.lastVisible, false, `${name} last clipped`);
+    }
+    await go("/contents");
+    await until(async () => {
+      const menu = await readMenu();
+      return Boolean(
+        menu &&
+        menu.lastVisible &&
+        menu.textFits &&
+        (wideTabs ? menu.firstVisible && !menu.scrolls : menu.scrolls),
+      );
+    }, `${name} contents tabs`);
+    const contentsTabs = await readMenu();
+    assert.equal(contentsTabs.first, "전화상담", `${name} contents first`);
+    assert.equal(contentsTabs.last, "콘텐츠", `${name} contents last`);
+    assert.equal(contentsTabs.lastVisible, true, `${name} contents last`);
+    assert.equal(contentsTabs.textFits, true, `${name} contents text`);
+    if (wideTabs) {
+      assert.equal(contentsTabs.scrolls, false, `${name} contents fit`);
+      assert.equal(contentsTabs.firstVisible, true, `${name} contents first`);
+    } else {
+      assert.equal(contentsTabs.scrolls, true, `${name} contents scroll`);
+      assert.ok(contentsTabs.scrollLeft > 0, `${name} contents autoscroll`);
+    }
+    results.push({ name, consult, home, homeTabs, contentsTabs });
     assert.equal(home.innerWidth, width);
     assert.equal(home.fine, fine);
     assert.equal(home.overflow, false);
