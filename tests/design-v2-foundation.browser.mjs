@@ -381,7 +381,8 @@ try {
     const loginBox = login.getBoundingClientRect();
     const tab = document.querySelector('nav[aria-label="주요 메뉴"]');
     const bar = document.querySelector('[data-app-bar]');
-    const phone = bar.querySelector('a[href^="tel:"] span');
+    const phoneButton = bar.querySelector("#bottom-phone-call");
+    const phone = phoneButton.querySelector("span");
     const phoneBox = phone.getBoundingClientRect();
     const barBox = bar.getBoundingClientRect();
     return {
@@ -395,8 +396,11 @@ try {
       barHeight: Math.round(barBox.height),
       phoneWidth: Math.round(phoneBox.width),
       phoneRaised: Math.round(barBox.top - phoneBox.top),
-      phoneHref: bar.querySelector('a[href^="tel:"]').getAttribute("href"),
-      labels: [...bar.querySelectorAll("a")].map((link) => link.textContent.trim()),
+      phoneTag: phoneButton.tagName,
+      phoneHref: phoneButton.getAttribute("href"),
+      labels: [...bar.children].map(
+        (node) => node.querySelectorAll("span")[1]?.textContent.trim() ?? "",
+      ),
       headerBg: getComputedStyle(document.querySelector("header")).backgroundColor,
       barBg: getComputedStyle(bar).backgroundColor,
       pageBg: getComputedStyle(document.body).backgroundColor,
@@ -411,7 +415,8 @@ try {
   assert.equal(header.barHeight, 72);
   assert.equal(header.phoneWidth, 54);
   assert.ok(header.phoneRaised >= 16 && header.phoneRaised <= 24);
-  assert.equal(header.phoneHref, "tel:010-0000-0000");
+  assert.equal(header.phoneTag, "BUTTON");
+  assert.equal(header.phoneHref, null);
   assert.deepEqual(header.labels, [
     "홈",
     "카테고리",

@@ -1,6 +1,6 @@
 export const siteConfig = {
   name: "쪽집게천사 운세통",
-  phone: "010-0000-0000",
+  phone: "0507-1498-0232",
   social: {
     blog: "https://example.com/blog",
     instagram: "https://example.com/instagram",

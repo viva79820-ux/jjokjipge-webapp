@@ -2,15 +2,31 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { Home, Grid2X2, Phone, CalendarSearch, UserRound } from "lucide-react";
 import { siteConfig } from "@/lib/site-config";
 import { appFixedBarClass } from "@/lib/app-frame";
+import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/ui/modal";
+
+const phoneButtonId = "bottom-phone-call";
+const representativeCallHref = `tel:${siteConfig.phone.replace(/\D/g, "")}`;
 
 const tabs = [
-  { label: "홈", href: "/", icon: Home },
-  { label: "카테고리", href: "/category", icon: Grid2X2 },
-  { label: "전화하기", href: `tel:${siteConfig.phone}`, icon: Phone },
-  { label: "예약조회", href: "/booking/lookup", icon: CalendarSearch },
+  { kind: "link" as const, label: "홈", href: "/", icon: Home },
+  {
+    kind: "link" as const,
+    label: "카테고리",
+    href: "/category",
+    icon: Grid2X2,
+  },
+  { kind: "phone" as const, label: "전화하기", icon: Phone },
+  {
+    kind: "link" as const,
+    label: "예약조회",
+    href: "/booking/lookup",
+    icon: CalendarSearch,
+  },
 ];
 
 export function BottomTabs({ signedIn }: { signedIn: boolean }) {
@@ -24,52 +40,91 @@ function BottomTabBar({
   signedIn: boolean;
   pathname: string | null;
 }) {
+  const [phoneOpen, setPhoneOpen] = useState(false);
+  const barRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    barRef.current?.setAttribute("data-bottom-tabs-ready", "yes");
+  }, []);
   const accountHref = signedIn ? "/mypage" : "/login";
   const accountLabel = signedIn ? "MY" : "로그인";
   return (
-    <nav
-      aria-label="하단 메뉴"
-      data-app-bar
-      className={`${appFixedBarClass} flex h-[calc(4.5rem+env(safe-area-inset-bottom))] items-stretch overflow-visible border-t border-border bg-surface pb-[env(safe-area-inset-bottom)]`}
-    >
-      {tabs.map(({ label, href, icon: Icon }) => {
-        const active = isActive(pathname, href);
-        const phone = href.startsWith("tel:");
-        const content = (
-          <>
-            <span
-              className={
-                phone
-                  ? "-mt-5 flex size-phone-fab items-center justify-center rounded-full border-4 border-on-brand bg-brand text-on-brand"
-                  : "flex h-6 items-center"
-              }
+    <>
+      <nav
+        ref={barRef}
+        aria-label="하단 메뉴"
+        data-app-bar
+        data-bottom-tabs-ready="no"
+        className={`${appFixedBarClass} flex h-[calc(4.5rem+env(safe-area-inset-bottom))] items-stretch overflow-visible border-t border-border bg-surface pb-[env(safe-area-inset-bottom)]`}
+      >
+        {tabs.map((tab) => {
+          const Icon = tab.icon;
+          if (tab.kind === "phone") {
+            return (
+              <button
+                key={tab.label}
+                type="button"
+                id={phoneButtonId}
+                className={tabClass(false, true)}
+                aria-haspopup="dialog"
+                aria-expanded={phoneOpen}
+                onClick={() => setPhoneOpen(true)}
+              >
+                <span className="-mt-5 flex size-phone-fab items-center justify-center rounded-full border-4 border-on-brand bg-brand text-on-brand">
+                  <Icon size={24} aria-hidden="true" />
+                </span>
+                <span>{tab.label}</span>
+              </button>
+            );
+          }
+          const active = isActive(pathname, tab.href);
+          return (
+            <Link
+              key={tab.href}
+              href={tab.href}
+              className={tabClass(active, false)}
+              aria-current={active ? "page" : undefined}
             >
-              <Icon size={24} aria-hidden="true" />
-            </span>
-            <span>{label}</span>
-          </>
-        );
-        return phone ? (
-          <a key={href} href={href} className={tabClass(active, true)}>
-            {content}
-          </a>
-        ) : (
-          <Link
-            key={href}
-            href={href}
-            className={tabClass(active, false)}
-            aria-current={active ? "page" : undefined}
-          >
-            {content}
-          </Link>
-        );
-      })}
-      <AccountTab
-        href={accountHref}
-        label={accountLabel}
-        active={accountActive(pathname, signedIn)}
-      />
-    </nav>
+              <span className="flex h-6 items-center">
+                <Icon size={24} aria-hidden="true" />
+              </span>
+              <span>{tab.label}</span>
+            </Link>
+          );
+        })}
+        <AccountTab
+          href={accountHref}
+          label={accountLabel}
+          active={accountActive(pathname, signedIn)}
+        />
+      </nav>
+      {phoneOpen && (
+        <Modal
+          title="쪽집게천사에 전화하기"
+          busy={false}
+          onClose={() => setPhoneOpen(false)}
+          restoreFocusId={phoneButtonId}
+          footer={
+            <>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setPhoneOpen(false)}
+              >
+                닫기
+              </Button>
+              <a
+                href={representativeCallHref}
+                className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-full bg-brand px-4.5 text-label font-bold text-on-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+              >
+                전화 연결
+              </a>
+            </>
+          }
+        >
+          <p className="text-title font-bold">{siteConfig.phone}</p>
+        </Modal>
+      )}
+    </>
   );
 }
 

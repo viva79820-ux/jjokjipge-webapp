@@ -541,7 +541,7 @@ try {
     await evaluate(
       `${inside("store-first", 'a[href^="tel:"]')}.getAttribute("href")`,
     ),
-    "tel:010-0000-0000",
+    "tel:0507-1498-0232",
   );
   const photoAddress = "대구 중구 동성로 1길 10";
   const localAddress = "대구 중구 동성로 2길 20";
