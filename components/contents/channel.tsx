@@ -5,6 +5,7 @@ import {
   ExternalLink,
   type LucideIcon,
 } from "lucide-react";
+import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import {
   channelLabels,
@@ -19,6 +20,27 @@ const icons: Record<Channel, LucideIcon> = {
   blog: BookOpen,
   instagram: Camera,
   youtube: CirclePlay,
+};
+
+const channelMarks: Record<
+  Channel,
+  { src: string; width: number; height: number }
+> = {
+  blog: {
+    src: "/images/channels/channel-naver-blog.png",
+    width: 244,
+    height: 244,
+  },
+  instagram: {
+    src: "/images/channels/channel-instagram.png",
+    width: 256,
+    height: 256,
+  },
+  youtube: {
+    src: "/images/channels/channel-youtube.png",
+    width: 256,
+    height: 179,
+  },
 };
 
 export function ChannelMark({ channel }: { channel: Channel }) {
@@ -38,12 +60,17 @@ export function OfficialChannelCard({
   channel: Channel;
   href: string | null;
 }) {
-  const Icon = icons[channel];
+  const mark = channelMarks[channel];
   const body = (
     <>
-      <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-brand text-on-brand">
-        <Icon size={22} aria-hidden="true" />
-      </span>
+      <Image
+        src={mark.src}
+        alt=""
+        width={mark.width}
+        height={mark.height}
+        unoptimized
+        className="h-11 w-auto shrink-0"
+      />
       <span className="max-w-full text-label font-extrabold break-keep text-foreground">
         {channelLabels[channel]}
       </span>
