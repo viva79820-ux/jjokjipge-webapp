@@ -296,39 +296,38 @@ begin
     return;
   end if;
 
+  -- 운영에서 한 상품의 테스트 가격이 달라졌으므로 이름·시간·순서로 시드 상품을 식별한다.
   with expected_products(
     counselor_slug,
     product_name,
     minutes,
-    price,
     sort_order
   ) as (
     values
-      ('a', '타로 상담 20분', 20, 20000, 0),
-      ('a', '타로 상담 30분', 30, 30000, 1),
-      ('b', '사주 상담 20분', 20, 20000, 0),
-      ('b', '사주 상담 30분', 30, 30000, 1),
-      ('c', '타로 상담 20분', 20, 20000, 0),
-      ('c', '타로 상담 30분', 30, 30000, 1),
-      ('d', '사주 상담 20분', 20, 20000, 0),
-      ('d', '사주 상담 30분', 30, 30000, 1),
-      ('e', '타로 상담 20분', 20, 20000, 0),
-      ('e', '타로 상담 30분', 30, 30000, 1),
-      ('f', '사주 상담 20분', 20, 20000, 0),
-      ('f', '사주 상담 30분', 30, 30000, 1)
+      ('a', '타로 상담 20분', 20, 0),
+      ('a', '타로 상담 30분', 30, 1),
+      ('b', '사주 상담 20분', 20, 0),
+      ('b', '사주 상담 30분', 30, 1),
+      ('c', '타로 상담 20분', 20, 0),
+      ('c', '타로 상담 30분', 30, 1),
+      ('d', '사주 상담 20분', 20, 0),
+      ('d', '사주 상담 30분', 30, 1),
+      ('e', '타로 상담 20분', 20, 0),
+      ('e', '타로 상담 30분', 30, 1),
+      ('f', '사주 상담 20분', 20, 0),
+      ('f', '사주 상담 30분', 30, 1)
   ),
   actual_products as (
     select
       c.slug as counselor_slug,
       p.name as product_name,
       p.minutes,
-      p.price,
       p.sort_order,
       count(*) as row_count
     from public.consult_products p
     join public.counselors c on c.id = p.counselor_id
     where p.counselor_id = any (target_ids)
-    group by c.slug, p.name, p.minutes, p.price, p.sort_order
+    group by c.slug, p.name, p.minutes, p.sort_order
   ),
   differences as (
     select
@@ -338,7 +337,6 @@ begin
       on actual.counselor_slug = expected.counselor_slug
       and actual.product_name = expected.product_name
       and actual.minutes = expected.minutes
-      and actual.price = expected.price
       and actual.sort_order = expected.sort_order
     where expected.counselor_slug is null
       or actual.counselor_slug is null

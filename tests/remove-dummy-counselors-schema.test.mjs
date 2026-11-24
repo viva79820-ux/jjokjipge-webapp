@@ -55,13 +55,14 @@ test("slug와 이름 6쌍 및 시드 상담상품 12개만 대상으로 삼는�
   assert.equal(
     [
       ...migration.matchAll(
-        /\('[a-f]', '(?:타로|사주) 상담 (?:20|30)분', (?:20|30), (?:20000|30000), [01]\)/g,
+        /\('[a-f]', '(?:타로|사주) 상담 (?:20|30)분', (?:20|30), [01]\)/g,
       ),
     ].length,
     12,
   );
   assert.match(migration, /matched_counselor_count not in \(0, 6\)/);
   assert.match(migration, /actual\.row_count <> 1/);
+  assert.doesNotMatch(migration, /actual\.price = expected\.price/);
   assert.doesNotMatch(migration, /구정미|가연/);
 });
 
