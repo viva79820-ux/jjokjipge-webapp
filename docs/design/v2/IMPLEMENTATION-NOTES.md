@@ -52,3 +52,4 @@
 - `DESIGN-SPEC.md`, `tokens.json`, `screens/`의 네 화면, `html/*.html`은 받은 원본 그대로다.
 - 로고와 매장 사진은 `public/images/brand/`에 있다. DB `image_path`에 자동 등록하지 않는다.
 - 기존 `docs/design/mood-*.png`는 이전 시안 기록으로 남겨 둔다. 화면 기준은 v2 명세다.
+- 11/24: 홈·전화상담·매장 화면 그림과 HTML을 11/20 수정본(상단 탭 6개, 운세통 한 줄 헤더, 상담사 2명)으로 교체했다. 2차 화면과 11/20 지시는 DESIGN-SPEC-2차.md에 있다.
