@@ -67,6 +67,11 @@ classes.push({
   created_at: "2026-11-18T01:00:00.000000+00:00",
   updated_at: "2026-11-18T01:00:00.000000+00:00",
 });
+for (const row of classes) {
+  row.is_online = true;
+  row.poster_path = null;
+  row.poster_alt = null;
+}
 let admin = true;
 let listFail = false;
 let customerEmpty = false;
@@ -531,7 +536,13 @@ try {
   });
   await emulate({ width: 390, fine: false });
   await go("/class");
-  await text("총 21건");
+  await text("과정 21개");
+  assert.deepEqual(
+    await page.evaluate(
+      `[...document.querySelectorAll('[aria-label="분야"] a')].filter((node) => node.checkVisibility()).map((node) => node.textContent.trim())`,
+    ),
+    ["전체", "사주", "타로"],
+  );
   await text(longTitle);
   await text("타로");
   await absent("테스트 비공개비밀");
@@ -542,6 +553,41 @@ try {
   await clickLink("다음");
   await text("테스트 둘째쪽");
   await text("2 / 2");
+  await clickLink("사주");
+  await until(
+    () =>
+      page.evaluate(
+        "location.pathname === '/class' && location.search === '?field=saju'",
+      ),
+    "saju field filter",
+  );
+  await text("과정 11개");
+  await text("테스트 공개 2");
+  await text("온라인");
+  await absent(longTitle);
+  await clickLink("타로");
+  await until(
+    () =>
+      page.evaluate(
+        "location.pathname === '/class' && location.search === '?field=tarot'",
+      ),
+    "tarot field filter",
+  );
+  await text("과정 10개");
+  await text(longTitle);
+  await text("온라인");
+  await absent("테스트 공개 2");
+  await go("/class?field=saju&page=2");
+  await until(
+    () =>
+      page.evaluate(
+        "location.pathname === '/class' && location.search === '?field=saju'",
+      ),
+    "saju page preserved",
+  );
+  await text("과정 11개");
+  await text("테스트 둘째쪽");
+  await absent(longTitle);
   await go(`/class/${longId}`);
   await text("줄바꿈첫줄");
   await text("줄바꿈둘째줄");

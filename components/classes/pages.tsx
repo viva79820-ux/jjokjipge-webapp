@@ -6,7 +6,12 @@ import { AdminAccessDenied } from "@/components/admin/access-denied";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ClassAdminFilter } from "@/components/classes/admin-filter";
+import { ClassDetailBody } from "@/components/classes/detail-body";
+import { ClassDetailFrame } from "@/components/classes/detail-frame";
+import { ClassDetailHeader } from "@/components/classes/detail-header";
 import { ClassEditor } from "@/components/classes/editor";
+import { ClassInquiryBar } from "@/components/classes/inquiry-bar";
+import { PublicClassCard } from "@/components/classes/public-card";
 import {
   adminClassDetail,
   adminClassList,
@@ -18,12 +23,13 @@ import {
   classFilters,
   classListUrl,
   classNewUrl,
+  publicFieldFilters,
   fieldLabel,
   pageSize,
   summarize,
   type ClassQuery,
 } from "@/lib/classes/rules";
-import { ClassVideoLink } from "./video-link";
+import { deliveryLabel } from "@/lib/classes/content";
 
 export async function ClassListPage({
   searchParams,
@@ -46,11 +52,11 @@ export async function ClassListPage({
     );
   const result = admin
     ? await adminClassList(filters.page, filters.status)
-    : await publicClassList(filters.page);
+    : await publicClassList(filters.page, filters.field);
   if (!result) return <AdminAccessDenied />;
   const pages = Math.max(1, Math.ceil(result.count / pageSize));
   if (filters.page > pages)
-    redirect(classListUrl(admin, pages, filters.status));
+    redirect(classListUrl(admin, pages, filters.status, "", filters.field));
   return (
     <div className="space-y-7 wrap-anywhere">
       <div className="space-y-2">
@@ -58,7 +64,7 @@ export async function ClassListPage({
         <p className="text-body text-muted">
           {admin
             ? "강의를 등록하고 공개 여부를 관리합니다."
-            : "사주·타로 강의를 외부 영상으로 볼 수 있습니다."}
+            : "사주·타로 수강 과정입니다. 카드의 온라인·오프라인 표시로 수업 형태를 확인합니다."}
         </p>
       </div>
       {admin && filters.result === "deleted" && (
@@ -78,39 +84,69 @@ export async function ClassListPage({
           />
         </>
       )}
-      <p className="text-caption text-muted">총 {result.count}건</p>
+      {!admin && (
+        <div
+          className="flex max-w-full gap-2 overflow-x-auto"
+          aria-label="분야"
+        >
+          {publicFieldFilters.map((item) => {
+            const selected = filters.field === item.value;
+            return (
+              <Button
+                key={item.label}
+                href={classListUrl(false, 1, "", "", item.value)}
+                variant={selected ? "primary" : "secondary"}
+                className="shrink-0"
+              >
+                {item.label}
+              </Button>
+            );
+          })}
+        </div>
+      )}
+      <p className="text-caption text-muted">
+        {admin ? `총 ${result.count}건` : `과정 ${result.count}개`}
+      </p>
       {!result.data.length && <p role="status">등록된 클래스가 없습니다.</p>}
       <div className="space-y-3">
-        {result.data.map((row) => {
-          const href = admin
-            ? classEditUrl(row.id, filters.page, filters.status)
-            : `/class/${row.id}`;
-          return (
-            <article
-              key={row.id}
-              className="space-y-2 rounded-card border border-border bg-surface p-3 @3xl/app:p-4"
-            >
-              <Link
-                href={href}
-                className="inline-flex min-h-11 items-center text-subtitle font-bold wrap-anywhere text-brand"
+        {!admin &&
+          result.data.map((row) =>
+            "is_online" in row && !("is_published" in row) ? (
+              <PublicClassCard key={row.id} row={row} />
+            ) : null,
+          )}
+        {admin &&
+          result.data.map((row) => {
+            const href = classEditUrl(row.id, filters.page, filters.status);
+            return (
+              <article
+                key={row.id}
+                className="space-y-2 rounded-card border border-border bg-surface p-3 @3xl/app:p-4"
               >
-                {row.title}
-              </Link>
-              <div className="flex flex-wrap gap-2">
-                <Badge>{fieldLabel(row.field)}</Badge>
-                {admin && "is_published" in row && (
-                  <Badge>{row.is_published ? "공개" : "비공개"}</Badge>
-                )}
-                {admin && "sort_order" in row && (
-                  <Badge>표시 순서 {row.sort_order}</Badge>
-                )}
-              </div>
-              <p className="text-body wrap-anywhere text-foreground">
-                {summarize(row.description)}
-              </p>
-            </article>
-          );
-        })}
+                <Link
+                  href={href}
+                  className="inline-flex min-h-11 items-center text-subtitle font-bold wrap-anywhere text-brand"
+                >
+                  {row.title}
+                </Link>
+                <div className="flex flex-wrap gap-2">
+                  <Badge>{fieldLabel(row.field)}</Badge>
+                  {admin && "is_online" in row && (
+                    <Badge>{deliveryLabel(row.is_online)}</Badge>
+                  )}
+                  {admin && "is_published" in row && (
+                    <Badge>{row.is_published ? "공개" : "비공개"}</Badge>
+                  )}
+                  {admin && "sort_order" in row && (
+                    <Badge>표시 순서 {row.sort_order}</Badge>
+                  )}
+                </div>
+                <p className="text-body wrap-anywhere text-foreground">
+                  {summarize(row.description)}
+                </p>
+              </article>
+            );
+          })}
       </div>
       <nav
         aria-label="클래스 페이지"
@@ -118,7 +154,13 @@ export async function ClassListPage({
       >
         {filters.page > 1 && (
           <Button
-            href={classListUrl(admin, filters.page - 1, filters.status)}
+            href={classListUrl(
+              admin,
+              filters.page - 1,
+              filters.status,
+              "",
+              filters.field,
+            )}
             variant="secondary"
           >
             이전
@@ -129,7 +171,13 @@ export async function ClassListPage({
         </span>
         {filters.page < pages && (
           <Button
-            href={classListUrl(admin, filters.page + 1, filters.status)}
+            href={classListUrl(
+              admin,
+              filters.page + 1,
+              filters.status,
+              "",
+              filters.field,
+            )}
             variant="secondary"
           >
             다음
@@ -149,21 +197,13 @@ export async function ClassDetailPage({
   const row = await publicClassDetail((await params).id);
   if (!row) notFound();
   return (
-    <article className="space-y-7 wrap-anywhere">
-      <Button href="/class" variant="secondary">
-        목록으로
-      </Button>
-      <header className="space-y-3">
-        <h1 className="text-display font-extrabold wrap-anywhere">
-          {row.title}
-        </h1>
-        <Badge>{fieldLabel(row.field)}</Badge>
-      </header>
-      <p className="text-body wrap-anywhere whitespace-pre-wrap">
-        {row.description}
-      </p>
-      <ClassVideoLink url={row.video_url} />
-    </article>
+    <ClassDetailFrame>
+      <article className="-mx-4 -mt-6 min-w-0 wrap-anywhere @3xl/app:-mx-6">
+        <ClassDetailHeader />
+        <ClassDetailBody row={row} />
+        <ClassInquiryBar videoUrl={row.video_url} />
+      </article>
+    </ClassDetailFrame>
   );
 }
 

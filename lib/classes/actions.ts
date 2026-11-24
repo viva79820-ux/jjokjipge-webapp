@@ -1,13 +1,22 @@
 "use server";
 import "server-only";
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/admin/auth";
 import { versionValid } from "@/lib/admin/support-rules";
 import { createClient } from "@/lib/supabase/server";
 import {
+  classifyStorageInfo,
+  cleanupAction,
+  confirmUploadAction,
+  removeUnreferenced,
+} from "./cleanup";
+import {
+  bucket,
   classMatches,
   columns,
   parseClass,
+  posterPath,
   sameClass,
   scalar,
   uuid,
@@ -19,6 +28,7 @@ export type Result = {
   message: string;
   row?: ClassRecord;
   errors?: Record<string, string>;
+  cleanup?: () => Promise<boolean>;
   missing?: boolean;
   deleted?: boolean;
   unchanged?: boolean;
@@ -72,13 +82,18 @@ async function readClass(
   return db.from("classes").select(columns).eq("id", id).maybeSingle();
 }
 
-function savedResult(row: ClassRecord, deleted = false): Result {
+function savedResult(
+  row: ClassRecord,
+  deleted = false,
+  cleanup?: () => Promise<boolean>,
+): Result {
   invalidate(row.id);
   return {
     state: "saved",
     message: deleted ? "클래스를 삭제했습니다." : "클래스를 저장했습니다.",
     row,
     deleted,
+    cleanup,
   };
 }
 
@@ -98,6 +113,17 @@ function duplicateField(form: FormData) {
     seen.add(key);
   }
   return false;
+}
+
+export async function prepareClassUpload(ext: string) {
+  const admin = await requireAdmin();
+  if (!admin || !["jpg", "jpeg", "png", "webp"].includes(ext)) return null;
+  const path = `classes/${randomUUID()}.${ext === "jpeg" ? "jpg" : ext}`;
+  return {
+    path,
+    cleanup: cleanupAction(path, admin.userId),
+    confirm: confirmUploadAction(path, admin.userId),
+  };
 }
 
 export async function reloadClass(id: string): Promise<Result> {
@@ -156,12 +182,46 @@ export async function saveClass(form: FormData): Promise<Result> {
     }
     if (mode !== "create" && !current) return missing;
     if (mode !== "create" && current!.updated_at !== version) return conflict;
+    const path = parsed?.patch.poster_path || null;
+    if (path && path !== current?.poster_path) {
+      const refs = await db
+        .from("classes")
+        .select("id", { count: "exact", head: true })
+        .eq("poster_path", path);
+      if (refs.error || refs.count === null) return unknown;
+      if (refs.count !== 0)
+        return {
+          state: "rejected",
+          message: "다른 클래스의 포스터 경로를 사용할 수 없습니다.",
+        };
+      let looked: ReturnType<typeof classifyStorageInfo>;
+      try {
+        looked = classifyStorageInfo(await db.storage.from(bucket).info(path));
+      } catch {
+        return unknown;
+      }
+      if (looked === "missing")
+        return {
+          state: "rejected",
+          message:
+            "업로드한 포스터를 찾지 못했습니다. 클래스 정보는 바꾸지 않았습니다.",
+        };
+      if (looked === "rejected")
+        return {
+          state: "rejected",
+          message: "업로드 포스터의 크기·형식을 확인하지 못했습니다.",
+        };
+      if (looked !== "present") return unknown;
+    }
     const payload = parsed
       ? {
           title: parsed.patch.title,
           description: parsed.patch.description,
           field: parsed.patch.field,
           video_url: parsed.patch.video_url,
+          is_online: parsed.patch.is_online,
+          poster_path: parsed.patch.poster_path,
+          poster_alt: parsed.patch.poster_alt,
           is_published: parsed.patch.is_published,
           sort_order: parsed.patch.sort_order,
         }
@@ -205,7 +265,22 @@ export async function saveClass(form: FormData): Promise<Result> {
         message: "저장 요청이 거부됐습니다. 입력과 권한을 확인해 주세요.",
       };
     }
-    return savedResult(result.data as ClassRecord, mode === "delete");
+    const saved = result.data as ClassRecord;
+    const previous = current?.poster_path;
+    let cleanup: (() => Promise<boolean>) | undefined;
+    if (
+      previous &&
+      posterPath(previous) &&
+      (mode === "delete" || previous !== saved.poster_path)
+    ) {
+      cleanup = cleanupAction(previous, admin.userId);
+      try {
+        if (await removeUnreferenced(db, previous)) cleanup = undefined;
+      } catch {
+        /* 클래스 저장은 유지하고 포스터 정리만 다시 시도할 수 있게 둔다. */
+      }
+    }
+    return savedResult(saved, mode === "delete", cleanup);
   } catch {
     return unknown;
   }
