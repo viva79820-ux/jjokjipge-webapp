@@ -27,7 +27,7 @@ export function TopTabs() {
   return (
     <nav
       aria-label="주요 메뉴"
-      className="flex h-12 min-w-0 overflow-x-auto border-b border-border bg-surface [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="flex h-12 min-w-0 gap-1 overflow-x-auto border-b border-border bg-surface px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
       {tabs.map(([label, href]) => {
         const active = pathname === href || pathname.startsWith(`${href}/`);
@@ -43,7 +43,7 @@ export function TopTabs() {
                 inline: "nearest",
               });
             }}
-            className={`flex h-12 shrink-0 cursor-pointer items-center justify-center border-b-3 px-4 text-body whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-brand ${active ? "border-brand font-bold text-brand" : "border-transparent font-semibold text-muted"}`}
+            className={`flex h-12 shrink-0 cursor-pointer items-center justify-center border-b-3 px-3 text-body whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-brand ${active ? "border-brand font-bold text-brand" : "border-transparent font-semibold text-muted"}`}
           >
             {label}
           </Link>

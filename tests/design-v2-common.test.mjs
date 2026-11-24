@@ -75,7 +75,10 @@ test("상단 탭은 지정 순서로 가로 스크롤하고 AI 사주는 준비 
   assert.match(tabs, /min-w-0/);
   assert.match(tabs, /shrink-0/);
   assert.match(tabs, /whitespace-nowrap/);
-  assert.match(tabs, /px-4/);
+  assert.match(tabs, /gap-1/);
+  assert.match(tabs, /px-2/);
+  assert.match(tabs, /px-3/);
+  assert.equal(tabs.includes("px-4"), false);
   assert.equal(tabs.includes("flex-1"), false);
   const page = read("app/(site)/ai-saju/page.tsx");
   const form = read("components/ai-saju/input-form.tsx");
@@ -108,7 +111,7 @@ test("360px에서 헤더가 들어가고 여섯 탭은 스크롤되며 PC 560px 
   const headerWidth = 32 + logoWidth + 8 + nameWidth + 8 + 44;
   assert.ok(headerWidth <= 360, `header ${headerWidth}`);
 
-  const hangul = (count) => count * 15 * 1.08 + 32;
+  const hangul = (count) => count * 15 * 1.08 + 24;
   const tabWidths = [
     hangul(4),
     24 + 4 + hangul(2),
@@ -117,9 +120,10 @@ test("360px에서 헤더가 들어가고 여섯 탭은 스크롤되며 PC 560px 
     hangul(3),
     hangul(3),
   ];
-  const tabsWidth = tabWidths.reduce((sum, width) => sum + width, 0);
+  const tabsWidth =
+    tabWidths.reduce((sum, width) => sum + width, 0) + 4 * 5 + 16;
   assert.equal(tabWidths.length, 6);
   assert.ok(tabWidths.every((width) => width >= 44));
-  assert.ok(tabsWidth > 360, `tabs ${tabsWidth}`);
+  assert.ok(tabsWidth > 430, `tabs ${tabsWidth}`);
   assert.ok(tabsWidth <= 560, `tabs ${tabsWidth}`);
 });
