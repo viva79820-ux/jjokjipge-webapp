@@ -98,7 +98,12 @@ test("하단 탭 동작과 PC 560px 틀은 유지된다", () => {
   for (const label of ["홈", "카테고리", "전화하기", "예약조회", "로그인"]) {
     assert.match(bottom, new RegExp(label));
   }
-  assert.match(bottom, /tel:\$\{siteConfig\.phone\}/);
+  assert.match(bottom, /쪽집게천사에 전화하기/);
+  assert.match(bottom, /전화 연결/);
+  assert.match(bottom, /닫기/);
+  assert.match(bottom, /tel:\$\{siteConfig\.phone\.replace\(\/\\D\/g, ""\)\}/);
+  assert.equal(bottom.includes("href: `tel:${siteConfig.phone}`"), false);
+  assert.match(bottom, /from "@\/components\/ui\/modal"/);
   assert.match(bottom, /appFixedBarClass/);
   const frame = read("lib/app-frame.ts");
   assert.match(frame, /max-w-app pc:max-w-pc/);
