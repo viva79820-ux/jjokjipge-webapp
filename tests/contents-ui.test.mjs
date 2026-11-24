@@ -862,6 +862,7 @@ test("공식 채널은 확인된 주소만 연결하고 임시 주소는 누르�
 
   const pages = read("components/contents/pages.tsx");
   const channel = read("components/contents/channel.tsx");
+  const thumbnail = read("components/contents/thumbnail.tsx");
   const start = pages.indexOf("export async function ContentListPage");
   const end = pages.indexOf("export async function AdminContentListPage");
   const pub = pages.slice(start, end);
@@ -892,6 +893,16 @@ test("공식 채널은 확인된 주소만 연결하고 임시 주소는 누르�
   assert.match(channel, /target="_blank"/);
   assert.match(channel, /rel="noopener noreferrer"/);
   assert.match(channel, /새 창으로 열기/);
+  for (const asset of [
+    "channel-youtube.png",
+    "channel-instagram.png",
+    "channel-naver-blog.png",
+  ]) {
+    assert.match(thumbnail, new RegExp(asset.replace(".", "\\.")));
+  }
+  assert.match(thumbnail, /bg-brand-soft/);
+  assert.match(thumbnail, /object-contain/);
+  assert.equal(thumbnail.includes("lucide-react"), false);
   assert.match(pub, /외부 주소를 사용할 수 없습니다/);
   assert.equal(channel.includes("<iframe"), false);
   const admin = pages.slice(end);

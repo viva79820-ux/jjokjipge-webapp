@@ -619,14 +619,32 @@ try {
     await page.evaluate("document.querySelectorAll('iframe').length"),
     0,
   );
-  const thumbnails = await page.evaluate(`(() => ({
-    valid: Boolean(document.querySelector('img[alt="테스트 블로그 썸네일"]')),
-    failed: Boolean(document.querySelector('[role="img"][aria-label="인스타그램 썸네일을 불러오지 못했습니다"]')),
-    missing: Array.from(document.querySelectorAll("a")).some((item) => item.textContent.includes("가운데 블로그") && item.querySelector('[role="img"][aria-label="블로그 썸네일 없음"]')),
-  }))()`);
+  const thumbnails = await page.evaluate(`(() => {
+    const failed = document.querySelector('[role="img"][aria-label="인스타그램 썸네일을 불러오지 못했습니다"]');
+    const missing = Array.from(document.querySelectorAll("a"))
+      .find((item) => item.textContent.includes("가운데 블로그"))
+      ?.querySelector('[role="img"][aria-label="블로그 썸네일 없음"]');
+    const missingMark = missing?.querySelector("img");
+    return {
+      valid: Boolean(document.querySelector('img[alt="테스트 블로그 썸네일"]')),
+      failed: Boolean(failed),
+      failedMark: failed?.querySelector("img")?.getAttribute("src"),
+      missing: Boolean(missing),
+      missingMark: missingMark?.getAttribute("src"),
+      missingFit: missingMark ? getComputedStyle(missingMark).objectFit : null,
+      missingFilter: missingMark ? getComputedStyle(missingMark).filter : null,
+    };
+  })()`);
   assert.equal(thumbnails.valid, true);
   assert.equal(thumbnails.failed, true);
+  assert.equal(thumbnails.failedMark, "/images/channels/channel-instagram.png");
   assert.equal(thumbnails.missing, true);
+  assert.equal(
+    thumbnails.missingMark,
+    "/images/channels/channel-naver-blog.png",
+  );
+  assert.equal(thumbnails.missingFit, "contain");
+  assert.equal(thumbnails.missingFilter, "none");
   const link = await page.evaluate(`(() => {
     const el = Array.from(document.querySelectorAll("a")).find((item) => item.checkVisibility() && item.textContent.includes("인스타 공개글"));
     return { href: el.href, target: el.target, rel: el.rel, text: el.textContent };
@@ -651,6 +669,13 @@ try {
   await text("둘째쪽 콘텐츠");
   await text("공개 유튜브");
   await text("2 / 2");
+  assert.equal(
+    await page.evaluate(`(() => Array.from(document.querySelectorAll("a"))
+      .find((item) => item.textContent.includes("공개 유튜브"))
+      ?.querySelector('[role="img"] img')
+      ?.getAttribute("src"))()`),
+    "/images/channels/channel-youtube.png",
+  );
   await absent(longTitle);
   await page.evaluate("history.back()");
   await until(
