@@ -1200,9 +1200,32 @@ try {
   ];
   for (const [width, fine, pad] of widths) {
     await emulate({ width, fine });
+    await go("/ai-saju/result");
+    await text("예시 결과 · 실제 내용은 AI 사주 서비스가 채움");
+    let chrome = await page.evaluate(`(() => ({
+      siteHeader: [...document.querySelectorAll("[data-site-header]")]
+        .filter((node) => node.checkVisibility()).length,
+      bottomTabs: [...document.querySelectorAll('[aria-label="하단 메뉴"]')]
+        .filter((node) => node.checkVisibility()).length,
+      detailHeader: [...document.querySelectorAll("[data-ai-saju-header]")]
+        .filter((node) => node.checkVisibility()).length,
+      actionBar: [...document.querySelectorAll("[data-booking-bar]")]
+        .filter((node) => node.checkVisibility()).length,
+    }))()`);
+    assert.deepEqual(chrome, {
+      siteHeader: 0,
+      bottomTabs: 0,
+      detailHeader: 1,
+      actionBar: 1,
+    });
+    let box = await measure();
+    assert.equal(box.overflow, false, `ai result overflow ${width}`);
+    if (fine) assert.equal(box.width, 560);
+    else if (width >= 1024) assert.equal(box.width, 1024);
+    else assert.equal(box.width, width);
     await go("/class");
     await text(longTitle);
-    let box = await measure();
+    box = await measure();
     assert.equal(box.overflow, false, `list overflow ${width}`);
     assert.equal(box.covered, false, `list covered ${width}`);
     assert.equal(box.controls.length, 0, `list touch ${width} ${box.controls}`);
@@ -1213,6 +1236,22 @@ try {
     await screenshot(`customer-list-${width}.png`);
     await go(`/class/${longId}`);
     await text("강의 영상 보기");
+    chrome = await page.evaluate(`(() => ({
+      siteHeader: [...document.querySelectorAll("[data-site-header]")]
+        .filter((node) => node.checkVisibility()).length,
+      bottomTabs: [...document.querySelectorAll('[aria-label="하단 메뉴"]')]
+        .filter((node) => node.checkVisibility()).length,
+      detailHeader: [...document.querySelectorAll('header a[aria-label="뒤로"]')]
+        .filter((node) => node.checkVisibility()).length,
+      actionBar: [...document.querySelectorAll("[data-class-inquiry]")]
+        .filter((node) => node.checkVisibility()).length,
+    }))()`);
+    assert.deepEqual(chrome, {
+      siteHeader: 0,
+      bottomTabs: 0,
+      detailHeader: 1,
+      actionBar: 1,
+    });
     box = await measure();
     assert.equal(box.overflow, false, `detail overflow ${width}`);
     assert.equal(box.covered, false, `detail covered ${width}`);

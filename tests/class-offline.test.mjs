@@ -116,8 +116,8 @@ test("structured class text stays in html fields and free text still works", () 
 });
 
 test("class inquiry uses the approved business number", () => {
-  assert.equal(inquiry.classInquiryPhoneDisplay, "010-5553-0120");
-  assert.equal(inquiry.classInquiryPhoneHref, "tel:01055530120");
+  assert.equal(inquiry.classInquiryPhoneDisplay, "0507-1498-0232");
+  assert.equal(inquiry.classInquiryPhoneHref, "tel:050714980232");
   assert.equal(inquiry.classInquiryLabel, "수강 문의");
   assert.equal(inquiry.classInquiryPhoneHref.includes("0000"), false);
   assert.equal(rules.includes("siteConfig.phone"), false);

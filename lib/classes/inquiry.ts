@@ -1,3 +1,3 @@
 export const classInquiryLabel = "수강 문의";
-export const classInquiryPhoneDisplay = "010-5553-0120";
-export const classInquiryPhoneHref = "tel:01055530120";
+export const classInquiryPhoneDisplay = "0507-1498-0232";
+export const classInquiryPhoneHref = "tel:050714980232";
