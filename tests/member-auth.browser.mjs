@@ -503,7 +503,7 @@ try {
   const verifyText = await textOf();
   assert.match(
     verifyText,
-    /인증 링크를 누르기 전에는 가입이 끝난 것이 아니에요/,
+    /확인 버튼을 누르기 전에는 가입이 끝난 것이 아니에요/,
   );
   assert.equal(verifyText.includes("인증이 완료"), false);
   assert.equal(verifyText.includes(password), false);
@@ -753,9 +753,33 @@ try {
   assert.equal((await textOf()).includes(nameB), false);
   await loginAs(emailA, nextPassword, nameA);
   assert.equal((await textOf()).includes(nameB), false);
+  assert.equal((await textOf()).includes("관리자 페이지"), false);
 
   await goto("/admin");
   await waitText("관리자 권한이 없어요.");
+  const promoted = await fetch(`${mock.url}/__test/role`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: emailA, role: "admin" }),
+  });
+  assert.equal(promoted.ok, true);
+  await goto("/mypage");
+  await waitText("관리자 페이지");
+  assert.equal(
+    await evaluate(
+      `[...document.querySelectorAll("a")].find((node) => node.textContent.trim() === "관리자 페이지")?.getAttribute("href")`,
+    ),
+    "/admin",
+  );
+  await click("a", "관리자 페이지");
+  await until(() => evaluate('location.pathname === "/admin"'), "admin page");
+  await until(async () => {
+    const text = await textOf();
+    return (
+      text.includes("쪽집게천사 운세통 관리자") &&
+      !text.includes("관리자 권한이 없어요.")
+    );
+  }, "admin allowed");
   await fetch(`${mock.url}/__test/revoke`, { method: "POST" });
   await goto("/mypage");
   await waitText("비밀번호 재설정");

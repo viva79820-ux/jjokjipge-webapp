@@ -141,10 +141,17 @@ export function startAuthMock() {
       refreshes.clear();
       return json(res, { ok: true });
     }
+    if (url.pathname === "/__test/role") {
+      const body = await readBody(req);
+      const user = users.get(String(body.email ?? ""));
+      if (!user) return json(res, { ok: false });
+      user.role = body.role === "admin" ? "admin" : "user";
+      return json(res, { ok: true, role: user.role });
+    }
 
     const apiKey = req.headers.apikey;
     if (url.pathname === "/rest/v1/reservations") {
-      if (req.method !== "GET") {
+      if (req.method !== "GET" && req.method !== "HEAD") {
         writes += 1;
         return fail(res, 405, "no_write");
       }
@@ -231,7 +238,7 @@ export function startAuthMock() {
       const user = userFromRequest(req);
       const id = url.searchParams.get("id");
       if (!user || id !== `eq.${user.id}`) return json(res, []);
-      return json(res, [{ name: user.name, role: "user" }]);
+      return json(res, [{ name: user.name, role: user.role ?? "user" }]);
     }
 
     if (!url.pathname.startsWith("/auth/v1/")) {
