@@ -404,7 +404,7 @@ try {
   })()`);
   assert.equal(header.row, 60);
   assert.equal(header.logo, 34);
-  assert.equal(header.name, "쪽집게천사 운명나라 · 동성로 사주·타로·작명");
+  assert.equal(header.name, "쪽집게천사 운세통");
   assert.equal(header.loginHref, "/login");
   assert.ok(header.loginWidth >= 44 && header.loginHeight >= 44);
   assert.equal(header.tabHeight, 48);
@@ -481,6 +481,108 @@ try {
     await evaluate(
       `document.body.innerText.includes(${JSON.stringify(longAddress)}) && document.querySelector("main").scrollWidth <= document.querySelector("main").clientWidth + 1`,
     ),
+    true,
+  );
+  const tabLabels = [
+    "전화상담",
+    "AI 사주",
+    "클래스",
+    "매장상담",
+    "타로샵",
+    "콘텐츠",
+  ];
+  const readTabs = () =>
+    evaluate(`(() => {
+      const nav = document.querySelector('nav[aria-label="주요 메뉴"]');
+      const active = nav?.querySelector('[aria-current="page"]');
+      const navBox = nav?.getBoundingClientRect();
+      const activeBox = active?.getBoundingClientRect();
+      const shell = document.querySelector("[data-app-shell]");
+      return {
+        labels: nav ? [...nav.querySelectorAll(":scope > a")].map((link) => link.textContent.trim()) : [],
+        active: active ? active.textContent.trim() : "",
+        scrolls: nav ? nav.scrollWidth > nav.clientWidth + 1 : false,
+        scrollLeft: nav ? nav.scrollLeft : 0,
+        activeInside: Boolean(
+          nav &&
+            active &&
+            activeBox.left >= navBox.left - 1 &&
+            activeBox.right <= navBox.right + 1 &&
+            activeBox.width > 0,
+        ),
+        shell: shell ? Math.round(shell.getBoundingClientRect().width) : 0,
+        overflow: document.documentElement.scrollWidth <= window.innerWidth + 1,
+      };
+    })()`);
+  for (const [width, fine] of [
+    [360, false],
+    [390, false],
+    [1280, true],
+  ]) {
+    await emulate({ width, height: fine ? 900 : 844, fine });
+    await go("/contents");
+    await until(async () => {
+      const tabs = await readTabs();
+      return (
+        tabs.active === "콘텐츠" &&
+        tabs.activeInside &&
+        tabs.labels.length === 6 &&
+        (fine || (tabs.scrolls && tabs.scrollLeft > 0))
+      );
+    }, `contents tabs ${width}`);
+    const contents = await readTabs();
+    assert.deepEqual(contents.labels, tabLabels, String(width));
+    assert.equal(contents.active, "콘텐츠", String(width));
+    assert.equal(contents.activeInside, true, `contents scroll ${width}`);
+    assert.equal(contents.overflow, true, `contents page ${width}`);
+    if (fine) assert.equal(contents.shell, 560, String(contents.shell));
+    else {
+      assert.equal(contents.scrolls, true, `contents overflow tabs ${width}`);
+      assert.ok(contents.scrollLeft > 0, `contents autoscroll ${width}`);
+    }
+    await go("/ai-saju");
+    await until(async () => {
+      const tabs = await readTabs();
+      return tabs.active === "AI 사주" && tabs.activeInside;
+    }, `ai tabs ${width}`);
+    const preparing = await evaluate(`(() => {
+      const button = [...document.querySelectorAll("button")].find((node) => node.textContent.trim() === "준비 중");
+      const example = [...document.querySelectorAll("a")].find((node) => node.textContent.trim() === "예시 결과 보기");
+      return {
+        disabled: Boolean(button && button.disabled),
+        example: example ? example.getAttribute("href") : "",
+        form: document.querySelectorAll("form").length,
+      };
+    })()`);
+    assert.equal(preparing.disabled, true, `preparing ${width}`);
+    assert.equal(preparing.example, "/ai-saju/result", `example ${width}`);
+    assert.equal(preparing.form, 0, `form ${width}`);
+  }
+  await emulate({ width: 390, height: 844, fine: false });
+  await go("/ai-saju");
+  await evaluate(`(() => {
+    const example = [...document.querySelectorAll("a")].find((node) => node.textContent.trim() === "예시 결과 보기");
+    example.click();
+  })()`);
+  await until(
+    () => evaluate('location.pathname === "/ai-saju/result"'),
+    "ai example",
+  );
+  assert.equal(
+    await evaluate(`(() => {
+      const text = document.body.innerText;
+      const visible = (selector) =>
+        [...document.querySelectorAll(selector)].some((node) =>
+          node.checkVisibility(),
+        );
+      return (
+        text.includes("예시 결과") &&
+        text.includes("다른 사람 보기") &&
+        text.includes("선생님께 상담") &&
+        !visible('nav[aria-label="주요 메뉴"]') &&
+        !visible('nav[aria-label="하단 메뉴"]')
+      );
+    })()`),
     true,
   );
   await go("/");
@@ -602,7 +704,98 @@ try {
     );
     const home = await measure();
     await shot(name);
-    results.push({ name, consult, home });
+    const wideTabs = fine || width >= 768;
+    const readMenu = () =>
+      evaluate(`(() => {
+        const nav = document.querySelector('nav[aria-label="주요 메뉴"]');
+        if (!nav) return null;
+        const links = [...nav.querySelectorAll(":scope > a")];
+        const navBox = nav.getBoundingClientRect();
+        const boxes = links.map((link) => {
+          const box = link.getBoundingClientRect();
+          return {
+            label: link.textContent.trim(),
+            left: box.left,
+            right: box.right,
+            width: box.width,
+            fits: link.scrollWidth <= link.clientWidth + 1,
+          };
+        });
+        const visible = (box) =>
+          box.left >= navBox.left - 1 &&
+          box.right <= navBox.right + 1 &&
+          box.width > 0;
+        const first = boxes[0];
+        const last = boxes.at(-1);
+        return {
+          count: boxes.length,
+          first: first ? first.label : "",
+          last: last ? last.label : "",
+          scrolls: nav.scrollWidth > nav.clientWidth + 1,
+          scrollLeft: nav.scrollLeft,
+          firstVisible: Boolean(first && visible(first)),
+          lastVisible: Boolean(last && visible(last)),
+          span: first && last ? last.right - first.left : 0,
+          inner: nav.clientWidth - 16,
+          textFits: boxes.every((box) => box.fits),
+          widthGap:
+            boxes.reduce((gap, box) => Math.max(gap, box.width), 0) -
+            boxes.reduce((gap, box) => Math.min(gap, box.width), Infinity),
+        };
+      })()`);
+    await until(async () => {
+      const menu = await readMenu();
+      return Boolean(
+        menu &&
+        menu.count === 6 &&
+        menu.textFits &&
+        menu.firstVisible &&
+        (wideTabs
+          ? !menu.scrolls && menu.lastVisible && menu.span >= menu.inner - 2
+          : menu.scrolls && !menu.lastVisible),
+      );
+    }, `${name} home tabs`);
+    const homeTabs = await readMenu();
+    assert.equal(homeTabs.first, "전화상담", `${name} first tab`);
+    assert.equal(homeTabs.last, "콘텐츠", `${name} last tab`);
+    assert.equal(homeTabs.textFits, true, `${name} tab text`);
+    assert.equal(homeTabs.firstVisible, true, `${name} first visible`);
+    if (wideTabs) {
+      assert.equal(homeTabs.scrolls, false, `${name} tabs fit`);
+      assert.equal(homeTabs.lastVisible, true, `${name} last visible`);
+      assert.ok(
+        homeTabs.span >= homeTabs.inner - 2,
+        `${name} span ${homeTabs.span} inner ${homeTabs.inner}`,
+      );
+      if (!fine)
+        assert.ok(homeTabs.widthGap <= 1, `${name} even ${homeTabs.widthGap}`);
+    } else {
+      assert.equal(homeTabs.scrolls, true, `${name} tabs scroll`);
+      assert.equal(homeTabs.lastVisible, false, `${name} last clipped`);
+    }
+    await go("/contents");
+    await until(async () => {
+      const menu = await readMenu();
+      return Boolean(
+        menu &&
+        menu.lastVisible &&
+        menu.textFits &&
+        (wideTabs ? menu.firstVisible && !menu.scrolls : menu.scrolls),
+      );
+    }, `${name} contents tabs`);
+    const contentsTabs = await readMenu();
+    assert.equal(contentsTabs.first, "전화상담", `${name} contents first`);
+    assert.equal(contentsTabs.last, "콘텐츠", `${name} contents last`);
+    assert.equal(contentsTabs.lastVisible, true, `${name} contents last`);
+    assert.equal(contentsTabs.textFits, true, `${name} contents text`);
+    if (wideTabs) {
+      assert.equal(contentsTabs.scrolls, false, `${name} contents fit`);
+      assert.equal(contentsTabs.firstVisible, true, `${name} contents first`);
+    } else {
+      assert.equal(contentsTabs.scrolls, true, `${name} contents scroll`);
+      assert.ok(contentsTabs.scrollLeft > 0, `${name} contents autoscroll`);
+    }
+    results.push({ name, consult, home, homeTabs, contentsTabs });
     assert.equal(home.innerWidth, width);
     assert.equal(home.fine, fine);
     assert.equal(home.overflow, false);

@@ -662,7 +662,7 @@ try {
   assert.equal(home.notice, `/notices/${pinnedId}`);
   assert.equal(home.noticeStatus, "ready");
   assert.equal(home.reviews, true);
-  assert.equal(home.footer.includes("쪽집게천사 운명나라"), true);
+  assert.equal(home.footer.includes("쪽집게천사 운세통"), true);
   assert.equal(home.footer.includes("1호점 · 2호점 · 3호점"), true);
   assert.equal(home.footer.includes("[대표자명]"), true);
   assert.equal(home.footer.includes("이용약관"), false);

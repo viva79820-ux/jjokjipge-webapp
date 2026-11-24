@@ -1,9 +1,9 @@
 export const siteConfig = {
-  name: "쪽집게천사 운명나라",
+  name: "쪽집게천사 운세통",
   phone: "010-0000-0000",
   social: {
-    blog: "https://example.com/blog",
-    instagram: "https://example.com/instagram",
-    youtube: "https://example.com/youtube",
+    blog: "https://blog.naver.com/taro93",
+    instagram: "https://www.instagram.com/kjm_chnam/",
+    youtube: "https://www.youtube.com/channel/UCQW1dFMrN1ndpsT77BK-9KA",
   },
 } as const;
