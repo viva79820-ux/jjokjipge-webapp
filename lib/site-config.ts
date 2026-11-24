@@ -1,6 +1,7 @@
 export const siteConfig = {
   name: "쪽집게천사 운세통",
   phone: "0507-1498-0232",
+  representativeCounselorId: "db5580e4-cffb-4b0e-8bec-5d012c06f9f7",
   social: {
     blog: "https://blog.naver.com/taro93",
     instagram: "https://www.instagram.com/kjm_chnam/",

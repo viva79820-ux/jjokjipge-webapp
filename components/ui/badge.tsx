@@ -9,13 +9,15 @@ export function Badge({
 }: {
   children: ReactNode;
   icon?: LucideIcon;
-  tone?: "soft" | "halo";
+  tone?: "soft" | "halo" | "brand";
   className?: string;
 }) {
   const toneClass =
     tone === "halo"
       ? "h-6.5 bg-halo px-2.5 text-fine font-extrabold text-foreground"
-      : "bg-brand-soft px-2 py-1 text-fine font-semibold text-brand-deep";
+      : tone === "brand"
+        ? "h-6 bg-brand-soft px-2 text-fine font-bold text-brand"
+        : "bg-brand-soft px-2 py-1 text-fine font-semibold text-brand-deep";
   return (
     <span
       className={`inline-flex items-center gap-1 rounded-full ${toneClass} ${className}`}

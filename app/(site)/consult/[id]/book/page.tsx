@@ -56,6 +56,9 @@ async function BookingContent({ params, searchParams }: Props) {
     return (
       <div className="px-4 pt-6 @3xl/app:px-6">
         <h1 className="text-xl font-bold">전화상담 예약</h1>
+        <p className="mt-3 wrap-anywhere text-base font-bold">
+          {counselorHeading(counselor.name)}
+        </p>
         <p className="mt-3 text-muted">
           지금은 예약 가능한 상담 상품이 없어요.
         </p>
@@ -88,9 +91,15 @@ async function BookingContent({ params, searchParams }: Props) {
     calendar[0];
   if (!selected)
     return (
-      <p className="px-4 py-6 text-muted">
-        지금은 예약 가능한 상담 상품이 없어요.
-      </p>
+      <div className="px-4 py-6 @3xl/app:px-6">
+        <h1 className="text-xl font-bold">전화상담 예약</h1>
+        <p className="mt-3 wrap-anywhere text-base font-bold">
+          {counselorHeading(counselor.name)}
+        </p>
+        <p className="mt-3 text-muted">
+          지금은 예약 가능한 상담 상품이 없어요.
+        </p>
+      </div>
     );
   return (
     <div className="min-w-0 space-y-7 px-4 pt-3 @3xl/app:space-y-9 @3xl/app:px-6">
