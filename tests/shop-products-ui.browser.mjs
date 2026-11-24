@@ -623,9 +623,15 @@ try {
   assert.equal(await htmlHas(secretId), false);
   assert.equal(
     await page.evaluate(
-      `[...document.querySelectorAll("a,button")].some((node) => /구매하기|결제하기|장바구니/.test(node.textContent))`,
+      `[...document.querySelectorAll("a,button")].some((node) => /구매하기|결제하기/.test(node.textContent))`,
     ),
     false,
+  );
+  assert.equal(
+    await page.evaluate(
+      `[...document.querySelectorAll("a")].find((node) => node.checkVisibility() && (node.getAttribute("aria-label") || "").startsWith("장바구니")).getAttribute("href")`,
+    ),
+    "/shop/cart",
   );
   await clickLink("다음");
   await text("테스트 둘째쪽");
@@ -633,7 +639,7 @@ try {
   await go(`/shop/${soldId}`);
   await text("줄바꿈첫줄");
   await text("줄바꿈둘째줄");
-  await text("구매 기능 준비 중");
+  await text("주문과 결제는 준비 중입니다.");
   await text("품절");
   await text("18,000원");
   await text("상품 사진을 불러오지 못했습니다.");
@@ -1527,7 +1533,7 @@ try {
     else assert.equal(box.width, width);
     await screenshot(`customer-list-${width}.png`);
     await go(`/shop/${soldId}`);
-    await text("구매 기능 준비 중");
+    await text("주문과 결제는 준비 중입니다.");
     box = await measure();
     assert.equal(box.overflow, false, `detail overflow ${width}`);
     assert.equal(box.covered, false, `detail covered ${width}`);

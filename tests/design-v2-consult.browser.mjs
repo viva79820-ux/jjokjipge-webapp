@@ -982,7 +982,7 @@ try {
     await evaluate(`(() => {
       const tabs = document.querySelector('[role="tablist"]');
       const reserve = [...document.querySelectorAll("a")].some((node) =>
-        node.checkVisibility() && node.textContent.includes("전화 상담 예약"),
+        node.checkVisibility() && node.textContent.trim() === "예약",
       );
       return !!tabs && !!document.querySelector(".cursor-grab") && reserve;
     })()`),
@@ -1043,6 +1043,8 @@ try {
     await shot(`consult-${name}.png`);
     await go("/consult/both");
     await waitText("선생님 소개");
+    assert.equal(await visibleCount("[data-site-header]"), 0);
+    assert.equal(await visibleCount('[aria-label="하단 메뉴"]'), 0);
     const detail = await measure();
     const targets = await evaluate(`(() => {
       const nodes = [

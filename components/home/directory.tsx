@@ -124,10 +124,22 @@ function DirectoryCard({ counselor }: { counselor: Counselor }) {
           <p className="text-caption text-muted">등록된 상담 상품이 없어요.</p>
         )}
       </div>
-      <Button href={href} className="shrink-0 gap-1.5 px-3.5 whitespace-nowrap">
-        <Phone size={16} aria-hidden="true" />
-        예약
-      </Button>
+      {counselor.products.length ? (
+        <Button
+          href={href}
+          className="shrink-0 gap-1.5 px-3.5 whitespace-nowrap"
+        >
+          <Phone size={16} aria-hidden="true" />
+          예약
+        </Button>
+      ) : (
+        <span
+          data-home-booking-unavailable
+          className="inline-flex min-h-11 shrink-0 items-center rounded-full border border-border bg-surface-muted px-3.5 text-label font-bold whitespace-nowrap text-muted"
+        >
+          예약 준비 중
+        </span>
+      )}
     </li>
   );
 }

@@ -67,6 +67,11 @@ classes.push({
   created_at: "2026-11-18T01:00:00.000000+00:00",
   updated_at: "2026-11-18T01:00:00.000000+00:00",
 });
+for (const row of classes) {
+  row.is_online = true;
+  row.poster_path = null;
+  row.poster_alt = null;
+}
 let admin = true;
 let listFail = false;
 let customerEmpty = false;
@@ -531,7 +536,13 @@ try {
   });
   await emulate({ width: 390, fine: false });
   await go("/class");
-  await text("총 21건");
+  await text("과정 21개");
+  assert.deepEqual(
+    await page.evaluate(
+      `[...document.querySelectorAll('[aria-label="분야"] a')].filter((node) => node.checkVisibility()).map((node) => node.textContent.trim())`,
+    ),
+    ["전체", "사주", "타로"],
+  );
   await text(longTitle);
   await text("타로");
   await absent("테스트 비공개비밀");
@@ -542,6 +553,41 @@ try {
   await clickLink("다음");
   await text("테스트 둘째쪽");
   await text("2 / 2");
+  await clickLink("사주");
+  await until(
+    () =>
+      page.evaluate(
+        "location.pathname === '/class' && location.search === '?field=saju'",
+      ),
+    "saju field filter",
+  );
+  await text("과정 11개");
+  await text("테스트 공개 2");
+  await text("온라인");
+  await absent(longTitle);
+  await clickLink("타로");
+  await until(
+    () =>
+      page.evaluate(
+        "location.pathname === '/class' && location.search === '?field=tarot'",
+      ),
+    "tarot field filter",
+  );
+  await text("과정 10개");
+  await text(longTitle);
+  await text("온라인");
+  await absent("테스트 공개 2");
+  await go("/class?field=saju&page=2");
+  await until(
+    () =>
+      page.evaluate(
+        "location.pathname === '/class' && location.search === '?field=saju'",
+      ),
+    "saju page preserved",
+  );
+  await text("과정 11개");
+  await text("테스트 둘째쪽");
+  await absent(longTitle);
   await go(`/class/${longId}`);
   await text("줄바꿈첫줄");
   await text("줄바꿈둘째줄");
@@ -1154,9 +1200,32 @@ try {
   ];
   for (const [width, fine, pad] of widths) {
     await emulate({ width, fine });
+    await go("/ai-saju/result");
+    await text("예시 결과 · 실제 내용은 AI 사주 서비스가 채움");
+    let chrome = await page.evaluate(`(() => ({
+      siteHeader: [...document.querySelectorAll("[data-site-header]")]
+        .filter((node) => node.checkVisibility()).length,
+      bottomTabs: [...document.querySelectorAll('[aria-label="하단 메뉴"]')]
+        .filter((node) => node.checkVisibility()).length,
+      detailHeader: [...document.querySelectorAll("[data-ai-saju-header]")]
+        .filter((node) => node.checkVisibility()).length,
+      actionBar: [...document.querySelectorAll("[data-booking-bar]")]
+        .filter((node) => node.checkVisibility()).length,
+    }))()`);
+    assert.deepEqual(chrome, {
+      siteHeader: 0,
+      bottomTabs: 0,
+      detailHeader: 1,
+      actionBar: 1,
+    });
+    let box = await measure();
+    assert.equal(box.overflow, false, `ai result overflow ${width}`);
+    if (fine) assert.equal(box.width, 560);
+    else if (width >= 1024) assert.equal(box.width, 1024);
+    else assert.equal(box.width, width);
     await go("/class");
     await text(longTitle);
-    let box = await measure();
+    box = await measure();
     assert.equal(box.overflow, false, `list overflow ${width}`);
     assert.equal(box.covered, false, `list covered ${width}`);
     assert.equal(box.controls.length, 0, `list touch ${width} ${box.controls}`);
@@ -1167,6 +1236,22 @@ try {
     await screenshot(`customer-list-${width}.png`);
     await go(`/class/${longId}`);
     await text("강의 영상 보기");
+    chrome = await page.evaluate(`(() => ({
+      siteHeader: [...document.querySelectorAll("[data-site-header]")]
+        .filter((node) => node.checkVisibility()).length,
+      bottomTabs: [...document.querySelectorAll('[aria-label="하단 메뉴"]')]
+        .filter((node) => node.checkVisibility()).length,
+      detailHeader: [...document.querySelectorAll('header a[aria-label="뒤로"]')]
+        .filter((node) => node.checkVisibility()).length,
+      actionBar: [...document.querySelectorAll("[data-class-inquiry]")]
+        .filter((node) => node.checkVisibility()).length,
+    }))()`);
+    assert.deepEqual(chrome, {
+      siteHeader: 0,
+      bottomTabs: 0,
+      detailHeader: 1,
+      actionBar: 1,
+    });
     box = await measure();
     assert.equal(box.overflow, false, `detail overflow ${width}`);
     assert.equal(box.covered, false, `detail covered ${width}`);
