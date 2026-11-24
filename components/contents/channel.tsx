@@ -41,21 +41,19 @@ export function OfficialChannelCard({
   const Icon = icons[channel];
   const body = (
     <>
-      <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand">
+      <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-brand text-on-brand">
         <Icon size={22} aria-hidden="true" />
       </span>
-      <span className="min-w-0">
-        <span className="block text-subtitle font-bold text-foreground">
-          {channelLabels[channel]}
-        </span>
-        <span className="block text-caption text-muted">
-          {href ? "새 창으로 열기" : "채널 주소 준비 중"}
-        </span>
+      <span className="max-w-full text-label font-extrabold break-keep text-foreground">
+        {channelLabels[channel]}
+      </span>
+      <span className="max-w-full text-fine font-semibold break-keep text-muted">
+        {href ? "새 창으로 열기" : "채널 주소 준비 중"}
       </span>
     </>
   );
   const className =
-    "flex min-h-11 min-w-0 items-center gap-3 rounded-card border border-border bg-surface p-3";
+    "flex min-h-11 min-w-0 flex-col items-center gap-1.5 rounded-card border border-border bg-surface px-1.5 py-3.5 text-center";
   if (!href) return <div className={className}>{body}</div>;
   return (
     <a

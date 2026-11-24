@@ -618,6 +618,7 @@ try {
   ];
   for (const [width, fine] of [
     [360, false],
+    [390, false],
     [1280, true],
   ]) {
     await emulate(width, fine);
@@ -629,9 +630,29 @@ try {
       const section = document.querySelector('[aria-label="공식 채널"]');
       const links = Array.from(section.querySelectorAll("a"));
       const shell = document.querySelector("[data-app-shell]");
+      const sectionBox = section.getBoundingClientRect();
+      const textOutside = (el) => {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const text = range.getBoundingClientRect();
+        const box = el.getBoundingClientRect();
+        if (text.width === 0) return false;
+        return (
+          text.left < box.left - 1 ||
+          text.right > box.right + 1 ||
+          text.top < box.top - 1 ||
+          text.bottom > box.bottom + 1
+        );
+      };
       return {
         shell: shell ? Math.round(shell.getBoundingClientRect().width) : 0,
         overflow: document.documentElement.scrollWidth <= window.innerWidth + 1,
+        clipped: links.some((node) => {
+          const card = node.getBoundingClientRect();
+          if (card.left < sectionBox.left - 1 || card.right > sectionBox.right + 1)
+            return true;
+          return [...node.querySelectorAll("span")].some(textOutside);
+        }),
         cards: links.map((node) => {
           const rect = node.getBoundingClientRect();
           return {
@@ -648,8 +669,9 @@ try {
       };
     })()`);
     assert.equal(official.overflow, true, `channel overflow ${width}`);
+    assert.equal(official.clipped, false, `channel clip ${width}`);
     assert.equal(official.cards.length, 3, `channel count ${width}`);
-    if (fine) assert.ok(official.shell <= 560, official.shell);
+    if (fine) assert.equal(official.shell, 560, official.shell);
     expectedChannels.forEach(([label, href], index) => {
       const card = official.cards[index];
       assert.equal(card.href, href, `${label} ${width}`);
@@ -659,17 +681,23 @@ try {
       assert.match(card.text, new RegExp(label));
       assert.match(card.text, /새 창으로 열기/);
       assert.ok(card.height >= 44, `${label} touch ${card.height}`);
+      assert.ok(
+        card.width < official.shell / 2,
+        `${label} column ${width} ${card.width}`,
+      );
     });
-    const stacked =
-      official.cards[1].top > official.cards[0].top + 8 &&
-      official.cards[2].top > official.cards[1].top + 8;
     const row =
       Math.abs(official.cards[0].top - official.cards[1].top) <= 2 &&
-      Math.abs(official.cards[1].top - official.cards[2].top) <= 2;
-    assert.equal(stacked || row, true, `channel layout ${width}`);
-    if (width === 360) assert.equal(stacked, true, "360 stack");
+      Math.abs(official.cards[1].top - official.cards[2].top) <= 2 &&
+      official.cards[0].left < official.cards[1].left &&
+      official.cards[1].left < official.cards[2].left;
+    assert.equal(row, true, `channel row ${width}`);
     await screenshot(
-      width === 360 ? "customer-empty.png" : "customer-channels-pc.png",
+      width === 360
+        ? "customer-empty.png"
+        : width === 390
+          ? "customer-channels-390.png"
+          : "customer-channels-pc.png",
     );
   }
   forceEmpty = false;

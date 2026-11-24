@@ -73,10 +73,7 @@ export async function ContentListPage({
           유튜브, 인스타그램, 블로그 글을 새 창에서 엽니다.
         </p>
       </header>
-      <section
-        aria-label="공식 채널"
-        className="grid gap-2 @3xl/app:grid-cols-3"
-      >
+      <section aria-label="공식 채널" className="grid grid-cols-3 gap-2">
         {publicChannels.map((channel) => (
           <OfficialChannelCard
             key={channel}

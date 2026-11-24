@@ -563,13 +563,18 @@ test("공식 채널은 확인된 주소만 연결하고 임시 주소는 누르�
   const cardPad = 24;
   const right = 360 - pagePad - cardPad - 88 - 12;
   assert.ok(right >= 7 * 14 + 16, `link ${right}`);
-  const channelText = 360 - pagePad - cardPad - 44 - 12;
-  assert.ok(channelText >= 9 * 13, `channel ${channelText}`);
-  const tabletCard = (768 - 48 - 16) / 3;
-  const tabletText = tabletCard - cardPad - 44 - 12;
-  assert.ok(tabletText >= 9 * 13, `tablet ${tabletText}`);
   const pcRight = 560 - pagePad - cardPad - 88 - 12;
   assert.ok(pcRight >= right, `pc ${pcRight}`);
+  assert.match(pub, /grid grid-cols-3 gap-2/);
+  assert.equal(pub.includes("@3xl/app:grid-cols-3"), false);
+  assert.match(channel, /flex min-h-11 min-w-0 flex-col items-center gap-1\.5/);
+  const channelPadX = 12;
+  const channelGaps = 16;
+  for (const viewport of [360, 390, 560]) {
+    const inner = (viewport - pagePad - channelGaps) / 3 - channelPadX;
+    assert.ok(inner >= 5 * 14, `name ${viewport} ${inner}`);
+    assert.ok(inner >= 6 * 12, `hint ${viewport} ${inner}`);
+  }
 });
 
 test("고객 조회 코드는 공개 클라이언트와 공개 조건만 사용한다", () => {

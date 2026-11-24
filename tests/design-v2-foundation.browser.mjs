@@ -483,6 +483,108 @@ try {
     ),
     true,
   );
+  const tabLabels = [
+    "전화상담",
+    "AI 사주",
+    "클래스",
+    "매장상담",
+    "타로샵",
+    "콘텐츠",
+  ];
+  const readTabs = () =>
+    evaluate(`(() => {
+      const nav = document.querySelector('nav[aria-label="주요 메뉴"]');
+      const active = nav?.querySelector('[aria-current="page"]');
+      const navBox = nav?.getBoundingClientRect();
+      const activeBox = active?.getBoundingClientRect();
+      const shell = document.querySelector("[data-app-shell]");
+      return {
+        labels: nav ? [...nav.querySelectorAll(":scope > a")].map((link) => link.textContent.trim()) : [],
+        active: active ? active.textContent.trim() : "",
+        scrolls: nav ? nav.scrollWidth > nav.clientWidth + 1 : false,
+        scrollLeft: nav ? nav.scrollLeft : 0,
+        activeInside: Boolean(
+          nav &&
+            active &&
+            activeBox.left >= navBox.left - 1 &&
+            activeBox.right <= navBox.right + 1 &&
+            activeBox.width > 0,
+        ),
+        shell: shell ? Math.round(shell.getBoundingClientRect().width) : 0,
+        overflow: document.documentElement.scrollWidth <= window.innerWidth + 1,
+      };
+    })()`);
+  for (const [width, fine] of [
+    [360, false],
+    [390, false],
+    [1280, true],
+  ]) {
+    await emulate({ width, height: fine ? 900 : 844, fine });
+    await go("/contents");
+    await until(async () => {
+      const tabs = await readTabs();
+      return (
+        tabs.active === "콘텐츠" &&
+        tabs.activeInside &&
+        tabs.labels.length === 6 &&
+        (fine || (tabs.scrolls && tabs.scrollLeft > 0))
+      );
+    }, `contents tabs ${width}`);
+    const contents = await readTabs();
+    assert.deepEqual(contents.labels, tabLabels, String(width));
+    assert.equal(contents.active, "콘텐츠", String(width));
+    assert.equal(contents.activeInside, true, `contents scroll ${width}`);
+    assert.equal(contents.overflow, true, `contents page ${width}`);
+    if (fine) assert.equal(contents.shell, 560, String(contents.shell));
+    else {
+      assert.equal(contents.scrolls, true, `contents overflow tabs ${width}`);
+      assert.ok(contents.scrollLeft > 0, `contents autoscroll ${width}`);
+    }
+    await go("/ai-saju");
+    await until(async () => {
+      const tabs = await readTabs();
+      return tabs.active === "AI 사주" && tabs.activeInside;
+    }, `ai tabs ${width}`);
+    const preparing = await evaluate(`(() => {
+      const button = [...document.querySelectorAll("button")].find((node) => node.textContent.trim() === "준비 중");
+      const example = [...document.querySelectorAll("a")].find((node) => node.textContent.trim() === "예시 결과 보기");
+      return {
+        disabled: Boolean(button && button.disabled),
+        example: example ? example.getAttribute("href") : "",
+        form: document.querySelectorAll("form").length,
+      };
+    })()`);
+    assert.equal(preparing.disabled, true, `preparing ${width}`);
+    assert.equal(preparing.example, "/ai-saju/result", `example ${width}`);
+    assert.equal(preparing.form, 0, `form ${width}`);
+  }
+  await emulate({ width: 390, height: 844, fine: false });
+  await go("/ai-saju");
+  await evaluate(`(() => {
+    const example = [...document.querySelectorAll("a")].find((node) => node.textContent.trim() === "예시 결과 보기");
+    example.click();
+  })()`);
+  await until(
+    () => evaluate('location.pathname === "/ai-saju/result"'),
+    "ai example",
+  );
+  assert.equal(
+    await evaluate(`(() => {
+      const text = document.body.innerText;
+      const visible = (selector) =>
+        [...document.querySelectorAll(selector)].some((node) =>
+          node.checkVisibility(),
+        );
+      return (
+        text.includes("예시 결과") &&
+        text.includes("다른 사람 보기") &&
+        text.includes("선생님께 상담") &&
+        !visible('nav[aria-label="주요 메뉴"]') &&
+        !visible('nav[aria-label="하단 메뉴"]')
+      );
+    })()`),
+    true,
+  );
   await go("/");
   assert.equal(
     await evaluate(
