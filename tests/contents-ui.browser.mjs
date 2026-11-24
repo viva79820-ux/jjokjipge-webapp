@@ -611,10 +611,67 @@ try {
   await page.button("다시 시도");
   await text("총 22건");
   forceEmpty = true;
-  await go("/contents");
-  await text("아직 올라온 소식이 없어요.");
-  await absent("선택한 채널의 콘텐츠가 없습니다.");
-  await screenshot("customer-empty.png");
+  const expectedChannels = [
+    ["유튜브", "https://www.youtube.com/channel/UCQW1dFMrN1ndpsT77BK-9KA"],
+    ["인스타그램", "https://www.instagram.com/kjm_chnam/"],
+    ["블로그", "https://blog.naver.com/taro93"],
+  ];
+  for (const [width, fine] of [
+    [360, false],
+    [1280, true],
+  ]) {
+    await emulate(width, fine);
+    await go("/contents");
+    await text("총 0건");
+    await text("아직 올라온 소식이 없어요.");
+    await absent("선택한 채널의 콘텐츠가 없습니다.");
+    const official = await page.evaluate(`(() => {
+      const section = document.querySelector('[aria-label="공식 채널"]');
+      const links = Array.from(section.querySelectorAll("a"));
+      const shell = document.querySelector("[data-app-shell]");
+      return {
+        shell: shell ? Math.round(shell.getBoundingClientRect().width) : 0,
+        overflow: document.documentElement.scrollWidth <= window.innerWidth + 1,
+        cards: links.map((node) => {
+          const rect = node.getBoundingClientRect();
+          return {
+            href: node.href,
+            target: node.target,
+            rel: node.rel,
+            text: node.innerText.replace(/\\s+/g, " ").trim(),
+            top: Math.round(rect.top),
+            left: Math.round(rect.left),
+            width: Math.round(rect.width),
+            height: Math.round(rect.height),
+          };
+        }),
+      };
+    })()`);
+    assert.equal(official.overflow, true, `channel overflow ${width}`);
+    assert.equal(official.cards.length, 3, `channel count ${width}`);
+    if (fine) assert.ok(official.shell <= 560, official.shell);
+    expectedChannels.forEach(([label, href], index) => {
+      const card = official.cards[index];
+      assert.equal(card.href, href, `${label} ${width}`);
+      assert.equal(card.target, "_blank", label);
+      assert.match(card.rel, /noopener/);
+      assert.match(card.rel, /noreferrer/);
+      assert.match(card.text, new RegExp(label));
+      assert.match(card.text, /새 창으로 열기/);
+      assert.ok(card.height >= 44, `${label} touch ${card.height}`);
+    });
+    const stacked =
+      official.cards[1].top > official.cards[0].top + 8 &&
+      official.cards[2].top > official.cards[1].top + 8;
+    const row =
+      Math.abs(official.cards[0].top - official.cards[1].top) <= 2 &&
+      Math.abs(official.cards[1].top - official.cards[2].top) <= 2;
+    assert.equal(stacked || row, true, `channel layout ${width}`);
+    if (width === 360) assert.equal(stacked, true, "360 stack");
+    await screenshot(
+      width === 360 ? "customer-empty.png" : "customer-channels-pc.png",
+    );
+  }
   forceEmpty = false;
   hideYoutube = true;
   await go("/contents?channel=youtube");

@@ -492,9 +492,24 @@ test("권한·충돌·없음·응답 유실에서 조건부 저장을 지킨다"
 test("공식 채널은 확인된 주소만 연결하고 임시 주소는 누르지 않는다", () => {
   const config = load("lib/site-config.ts");
   assert.deepEqual(rules.publicChannels, ["youtube", "instagram", "blog"]);
-  for (const url of Object.values(config.siteConfig.social)) {
+  assert.equal(
+    rules.confirmedSocialHref(config.siteConfig.social.blog),
+    "https://blog.naver.com/taro93",
+  );
+  assert.equal(
+    rules.confirmedSocialHref(config.siteConfig.social.instagram),
+    "https://www.instagram.com/kjm_chnam/",
+  );
+  assert.equal(
+    rules.confirmedSocialHref(config.siteConfig.social.youtube),
+    "https://www.youtube.com/channel/UCQW1dFMrN1ndpsT77BK-9KA",
+  );
+  for (const url of [
+    "https://example.com/blog",
+    "https://example.com/instagram",
+    "https://example.com/youtube",
+  ]) {
     assert.equal(rules.confirmedSocialHref(url), null, url);
-    assert.match(url, /^https:\/\/example\.com\//);
   }
   assert.equal(
     rules.confirmedSocialHref("https://www.youtube.com/watch?v=abc"),
