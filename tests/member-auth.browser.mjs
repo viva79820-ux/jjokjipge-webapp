@@ -556,7 +556,7 @@ try {
   await waitText(nameA);
   await goto("/forgot-password");
   await fill("email", emailA);
-  await click("button", "재설정 메일 요청");
+  await click("button", "재설정 메일 보내기");
   await waitText("가입된 주소라면");
   await shot("forgot-password-390.png");
   await fetch(`${mock.url}/__test/expire`, { method: "POST" });
@@ -565,7 +565,7 @@ try {
   await waitText("만료됐거나 이미 사용");
   await goto("/forgot-password");
   await fill("email", emailA);
-  await click("button", "재설정 메일 요청");
+  await click("button", "재설정 메일 보내기");
   await waitText("가입된 주소라면");
   await confirm(emailA, "새 비밀번호", "/admin");
   assert.equal(await evaluate("location.pathname"), "/auth/update-password");
