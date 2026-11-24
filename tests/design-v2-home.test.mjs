@@ -36,7 +36,7 @@ const { homeStoreMenuItems, homeStoreMenuKeys, homeStorePriceNotice } =
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 
-test("사진 있는 추천 상담사만 배너에 남고 빈 경력은 만들지 않는다", () => {
+test("사진이 없어도 추천 상담사는 배너에 남고 빈 경력은 만들지 않는다", () => {
   const people = [
     { id: "photo", isRecommended: true, imageUrl: "https://cdn.example/a.jpg" },
     { id: "blank", isRecommended: true, imageUrl: null },
@@ -48,7 +48,7 @@ test("사진 있는 추천 상담사만 배너에 남고 빈 경력은 만들지
   ];
   assert.deepEqual(
     homeBannerCounselors(people).map((item) => item.id),
-    ["photo"],
+    ["photo", "blank"],
   );
   assert.deepEqual(visibleCareers(["  사주 10년  ", "", "   "]), ["사주 10년"]);
   assert.deepEqual(visibleCareers(["  하나  ", "둘", "셋"]), [
