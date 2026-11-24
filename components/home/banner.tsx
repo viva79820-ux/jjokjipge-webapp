@@ -124,7 +124,9 @@ function HomeBannerSlides({ counselors }: { counselors: Counselor[] }) {
                       data-home-banner-reserve={counselor.id}
                       className={`mt-1.5 inline-flex min-h-11 w-fit max-w-full items-center gap-1 rounded-full bg-surface px-3.5 text-label font-extrabold text-brand ${focus}`}
                     >
-                      상담 예약하기
+                      {counselor.products.length
+                        ? "상담 예약하기"
+                        : "선생님 소개 보기"}
                       <ChevronRight size={16} aria-hidden="true" />
                     </Link>
                   </div>

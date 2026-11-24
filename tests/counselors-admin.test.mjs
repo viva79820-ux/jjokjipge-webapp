@@ -412,7 +412,9 @@ test("chips, filters and honorifics do not rewrite stored values", () => {
   assert.equal(rules.counselorHeading("가연샘"), "가연샘");
   assert.equal(rules.counselorHeading("가연쌤"), "가연쌤");
   assert.equal(rules.counselorHeading("김선생님"), "김선생님");
+  assert.equal(rules.counselorHeading("청남 원장님"), "청남 원장님");
   assert.equal(rules.counselorNeedsHonorific("가연샘"), false);
+  assert.equal(rules.counselorNeedsHonorific("청남 원장님"), false);
   assert.equal(
     rules.counselorMatches(
       row,
