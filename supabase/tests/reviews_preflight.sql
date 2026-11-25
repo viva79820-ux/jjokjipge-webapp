@@ -278,7 +278,17 @@ with check ((select private.is_admin()));
 
 revoke all on public.reviews
 from public, anon, authenticated, service_role;
-grant select on public.reviews to anon, authenticated;
+grant select (
+  id,
+  counselor_id,
+  product_id,
+  author_name,
+  rating,
+  body,
+  is_published,
+  created_at,
+  updated_at
+) on public.reviews to anon, authenticated;
 grant update (is_published) on public.reviews to authenticated;
 -- END EXACT MIGRATION
 
@@ -495,6 +505,11 @@ select pg_temp.reviews_expected_error(
   '42501',
   '비로그인 후기 등록 차단'
 );
+select pg_temp.reviews_expected_error(
+  $$select author_id, reservation_id from public.reviews$$,
+  '42501',
+  '비로그인 작성자·예약 식별자 조회 차단'
+);
 reset role;
 
 set local role authenticated;
@@ -544,6 +559,11 @@ select pg_temp.reviews_expected_error(
   $$update public.reviews set body = '침범'$$,
   '42501',
   '일반 회원 본문 변경 권한 없음'
+);
+select pg_temp.reviews_expected_error(
+  $$select author_id, reservation_id from public.reviews$$,
+  '42501',
+  '일반 회원 작성자·예약 식별자 조회 차단'
 );
 reset role;
 

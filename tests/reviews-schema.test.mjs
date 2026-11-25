@@ -102,9 +102,16 @@ test("공개 읽기와 관리자 공개 전환만 허용한다", () => {
     migration,
     /grant update \(is_published\) on public\.reviews to authenticated/,
   );
+  assert.match(
+    migration,
+    /grant select \(\s+id,\s+counselor_id,\s+product_id,\s+author_name,\s+rating,\s+body,\s+is_published,\s+created_at,\s+updated_at\s+\) on public\.reviews to anon, authenticated/,
+  );
+  assert.doesNotMatch(migration, /grant select on public\.reviews/);
   assert.doesNotMatch(migration, /grant (?:insert|delete)/);
   assert.match(preflight, /비로그인 공개 후기만 조회/);
+  assert.match(preflight, /비로그인 작성자·예약 식별자 조회 차단/);
   assert.match(preflight, /일반 회원 공개 상태 변경 0행/);
+  assert.match(preflight, /일반 회원 작성자·예약 식별자 조회 차단/);
   assert.match(preflight, /관리자 공개 전환과 수정일 갱신/);
   assert.match(preflight, /관리자 공개 여부 외 열 변경 차단/);
 });
