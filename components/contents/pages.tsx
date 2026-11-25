@@ -1,7 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
+import { ExternalLink } from "lucide-react";
 import { connection } from "next/server";
-import { notFound, redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/admin/auth";
 import { AdminAccessDenied } from "@/components/admin/access-denied";
 import { Badge } from "@/components/ui/badge";
@@ -12,12 +13,14 @@ import {
   adminContentList,
   publicContentList,
 } from "@/lib/contents/data";
+import { cleanupAction } from "@/lib/contents/cleanup";
 import {
   adminEditUrl,
   adminFilters,
   adminListUrl,
   channelLabels,
   confirmedSocialHref,
+  formatPostedOn,
   isChannel,
   pageSize,
   publicChannels,
@@ -29,13 +32,12 @@ import {
 import { AdminContentFilter, ContentListSettled } from "./admin-filter";
 import {
   ChannelMark,
-  ContentChannelArt,
   ContentChannelBadge,
-  ContentExternalLink,
   OfficialChannelCard,
 } from "./channel";
-import { ContentEditor } from "./editor";
+import { ContentDeletedCleanup, ContentEditor } from "./editor";
 import { ContentRetry } from "./retry";
+import { ContentThumbnail } from "./thumbnail";
 
 const filterClass =
   "inline-flex min-h-11 cursor-pointer items-center gap-1 rounded-full px-4 text-label font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
@@ -70,7 +72,7 @@ export async function ContentListPage({
       <header className="space-y-2">
         <h1 className="text-display font-extrabold">콘텐츠</h1>
         <p className="text-body text-muted">
-          유튜브, 인스타그램, 블로그 글을 새 창에서 엽니다.
+          쪽집게천사의 블로그·인스타그램·유튜브 소식을 모아 봤어요.
         </p>
       </header>
       <section aria-label="공식 채널" className="grid grid-cols-3 gap-2">
@@ -121,51 +123,88 @@ export async function ContentListPage({
           </div>
         )}
         {result.count === 0 && !emptyCatalog && (
-          <div role="status" className="space-y-3">
+          <div
+            role="status"
+            className="space-y-3 rounded-card border border-border bg-surface px-4 py-8 text-center"
+          >
             <p>선택한 채널의 콘텐츠가 없습니다.</p>
             <Button href={publicListUrl()} variant="secondary">
               전체 채널 보기
             </Button>
           </div>
         )}
-        {result.rows.map((row) => (
-          <article
-            key={row.id}
-            className="flex min-w-0 items-start gap-3 rounded-card border border-border bg-surface p-3 @3xl/app:p-4"
+        <div className="grid min-w-0 grid-cols-1 gap-2.5 @3xl/app:grid-cols-2">
+          {result.rows.map((row) => {
+            const body = (
+              <>
+                <ContentThumbnail
+                  src={row.thumbnail_url}
+                  alt={row.thumbnail_alt}
+                  channel={row.channel}
+                />
+                <span className="flex min-w-0 flex-1 flex-col items-start gap-1.5">
+                  <ContentChannelBadge channel={row.channel} />
+                  <span className="text-body font-bold wrap-anywhere">
+                    {row.title}
+                  </span>
+                  <span className="flex min-w-0 flex-wrap items-center gap-1 text-fine font-semibold text-muted">
+                    <span>{formatPostedOn(row.posted_on)}</span>
+                    <span aria-hidden="true">·</span>
+                    {row.href ? (
+                      <>
+                        <span>새 창으로 열기</span>
+                        <ExternalLink
+                          size={13}
+                          aria-hidden="true"
+                          className="shrink-0"
+                        />
+                      </>
+                    ) : (
+                      <span>외부 주소를 사용할 수 없습니다.</span>
+                    )}
+                  </span>
+                </span>
+              </>
+            );
+            const className =
+              "flex min-w-0 items-start gap-3 rounded-card border border-border bg-surface p-3 text-foreground @3xl/app:p-4";
+            return row.href ? (
+              <a
+                key={row.id}
+                href={row.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`${className} min-h-11 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand`}
+              >
+                {body}
+              </a>
+            ) : (
+              <article key={row.id} className={className}>
+                {body}
+              </article>
+            );
+          })}
+        </div>
+        {result.count > 0 && (
+          <nav
+            aria-label="콘텐츠 페이지"
+            className="flex flex-wrap items-center justify-center gap-3"
           >
-            <ContentChannelArt channel={row.channel} />
-            <div className="flex min-w-0 flex-1 flex-col items-start gap-1.5">
-              <ContentChannelBadge channel={row.channel} />
-              <h2 className="text-subtitle font-bold wrap-anywhere">
-                {row.title}
-              </h2>
-              {row.description && (
-                <p className="text-body wrap-anywhere whitespace-pre-wrap">
-                  {row.description}
-                </p>
-              )}
-              <ContentExternalLink href={row.href} channel={row.channel} />
-            </div>
-          </article>
-        ))}
-        <nav
-          aria-label="콘텐츠 페이지"
-          className="flex flex-wrap items-center justify-center gap-3"
-        >
-          {filters.page > 1 && (
-            <Button href={publicListUrl(filters.page - 1, filters.channel)}>
-              이전
-            </Button>
-          )}
-          <span className="text-label font-semibold">
-            {filters.page} / {pages}
-          </span>
-          {filters.page < pages && (
-            <Button href={publicListUrl(filters.page + 1, filters.channel)}>
-              다음
-            </Button>
-          )}
-        </nav>
+            {filters.page > 1 && (
+              <Button href={publicListUrl(filters.page - 1, filters.channel)}>
+                이전
+              </Button>
+            )}
+            <span className="text-label font-semibold">
+              {filters.page} / {pages}
+            </span>
+            {filters.page < pages && (
+              <Button href={publicListUrl(filters.page + 1, filters.channel)}>
+                다음
+              </Button>
+            )}
+          </nav>
+        )}
       </div>
     </div>
   );
@@ -289,14 +328,17 @@ export async function AdminContentEditorPage({
   creating?: boolean;
 }) {
   await connection();
-  if (!(await requireAdmin())) return <AdminAccessDenied />;
+  const admin = await requireAdmin();
+  if (!admin) return <AdminAccessDenied />;
   const query = await searchParams;
   const back = returnUrl(query.returnTo);
   if (creating)
     return <ContentEditor initial={null} returnTo={back} saved={false} />;
-  const loaded = await adminContent((await params)!.id);
+  const contentId = (await params)!.id;
+  const loaded = await adminContent(contentId);
   if (!loaded) return <AdminAccessDenied />;
-  if ("missing" in loaded) notFound();
+  if ("missing" in loaded)
+    return <ContentDeletedCleanup id={contentId} returnTo={back} />;
   if ("error" in loaded)
     return (
       <div role="alert" className="space-y-3">
@@ -310,6 +352,16 @@ export async function AdminContentEditorPage({
       initial={loaded.row}
       returnTo={back}
       saved={query.saved === "1"}
+      initialCleanup={
+        loaded.row.thumbnail_path
+          ? cleanupAction(
+              loaded.row.thumbnail_path,
+              admin.userId,
+              undefined,
+              loaded.row,
+            )
+          : undefined
+      }
     />
   );
 }

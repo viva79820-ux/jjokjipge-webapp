@@ -48,6 +48,9 @@ function fields(extra = {}) {
     description: "  첫 줄\n둘째 줄  ",
     channel: "blog",
     external_url: "https://Example.com/post",
+    thumbnail_path: "",
+    thumbnail_alt: "",
+    posted_on: "",
     is_published: "false",
     sort_order: "0",
     ...extra,
@@ -172,6 +175,175 @@ test("문자 수·중복 필드·채널·공개·정렬을 거부한다", () => 
   );
 });
 
+test("썸네일 경로·대체 설명·실제 게시일을 엄격하게 검증한다", () => {
+  const path = "contents/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.png";
+  assert.equal(rules.thumbnailPath(path), true);
+  for (const invalid of [
+    "contents/AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA.png",
+    "content/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.png",
+    "contents/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.svg",
+    "contents/../../secret.png",
+  ])
+    assert.equal(rules.thumbnailPath(invalid), false, invalid);
+  assert.equal(
+    rules.contentPatch(
+      form({ thumbnail_path: path, thumbnail_alt: "  대표 썸네일  " }),
+    ).patch.thumbnail_alt,
+    "대표 썸네일",
+  );
+  assert.equal(
+    rules.contentPatch(form({ thumbnail_path: path, thumbnail_alt: "  " }))
+      .patch,
+    null,
+  );
+  assert.equal(
+    rules.contentPatch(
+      form({ thumbnail_path: path, thumbnail_alt: "가".repeat(201) }),
+    ).patch,
+    null,
+  );
+  assert.equal(
+    rules.contentPatch(form({ thumbnail_path: "", thumbnail_alt: "" })).patch
+      .thumbnail_alt,
+    null,
+  );
+  for (const [date, expected] of [
+    ["", null],
+    ["2024-02-29", "2024-02-29"],
+    ["2000-02-29", "2000-02-29"],
+  ])
+    assert.equal(
+      rules.contentPatch(form({ posted_on: date })).patch.posted_on,
+      expected,
+    );
+  for (const invalid of [
+    "2023-02-29",
+    "1900-02-29",
+    "2026-04-31",
+    "2026-1-01",
+    "0000-01-01",
+  ])
+    assert.equal(
+      rules.contentPatch(form({ posted_on: invalid })).patch,
+      null,
+      invalid,
+    );
+  assert.equal(
+    rules.imageMetadataValid({ size: 1024, contentType: "image/png" }, path),
+    true,
+  );
+  assert.equal(
+    rules.imageMetadataValid({ size: 1024, contentType: "image/jpeg" }, path),
+    false,
+  );
+  const previous = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  process.env.NEXT_PUBLIC_SUPABASE_URL = "https://fixture.invalid";
+  const card = rules.presentPublic({
+    id,
+    title: "썸네일 글",
+    channel: "blog",
+    external_url: "https://example.com/post",
+    thumbnail_path: path,
+    thumbnail_alt: "대표 썸네일",
+    posted_on: "2024-02-29",
+    is_published: true,
+  });
+  assert.equal(
+    card.thumbnail_url,
+    `https://fixture.invalid/storage/v1/object/public/public-images/${path}`,
+  );
+  assert.equal(card.posted_on, "2024-02-29");
+  if (previous === undefined) delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+  else process.env.NEXT_PUBLIC_SUPABASE_URL = previous;
+});
+
+test("브라우저 썸네일 검사는 서명·MIME·디코드와 upsert 금지를 지킨다", async () => {
+  const upload = load("lib/contents/upload.ts", { "./rules": rules });
+  const previous = globalThis.createImageBitmap;
+  let closed = false;
+  globalThis.createImageBitmap = async () => ({
+    width: 1,
+    height: 1,
+    close() {
+      closed = true;
+    },
+  });
+  try {
+    const jpeg = new File([Uint8Array.from([255, 216, 255, 0])], "thumb.jpg", {
+      type: "image/jpeg",
+    });
+    assert.equal((await upload.inspectImage(jpeg)).ext, "jpg");
+    assert.equal(closed, true);
+    const mismatch = new File(
+      [Uint8Array.from([255, 216, 255, 0])],
+      "thumb.png",
+      { type: "image/png" },
+    );
+    await assert.rejects(() => upload.inspectImage(mismatch), /MIME/);
+    const calls = [];
+    const client = {
+      storage: {
+        from(bucket) {
+          return {
+            async upload(path, file, options) {
+              calls.push({ bucket, path, file, options });
+              return { error: null };
+            },
+          };
+        },
+      },
+    };
+    const path = "contents/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.jpg";
+    assert.equal(await upload.uploadImage(client, jpeg, path), path);
+    assert.equal(calls[0].options.upsert, false);
+    assert.equal(calls[0].options.contentType, "image/jpeg");
+  } finally {
+    if (previous === undefined) delete globalThis.createImageBitmap;
+    else globalThis.createImageBitmap = previous;
+  }
+});
+
+test("업로드·정리 응답 유실은 파일을 자동 삭제하거나 저장 성공으로 단정하지 않는다", async () => {
+  const submit = load("lib/contents/submit.ts");
+  const path = "contents/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.png";
+  let saved = false;
+  let discarded = false;
+  const lost = await submit.submitContentAttempt(
+    {
+      upload: async () => {
+        throw Object.assign(Error("socket"), { definite: false });
+      },
+      save: async () => {
+        saved = true;
+        return { state: "saved", message: "잘못된 성공" };
+      },
+      discard: async () => {
+        discarded = true;
+        return true;
+      },
+      pendingUpload: () => path,
+    },
+    "",
+    true,
+  );
+  assert.equal(lost.result.state, "unknown");
+  assert.equal(lost.uploaded, path);
+  assert.equal(saved, false);
+  assert.equal(discarded, false);
+
+  const kept = await submit.submitContentAttempt(
+    {
+      upload: async () => path,
+      save: async () => ({ state: "conflict", message: "충돌" }),
+      discard: async () => false,
+    },
+    "",
+    true,
+  );
+  assert.equal(kept.result.state, "conflict");
+  assert.equal(kept.uploaded, path);
+});
+
 test("목록 조건과 정렬 해석이 하나다", () => {
   assert.deepEqual(rules.publicFilters({ channel: "blog", page: "2" }), {
     page: 2,
@@ -200,10 +372,10 @@ test("목록 조건과 정렬 해석이 하나다", () => {
     "/admin/contents?page=2&status=public",
   );
   const rows = [
-    { sort_order: 1, created_at: "2026-11-18T00:00:00.000000+00:00", id: "b" },
-    { sort_order: 0, created_at: "2026-11-18T00:00:00.000000+00:00", id: "a" },
-    { sort_order: 1, created_at: "2026-11-18T00:00:02.000000+00:00", id: "c" },
-    { sort_order: 1, created_at: "2026-11-18T00:00:02.000000+00:00", id: "d" },
+    { sort_order: 1, posted_on: null, id: "b" },
+    { sort_order: 0, posted_on: null, id: "a" },
+    { sort_order: 1, posted_on: "2026-11-18", id: "c" },
+    { sort_order: 1, posted_on: "2026-11-18", id: "d" },
   ].sort(rules.compareContents);
   assert.deepEqual(
     rows.map((row) => row.id),
@@ -215,6 +387,9 @@ test("목록 조건과 정렬 해석이 하나다", () => {
     description: "숨김",
     channel: "youtube",
     external_url: "https://secret.example/hidden",
+    thumbnail_path: null,
+    thumbnail_alt: null,
+    posted_on: null,
     is_published: false,
   });
   assert.equal(hidden, null);
@@ -224,9 +399,13 @@ test("목록 조건과 정렬 해석이 하나다", () => {
     description: null,
     channel: "blog",
     external_url: "javascript:alert(1)",
+    thumbnail_path: "contents/../../secret.png",
+    thumbnail_alt: "위험",
+    posted_on: null,
     is_published: true,
   });
   assert.equal(unsafe.href, null);
+  assert.equal(unsafe.thumbnail_url, null);
   assert.equal(JSON.stringify(unsafe).includes("javascript:"), false);
 });
 
@@ -281,6 +460,34 @@ function memory(world) {
       };
       return api;
     },
+    storage: {
+      from() {
+        return {
+          async info(path) {
+            world.storageCalls.push(["info", path]);
+            if (world.storageUnknown) throw Error("socket");
+            if (!world.files.has(path))
+              return {
+                data: null,
+                error: { statusCode: 404 },
+              };
+            return {
+              data: {
+                size: world.files.get(path).size,
+                contentType: world.files.get(path).contentType,
+              },
+              error: null,
+            };
+          },
+          async remove(paths) {
+            world.storageCalls.push(["remove", ...paths]);
+            if (world.cleanupFail) return { error: { statusCode: 503 } };
+            for (const path of paths) world.files.delete(path);
+            return { error: null };
+          },
+        };
+      },
+    },
   };
 }
 
@@ -323,6 +530,10 @@ function execute(world, query) {
   if (query.kind === "update") {
     for (const row of selected)
       Object.assign(row, query.payload, { updated_at: nextVersion });
+    if (world.loseUpdate) {
+      world.loseUpdate = false;
+      throw Error("socket");
+    }
   }
   if (query.kind === "delete") {
     if (world.loseDelete === "before") {
@@ -347,6 +558,9 @@ function row(extra = {}) {
     description: "첫 줄\n둘째 줄",
     channel: "blog",
     external_url: "https://example.com/post",
+    thumbnail_path: null,
+    thumbnail_alt: null,
+    posted_on: null,
     is_published: false,
     sort_order: 0,
     created_at: version,
@@ -356,26 +570,43 @@ function row(extra = {}) {
 }
 
 function harness(extra = {}, admin = true) {
-  const state = { calls: [], rows: [row()], readError: null, ...extra };
+  const state = {
+    calls: [],
+    rows: [row()],
+    readError: null,
+    files: new Map(),
+    storageCalls: [],
+    ...extra,
+  };
   const paths = [];
   let clients = 0;
-  const actions = load("lib/contents/actions.ts", {
+  const authAdapter = {
+    requireAdmin: async () =>
+      admin ? { userId: "admin", email: "a@b.c" } : null,
+  };
+  const serverAdapter = {
+    createClient: async () => {
+      clients += 1;
+      return memory(state);
+    },
+  };
+  const cleanup = load("lib/contents/cleanup.ts", {
     "server-only": {},
-    "next/cache": { revalidatePath: (path) => paths.push(path) },
-    "@/lib/admin/auth": {
-      requireAdmin: async () =>
-        admin ? { userId: "admin", email: "a@b.c" } : null,
-    },
-    "@/lib/admin/support-rules": support,
-    "@/lib/supabase/server": {
-      createClient: async () => {
-        clients += 1;
-        return memory(state);
-      },
-    },
+    "@/lib/admin/auth": authAdapter,
+    "@/lib/supabase/server": serverAdapter,
     "./rules": rules,
   });
-  return { state, paths, actions, clients: () => clients };
+  const actions = load("lib/contents/actions.ts", {
+    "server-only": {},
+    "node:crypto": { randomUUID: () => id },
+    "next/cache": { revalidatePath: (path) => paths.push(path) },
+    "@/lib/admin/auth": authAdapter,
+    "@/lib/admin/support-rules": support,
+    "@/lib/supabase/server": serverAdapter,
+    "./cleanup": cleanup,
+    "./rules": rules,
+  });
+  return { state, paths, actions, cleanup, clients: () => clients };
 }
 
 test("권한·충돌·없음·응답 유실에서 조건부 저장을 지킨다", async () => {
@@ -489,6 +720,114 @@ test("권한·충돌·없음·응답 유실에서 조건부 저장을 지킨다"
   assert.equal(refused.paths.length, 0);
 });
 
+test("썸네일 저장은 메타데이터·중복 참조를 확인하고 성공 뒤에만 이전 파일을 정리한다", async () => {
+  const oldPath = "contents/11111111-1111-4111-8111-111111111111.png";
+  const nextPath = "contents/22222222-2222-4222-8222-222222222222.png";
+  const meta = { size: 100, contentType: "image/png" };
+
+  const attached = harness({
+    rows: [row()],
+    files: new Map([[nextPath, meta]]),
+  });
+  const saved = await attached.actions.saveContent(
+    form({
+      thumbnail_path: nextPath,
+      thumbnail_alt: "새 썸네일",
+      posted_on: "2024-02-29",
+    }),
+  );
+  assert.equal(saved.state, "saved");
+  assert.equal(saved.row.thumbnail_path, nextPath);
+  assert.deepEqual(attached.state.storageCalls[0], ["info", nextPath]);
+
+  const duplicate = harness({
+    rows: [
+      row(),
+      row({
+        id: otherId,
+        title: "다른 콘텐츠",
+        thumbnail_path: nextPath,
+        thumbnail_alt: "다른 썸네일",
+      }),
+    ],
+    files: new Map([[nextPath, meta]]),
+  });
+  const refused = await duplicate.actions.saveContent(
+    form({ thumbnail_path: nextPath, thumbnail_alt: "새 썸네일" }),
+  );
+  assert.equal(refused.state, "rejected");
+  assert.match(refused.message, /다른 콘텐츠/);
+  assert.equal(kindCount(duplicate.state, "update"), 0);
+
+  const replaced = harness({
+    rows: [
+      row({
+        thumbnail_path: oldPath,
+        thumbnail_alt: "이전 썸네일",
+      }),
+    ],
+    files: new Map([
+      [oldPath, meta],
+      [nextPath, meta],
+    ]),
+  });
+  const replacement = await replaced.actions.saveContent(
+    form({ thumbnail_path: nextPath, thumbnail_alt: "새 썸네일" }),
+  );
+  assert.equal(replacement.state, "saved");
+  assert.equal(replaced.state.files.has(oldPath), false);
+  assert.equal(replaced.state.files.has(nextPath), true);
+
+  const retry = harness({
+    rows: [
+      row({
+        thumbnail_path: oldPath,
+        thumbnail_alt: "이전 썸네일",
+      }),
+    ],
+    files: new Map([
+      [oldPath, meta],
+      [nextPath, meta],
+    ]),
+    cleanupFail: true,
+  });
+  const pending = await retry.actions.saveContent(
+    form({ thumbnail_path: nextPath, thumbnail_alt: "새 썸네일" }),
+  );
+  assert.equal(pending.state, "saved");
+  assert.equal(typeof pending.cleanup, "function");
+  assert.equal(retry.state.files.has(oldPath), true);
+  retry.state.cleanupFail = false;
+  assert.equal(await pending.cleanup(), true);
+  assert.equal(retry.state.files.has(oldPath), false);
+
+  const uncertain = harness({
+    rows: [
+      row({
+        thumbnail_path: oldPath,
+        thumbnail_alt: "이전 썸네일",
+      }),
+    ],
+    files: new Map([
+      [oldPath, meta],
+      [nextPath, meta],
+    ]),
+    loseUpdate: true,
+  });
+  const unknownResult = await uncertain.actions.saveContent(
+    form({ thumbnail_path: nextPath, thumbnail_alt: "새 썸네일" }),
+  );
+  assert.equal(unknownResult.state, "unknown");
+  assert.equal(uncertain.state.files.has(oldPath), true);
+  assert.equal(uncertain.state.files.has(nextPath), true);
+  const confirmed = await uncertain.actions.confirmContent(
+    id,
+    form({ thumbnail_path: nextPath, thumbnail_alt: "새 썸네일" }),
+  );
+  assert.equal(confirmed.state, "saved");
+  assert.equal(typeof confirmed.recovery, "function");
+});
+
 test("공식 채널은 확인된 주소만 연결하고 임시 주소는 누르지 않는다", () => {
   const config = load("lib/site-config.ts");
   assert.deepEqual(rules.publicChannels, ["youtube", "instagram", "blog"]);
@@ -523,11 +862,12 @@ test("공식 채널은 확인된 주소만 연결하고 임시 주소는 누르�
 
   const pages = read("components/contents/pages.tsx");
   const channel = read("components/contents/channel.tsx");
+  const thumbnail = read("components/contents/thumbnail.tsx");
   const start = pages.indexOf("export async function ContentListPage");
   const end = pages.indexOf("export async function AdminContentListPage");
   const pub = pages.slice(start, end);
   const order = [
-    "유튜브, 인스타그램, 블로그 글을 새 창에서 엽니다.",
+    "쪽집게천사의 블로그·인스타그램·유튜브 소식을 모아 봤어요.",
     'aria-label="공식 채널"',
     "publicChannels.map",
     'aria-label="콘텐츠 채널"',
@@ -536,9 +876,9 @@ test("공식 채널은 확인된 주소만 연결하고 임시 주소는 누르�
     "아직 올라온 소식이 없어요.",
     "선택한 채널의 콘텐츠가 없습니다.",
     "전체 채널 보기",
-    "ContentChannelArt",
+    "ContentThumbnail",
     "ContentChannelBadge",
-    "ContentExternalLink",
+    "새 창으로 열기",
   ];
   let cursor = -1;
   for (const marker of order) {
@@ -553,7 +893,17 @@ test("공식 채널은 확인된 주소만 연결하고 임시 주소는 누르�
   assert.match(channel, /target="_blank"/);
   assert.match(channel, /rel="noopener noreferrer"/);
   assert.match(channel, /새 창으로 열기/);
-  assert.match(channel, /주소를 확인할 수 없어 링크를 표시하지 않습니다/);
+  for (const asset of [
+    "channel-youtube.png",
+    "channel-instagram.png",
+    "channel-naver-blog.png",
+  ]) {
+    assert.match(thumbnail, new RegExp(asset.replace(".", "\\.")));
+  }
+  assert.match(thumbnail, /bg-brand-soft/);
+  assert.match(thumbnail, /object-contain/);
+  assert.equal(thumbnail.includes("lucide-react"), false);
+  assert.match(pub, /외부 주소를 사용할 수 없습니다/);
   assert.equal(channel.includes("<iframe"), false);
   const admin = pages.slice(end);
   assert.match(admin, /등록된 콘텐츠가 없습니다/);
@@ -565,8 +915,7 @@ test("공식 채널은 확인된 주소만 연결하고 임시 주소는 누르�
   assert.ok(right >= 7 * 14 + 16, `link ${right}`);
   const pcRight = 560 - pagePad - cardPad - 88 - 12;
   assert.ok(pcRight >= right, `pc ${pcRight}`);
-  assert.match(pub, /grid grid-cols-3 gap-2/);
-  assert.equal(pub.includes("@3xl/app:grid-cols-3"), false);
+  assert.match(pub, /grid min-w-0 grid-cols-1 gap-2\.5 @3xl\/app:grid-cols-2/);
   assert.match(channel, /flex min-h-11 min-w-0 flex-col items-center gap-1\.5/);
   const channelPadX = 12;
   const channelGaps = 16;
@@ -603,7 +952,8 @@ test("고객 조회 코드는 공개 클라이언트와 공개 조건만 사용�
 const otherId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const conflictText =
   "다른 작업으로 콘텐츠가 변경됐습니다. 최신 내용을 확인해 주세요.";
-const unchangedText = "삭제가 반영되지 않았습니다. 콘텐츠는 그대로입니다.";
+const unchangedText =
+  "삭제는 반영되지 않았습니다. 콘텐츠는 그대로 있습니다. 다시 삭제할 수 있습니다.";
 const confirmedGoneText = "콘텐츠가 없는 것을 확인했습니다.";
 
 function kindCount(state, kind) {
@@ -750,6 +1100,10 @@ async function editorScreen(extra = {}, props = {}) {
     useLayoutEffect(fn, deps) {
       planned.push({ kind: "layout", index: hookIndex++, fn, deps });
     },
+    useSyncExternalStore(subscribe, getSnapshot) {
+      hookIndex += 1;
+      return getSnapshot();
+    },
   };
   function sameDeps(left, right) {
     return (
@@ -794,6 +1148,15 @@ async function editorScreen(extra = {}, props = {}) {
       "@/lib/contents/actions": world.actions,
       "@/lib/contents/rules": rules,
       "@/lib/contents/submit": load("lib/contents/submit.ts"),
+      "@/lib/contents/upload": {
+        inspectImage: async () => ({ ext: "png", mime: "image/png" }),
+        uploadImage: async (_client, _file, path) => path,
+        uploadLookupMessage: () => "",
+      },
+      "@/lib/supabase/client": { createClient: () => ({}) },
+      "./thumbnail": {
+        ContentThumbnail: (props) => ({ type: "thumbnail", props }),
+      },
     },
     { jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
   );
@@ -920,7 +1283,10 @@ test("삭제 결과 확인은 조회와 캐시 재검증만 한다", async () =>
   const same = harness();
   const kept = await same.actions.confirmContentDeletion(id, version);
   assert.equal(kept.unchanged, true);
-  assert.equal(kept.message, unchangedText);
+  assert.equal(
+    kept.message,
+    "삭제가 반영되지 않았습니다. 콘텐츠는 그대로입니다.",
+  );
   assert.equal(same.paths.length, 0);
   assert.equal(same.state.rows[0].title, "테스트 제목");
   assert.equal(
@@ -967,7 +1333,7 @@ test("삭제 반영 후 응답이 끊기면 재확인이 목록 이동과 별도
   assert.equal(kindCount(screen.world.state, "update"), 0);
   assert.equal(kindCount(screen.world.state, "insert"), 0);
   assert.equal(screen.navigated.includes("refresh"), false);
-  await screen.click("저장 결과 다시 확인");
+  await screen.click("삭제 결과 다시 확인");
   await screen.show();
   assert.equal(kindCount(screen.world.state, "delete"), deletes);
   assert.equal(kindCount(screen.world.state, "update"), 0);
@@ -991,7 +1357,7 @@ test("삭제 미반영 후 버전이 바뀌면 재확인은 충돌이고 입력�
   screen.world.state.rows[0].title = "서버에서 바꾼 제목";
   screen.world.state.rows[0].updated_at = nextVersion;
   const deletes = kindCount(screen.world.state, "delete");
-  await screen.click("저장 결과 다시 확인");
+  await screen.click("삭제 결과 다시 확인");
   assert.equal(screen.status(), conflictText);
   assert.equal(screen.value("title"), "유지할 제목");
   assert.equal(screen.baseline().current.title, "테스트 제목");
@@ -1020,10 +1386,10 @@ test("삭제 재확인은 편집 중인 기준이 아니라 요청 당시 행을
     title: "다른 콘텐츠",
   };
   const deletes = kindCount(screen.world.state, "delete");
-  await screen.click("저장 결과 다시 확인");
+  await screen.click("삭제 결과 다시 확인");
   await screen.show();
   assert.equal(screen.status(), confirmedGoneText);
-  assert.equal(screen.value("title"), "재확인 중에 바뀐 입력");
+  assert.equal(screen.value("title"), null);
   assert.equal(
     screen.world.state.rows.some((item) => item.id === otherId),
     true,
@@ -1046,7 +1412,7 @@ test("같은 버전이 남아 있으면 삭제를 다시 시도할 수 있다", 
     updated_at: nextVersion,
   };
   const driftedDeletes = kindCount(drifted.world.state, "delete");
-  await drifted.click("저장 결과 다시 확인");
+  await drifted.click("삭제 결과 다시 확인");
   assert.equal(drifted.status(), unchangedText);
   assert.equal(drifted.value("title"), "유지할 제목");
   assert.equal(drifted.world.state.rows[0].updated_at, version);
@@ -1058,7 +1424,7 @@ test("같은 버전이 남아 있으면 삭제를 다시 시도할 수 있다", 
   await screen.click("삭제 전 확인");
   await screen.click("확인 후 처리");
   const deletes = kindCount(screen.world.state, "delete");
-  await screen.click("저장 결과 다시 확인");
+  await screen.click("삭제 결과 다시 확인");
   assert.equal(screen.status(), unchangedText);
   assert.equal(kindCount(screen.world.state, "delete"), deletes);
   await screen.click("삭제 전 확인");
@@ -1075,7 +1441,7 @@ test("삭제 재확인 조회가 실패하면 완료나 미반영으로 단정�
   await screen.click("확인 후 처리");
   screen.world.state.readError = { code: "XX000" };
   const deletes = kindCount(screen.world.state, "delete");
-  await screen.click("저장 결과 다시 확인");
+  await screen.click("삭제 결과 다시 확인");
   assert.match(screen.status(), /확인하지 못했습니다/);
   assert.equal(screen.status().includes("반영되지 않았습니다"), false);
   assert.equal(screen.status().includes(confirmedGoneText), false);
@@ -1083,7 +1449,7 @@ test("삭제 재확인 조회가 실패하면 완료나 미반영으로 단정�
   assert.equal(kindCount(screen.world.state, "delete"), deletes);
   assert.equal(screen.world.paths.length, 0);
   screen.world.state.readError = null;
-  await screen.click("저장 결과 다시 확인");
+  await screen.click("삭제 결과 다시 확인");
   assert.equal(screen.status(), unchangedText);
   assert.equal(kindCount(screen.world.state, "delete"), deletes);
   assert.equal(screen.world.paths.length, 0);

@@ -8,6 +8,7 @@ import { displayChips } from "@/lib/counselors/rules";
 import { Chip } from "@/components/ui/chip";
 import { CounselorName } from "@/components/counselor/name";
 import { CounselorPhoto } from "@/components/counselor/photo";
+import { RepresentativeBadge } from "@/components/counselor/representative-badge";
 
 const focus =
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
@@ -66,11 +67,12 @@ function RecommendCard({ counselor }: { counselor: Counselor }) {
         className="h-[168px] w-full"
       />
       <div className="flex min-w-0 flex-col gap-1.5 p-2.5">
-        <p className="text-subtitle font-bold">
+        <p className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-1 text-subtitle font-bold">
           <CounselorName
             name={counselor.name}
             honorificClassName="text-caption font-medium text-muted"
           />
+          <RepresentativeBadge counselorId={counselor.id} tone="brand" />
         </p>
         <div className="flex min-w-0 max-w-full flex-wrap gap-1">
           {displayChips(counselor).map((tag, index) => (

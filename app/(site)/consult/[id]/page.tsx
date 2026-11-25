@@ -6,6 +6,7 @@ import { Suspense } from "react";
 import { getCounselor } from "@/lib/data/counselors";
 import { counselorHeading, displayChips } from "@/lib/counselors/rules";
 import { CounselorName } from "@/components/counselor/name";
+import { RepresentativeBadge } from "@/components/counselor/representative-badge";
 import { CounselorPhoto } from "@/components/counselor/photo";
 import { CounselorDetailFrame } from "@/components/counselor/counselor-detail-frame";
 import { CounselorMenu } from "@/components/counselor/counselor-menu";
@@ -57,11 +58,12 @@ async function CounselorContent({ params }: Props) {
         className="mx-auto aspect-[20/19] w-full @3xl/app:w-[min(100%,calc((100dvh-128px)*20/19))]"
       />
       <section className="relative z-10 -mt-4 mx-4 flex flex-col gap-2 rounded-card border border-border bg-surface px-4.5 pt-8 pb-4.5 @3xl/app:mx-6">
-        <h1 className="m-0 text-display font-extrabold wrap-anywhere">
+        <h1 className="m-0 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-display font-extrabold wrap-anywhere">
           <CounselorName
             name={counselor.name}
             honorificClassName="text-subtitle font-semibold text-muted"
           />
+          <RepresentativeBadge counselorId={counselor.id} tone="brand" />
         </h1>
         {chips.length > 0 && (
           <div className="flex min-w-0 max-w-full flex-wrap gap-1">

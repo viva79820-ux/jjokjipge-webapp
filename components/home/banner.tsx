@@ -10,6 +10,7 @@ import { visibleCareers } from "@/lib/home/counselors";
 import { counselorHeading } from "@/lib/counselors/rules";
 import { CounselorName } from "@/components/counselor/name";
 import { CounselorPhoto } from "@/components/counselor/photo";
+import { RepresentativeBadge } from "@/components/counselor/representative-badge";
 
 const focus =
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-on-brand";
@@ -100,16 +101,22 @@ function HomeBannerSlides({ counselors }: { counselors: Counselor[] }) {
                     <span className="inline-flex h-[26px] w-fit max-w-full items-center rounded-full bg-halo px-2.5 text-fine font-extrabold text-foreground">
                       전화상담 선생님
                     </span>
-                    <p
-                      data-home-banner-name
-                      className="text-display font-extrabold wrap-anywhere text-on-brand"
-                    >
-                      <CounselorName
-                        name={counselor.name}
-                        suffix="same"
-                        honorificClassName="text-on-brand"
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
+                      <p
+                        data-home-banner-name
+                        className="min-w-0 text-display font-extrabold wrap-anywhere text-on-brand"
+                      >
+                        <CounselorName
+                          name={counselor.name}
+                          suffix="same"
+                          honorificClassName="text-on-brand"
+                        />
+                      </p>
+                      <RepresentativeBadge
+                        counselorId={counselor.id}
+                        tone="halo"
                       />
-                    </p>
+                    </div>
                     {careers.length > 0 ? (
                       <p
                         data-home-banner-career
