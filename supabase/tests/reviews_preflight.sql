@@ -304,6 +304,21 @@ insert into reviews_test_ids (kind, id) values
   ('public_product_review', gen_random_uuid()),
   ('non_admin', gen_random_uuid());
 
+create temporary table reviews_test_actors (
+  kind text primary key,
+  id uuid unique not null
+);
+insert into reviews_test_actors (kind, id)
+select 'admin', id
+from public.profiles
+where role = 'admin'
+order by id
+limit 1;
+insert into reviews_test_actors (kind, id)
+select 'non_admin', id
+from reviews_test_ids
+where kind = 'non_admin';
+
 insert into public.counselors (
   id,
   slug,
@@ -423,7 +438,7 @@ begin
 end;
 $$;
 
-grant select on reviews_test_ids to anon, authenticated;
+grant select on reviews_test_ids, reviews_test_actors to anon, authenticated;
 grant execute on function pg_temp.reviews_assert(boolean, text)
 to anon, authenticated;
 grant execute on function pg_temp.reviews_expected_error(text, text, text)
@@ -515,18 +530,23 @@ reset role;
 set local role authenticated;
 select set_config(
   'request.jwt.claim.sub',
-  (select id::text from reviews_test_ids where kind = 'non_admin'),
+  (select id::text from reviews_test_actors where kind = 'non_admin'),
   true
 );
 select set_config(
   'request.jwt.claims',
   jsonb_build_object(
     'sub',
-    (select id::text from reviews_test_ids where kind = 'non_admin'),
+    (select id::text from reviews_test_actors where kind = 'non_admin'),
     'role',
     'authenticated'
   )::text,
   true
+);
+select pg_temp.reviews_assert(
+  auth.uid() = (select id from reviews_test_actors where kind = 'non_admin')
+  and not (select private.is_admin()),
+  '비관리자 인증 역할 확인'
 );
 select pg_temp.reviews_assert(
   (
@@ -570,18 +590,23 @@ reset role;
 set local role authenticated;
 select set_config(
   'request.jwt.claim.sub',
-  (select id::text from public.profiles where role = 'admin' order by id limit 1),
+  (select id::text from reviews_test_actors where kind = 'admin'),
   true
 );
 select set_config(
   'request.jwt.claims',
   jsonb_build_object(
     'sub',
-    (select id::text from public.profiles where role = 'admin' order by id limit 1),
+    (select id::text from reviews_test_actors where kind = 'admin'),
     'role',
     'authenticated'
   )::text,
   true
+);
+select pg_temp.reviews_assert(
+  auth.uid() = (select id from reviews_test_actors where kind = 'admin')
+  and (select private.is_admin()),
+  '관리자 인증 역할 확인'
 );
 select pg_temp.reviews_assert(
   (
