@@ -122,5 +122,15 @@ with check ((select private.is_admin()));
 
 revoke all on public.reviews
 from public, anon, authenticated, service_role;
-grant select on public.reviews to anon, authenticated;
+grant select (
+  id,
+  counselor_id,
+  product_id,
+  author_name,
+  rating,
+  body,
+  is_published,
+  created_at,
+  updated_at
+) on public.reviews to anon, authenticated;
 grant update (is_published) on public.reviews to authenticated;
