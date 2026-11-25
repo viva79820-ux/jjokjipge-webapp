@@ -37,7 +37,7 @@ export function AuthScreenMain({
   className?: string;
 }) {
   return (
-    <div className={`flex flex-col gap-6 px-5 @3xl/app:px-6 ${className}`}>
+    <div className={`flex flex-col px-5 @3xl/app:px-6 ${className}`}>
       {children}
     </div>
   );
