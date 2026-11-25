@@ -1,7 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { fieldClass, labelClass } from "./styles";
+import { Lock } from "lucide-react";
+import {
+  fieldClass,
+  labelClass,
+  screenFieldClass,
+  screenLabelClass,
+} from "./styles";
 
 export function PasswordField({
   id,
@@ -11,6 +17,7 @@ export function PasswordField({
   invalid,
   describedBy,
   disabled,
+  screen = false,
 }: {
   id: string;
   name: string;
@@ -19,14 +26,22 @@ export function PasswordField({
   invalid: boolean;
   describedBy?: string;
   disabled?: boolean;
+  screen?: boolean;
 }) {
   const [visible, setVisible] = useState(false);
   return (
-    <div>
-      <label htmlFor={id} className={labelClass}>
+    <div className={screen ? "flex flex-col gap-1.5" : undefined}>
+      <label htmlFor={id} className={screen ? screenLabelClass : labelClass}>
         {label}
       </label>
       <div className="relative">
+        {screen ? (
+          <Lock
+            aria-hidden="true"
+            size={20}
+            className="pointer-events-none absolute top-3.5 left-3.5 text-muted"
+          />
+        ) : null}
         <input
           id={id}
           name={name}
@@ -36,13 +51,22 @@ export function PasswordField({
           spellCheck={false}
           required
           disabled={disabled}
+          placeholder={screen ? "비밀번호" : undefined}
           aria-invalid={invalid}
           aria-describedby={describedBy}
-          className={`${fieldClass(invalid)} pr-20`}
+          className={
+            screen
+              ? `${screenFieldClass(invalid)} pr-18 pl-11`
+              : `${fieldClass(invalid)} pr-20`
+          }
         />
         <button
           type="button"
-          className="absolute top-1/2 right-1 inline-flex min-h-11 -translate-y-1/2 cursor-pointer items-center px-2 text-caption font-semibold text-brand"
+          className={
+            screen
+              ? "absolute top-1.5 right-1.5 inline-flex h-11 cursor-pointer items-center px-3 text-caption font-bold text-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+              : "absolute top-1/2 right-1 inline-flex min-h-11 -translate-y-1/2 cursor-pointer items-center px-2 text-caption font-semibold text-brand"
+          }
           aria-pressed={visible}
           aria-label={visible ? `${label} 숨기기` : `${label} 표시`}
           onClick={() => setVisible((current) => !current)}

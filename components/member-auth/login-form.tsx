@@ -2,14 +2,21 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import { login } from "@/lib/member-auth/actions";
 import type { FieldState } from "@/lib/member-auth/actions";
 import { validateLogin } from "@/lib/member-auth/validation";
+import { EmailField } from "./email-field";
 import { HardNavigation, useFormResetRef } from "./navigation-reset";
 import { PasswordField } from "./password-field";
-import { alertClass, fieldClass, labelClass, linkClass } from "./styles";
+import { alertClass } from "./styles";
 import { useActionState } from "react";
+
+const focus =
+  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
+
+const textLink = `inline-flex min-h-11 cursor-pointer items-center text-label font-semibold hover:text-brand-deep ${focus}`;
+
+const submitClass = `mt-1 inline-flex h-13 w-full cursor-pointer items-center justify-center rounded-full bg-brand px-4 text-base font-bold text-on-brand disabled:cursor-not-allowed disabled:opacity-50 ${focus}`;
 
 export function LoginForm() {
   const [formRef, formResetRef] = useFormResetRef();
@@ -67,53 +74,47 @@ export function LoginForm() {
         noValidate
         aria-busy={pending}
         onSubmit={onSubmit}
-        className="space-y-4"
+        className="flex flex-col gap-4"
       >
         <div>
-          <label htmlFor="email" className={labelClass}>
-            이메일
-          </label>
-          <input
+          <EmailField
             id="email"
-            name="email"
-            type="email"
             autoComplete="username"
-            autoCapitalize="none"
-            spellCheck={false}
-            required
+            invalid={Boolean(errors.email)}
+            describedBy={errors.email ? "email-error" : undefined}
             disabled={pending}
-            aria-invalid={Boolean(errors.email)}
-            aria-describedby={errors.email ? "email-error" : undefined}
-            className={fieldClass(Boolean(errors.email))}
           />
           {errors.email && (
             <p
               id="email-error"
               role="alert"
-              className="mt-1 text-caption text-error"
+              className="mt-1.5 text-caption text-error"
             >
               {errors.email}
             </p>
           )}
         </div>
-        <PasswordField
-          id="password"
-          name="password"
-          label="비밀번호"
-          autoComplete="current-password"
-          invalid={Boolean(errors.password)}
-          describedBy={errors.password ? "password-error" : undefined}
-          disabled={pending}
-        />
-        {errors.password && (
-          <p
-            id="password-error"
-            role="alert"
-            className="-mt-2 text-caption text-error"
-          >
-            {errors.password}
-          </p>
-        )}
+        <div>
+          <PasswordField
+            id="password"
+            name="password"
+            label="비밀번호"
+            autoComplete="current-password"
+            invalid={Boolean(errors.password)}
+            describedBy={errors.password ? "password-error" : undefined}
+            disabled={pending}
+            screen
+          />
+          {errors.password && (
+            <p
+              id="password-error"
+              role="alert"
+              className="mt-1.5 text-caption text-error"
+            >
+              {errors.password}
+            </p>
+          )}
+        </div>
         {state.message && (
           <p
             ref={feedbackRef}
@@ -124,22 +125,21 @@ export function LoginForm() {
             {state.message}
           </p>
         )}
-        <Button
-          type="submit"
-          disabled={pending}
-          className="w-full disabled:opacity-50"
-        >
+        <button type="submit" disabled={pending} className={submitClass}>
           {pending ? "로그인 중..." : "로그인"}
-        </Button>
+        </button>
+        <div className="flex items-center justify-center gap-4">
+          <Link href="/forgot-password" className={`${textLink} text-muted`}>
+            비밀번호 재설정
+          </Link>
+          <span aria-hidden="true" className="text-label text-border">
+            |
+          </span>
+          <Link href="/signup" className={`${textLink} text-brand`}>
+            회원가입
+          </Link>
+        </div>
       </form>
-      <div className="mt-4 flex flex-col">
-        <Link href="/signup" className={linkClass}>
-          회원가입
-        </Link>
-        <Link href="/forgot-password" className={linkClass}>
-          비밀번호 재설정
-        </Link>
-      </div>
     </>
   );
 }

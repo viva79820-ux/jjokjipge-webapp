@@ -7,22 +7,20 @@ import {
   useState,
   type FormEvent,
 } from "react";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import {
   requestPasswordReset,
   type FieldState,
 } from "@/lib/member-auth/actions";
 import { messages } from "@/lib/member-auth/errors";
 import { readReset, validateReset } from "@/lib/member-auth/validation";
+import { EmailField } from "./email-field";
 import { useFormResetRef } from "./navigation-reset";
-import {
-  alertClass,
-  fieldClass,
-  labelClass,
-  linkClass,
-  statusClass,
-} from "./styles";
+import { alertClass, statusClass } from "./styles";
+
+const focus =
+  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
+
+const submitClass = `inline-flex h-13 w-full cursor-pointer items-center justify-center rounded-full bg-brand px-4 text-base font-bold text-on-brand disabled:cursor-not-allowed disabled:opacity-50 ${focus}`;
 
 export function ForgotPasswordForm() {
   const [formRef, formResetRef] = useFormResetRef();
@@ -67,73 +65,50 @@ export function ForgotPasswordForm() {
   }
 
   return (
-    <>
-      <form
-        ref={formResetRef}
-        action={action}
-        noValidate
-        aria-busy={pending}
-        onSubmit={onSubmit}
-        className="space-y-4"
-      >
-        <div>
-          <label htmlFor="email" className={labelClass}>
-            이메일
-          </label>
-          <input
-            id="email"
-            name="email"
-            type="email"
-            autoComplete="email"
-            autoCapitalize="none"
-            spellCheck={false}
-            required
-            disabled={pending}
-            aria-invalid={Boolean(errors.email)}
-            aria-describedby={errors.email ? "email-error" : undefined}
-            className={fieldClass(Boolean(errors.email))}
-          />
-          {errors.email && (
-            <p
-              id="email-error"
-              role="alert"
-              className="mt-1 text-caption text-error"
-            >
-              {errors.email}
-            </p>
-          )}
-        </div>
-        {state.message && (
-          <p
-            ref={feedbackRef}
-            tabIndex={-1}
-            role="alert"
-            className={alertClass}
-          >
-            {state.message}
-          </p>
-        )}
-        {state.status === "accepted" && (
-          <p
-            ref={feedbackRef}
-            tabIndex={-1}
-            role="status"
-            className={statusClass}
-          >
-            {messages.resetAccepted}
-          </p>
-        )}
-        <Button
-          type="submit"
+    <form
+      ref={formResetRef}
+      action={action}
+      noValidate
+      aria-busy={pending}
+      onSubmit={onSubmit}
+      className="flex flex-col gap-4"
+    >
+      <div>
+        <EmailField
+          id="email"
+          autoComplete="email"
+          invalid={Boolean(errors.email)}
+          describedBy={errors.email ? "email-error" : undefined}
           disabled={pending}
-          className="w-full disabled:opacity-50"
+        />
+        {errors.email && (
+          <p
+            id="email-error"
+            role="alert"
+            className="mt-1.5 text-caption text-error"
+          >
+            {errors.email}
+          </p>
+        )}
+      </div>
+      {state.message && (
+        <p ref={feedbackRef} tabIndex={-1} role="alert" className={alertClass}>
+          {state.message}
+        </p>
+      )}
+      {state.status === "accepted" && (
+        <p
+          ref={feedbackRef}
+          tabIndex={-1}
+          role="status"
+          className={statusClass}
         >
-          {pending ? "요청 중..." : "재설정 메일 요청"}
-        </Button>
-      </form>
-      <Link href="/login" className={`${linkClass} mt-4`}>
-        로그인으로 돌아가기
-      </Link>
-    </>
+          {messages.resetAccepted}
+        </p>
+      )}
+      <button type="submit" disabled={pending} className={submitClass}>
+        {pending ? "요청 중..." : "재설정 메일 보내기"}
+      </button>
+    </form>
   );
 }
