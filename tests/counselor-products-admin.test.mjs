@@ -306,7 +306,9 @@ const adminAuth = {
 
 function reservationModules(state) {
   const bookingTime = load("lib/booking-time.ts", {
-    "@/lib/booking-config": load("lib/booking-config.ts"),
+    "@/lib/booking-config": load("lib/booking-config.ts", {
+      "@/lib/bank-transfer-config": load("lib/bank-transfer-config.ts"),
+    }),
   });
   const admin = { createAdminClient: () => memory(state) };
   const availability = load("lib/reservations/availability.ts", {
