@@ -8,7 +8,8 @@ const read = (file) =>
   readFileSync(new URL(file, import.meta.url), "utf8").replaceAll("\r\n", "\n");
 const between = (source, start, end) => source.split(start)[1].split(end)[0];
 
-const migrationFile = "../supabase/migrations/20261125120000_lectures_schema.sql";
+const migrationFile =
+  "../supabase/migrations/20261125120000_lectures_schema.sql";
 const preflightFile = "../supabase/tests/lectures_preflight.sql";
 const rollbackFile = "../supabase/tests/lectures_rollback_check.sql";
 const earlierMigrations = [
@@ -34,7 +35,11 @@ test("사전 검사는 강의 마이그레이션 전체를 그대로 포함한�
   const preflight = read(preflightFile);
 
   assert.equal(
-    between(preflight, "-- BEGIN EXACT MIGRATION\n", "\n-- END EXACT MIGRATION"),
+    between(
+      preflight,
+      "-- BEGIN EXACT MIGRATION\n",
+      "\n-- END EXACT MIGRATION",
+    ),
     migration,
   );
   assert.match(migration, /create table public\.teachers/);

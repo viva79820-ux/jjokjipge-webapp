@@ -8,6 +8,7 @@ import { ReservationHistory } from "@/components/member-auth/reservation-history
 import { linkClass, noteClass } from "@/components/member-auth/styles";
 import { Button } from "@/components/ui/button";
 import { getAdmin } from "@/lib/admin/auth";
+import { isTeacher } from "@/lib/lectures/data";
 import { getMemberReservations } from "@/lib/member-auth/reservations";
 import { getMember } from "@/lib/member-auth/session";
 import { siteConfig } from "@/lib/site-config";
@@ -40,9 +41,10 @@ async function MemberPage({
   await connection();
   const member = await getMember();
   if (!member) redirect("/login");
-  const [admin, reservations] = await Promise.all([
+  const [admin, reservations, teacher] = await Promise.all([
     getAdmin(),
     getMemberReservations(member.id),
+    isTeacher(member.id),
   ]);
   const notice = (await searchParams).notice;
   return (
@@ -73,14 +75,21 @@ async function MemberPage({
         </div>
       </dl>
       <ReservationHistory reservations={reservations} />
-      {admin ? (
+      {teacher ? (
         <div className="mt-5">
+          <Button href="/mypage/lectures" className="w-full">
+            강의 관리
+          </Button>
+        </div>
+      ) : null}
+      {admin ? (
+        <div className={teacher ? "mt-3" : "mt-5"}>
           <Button href="/admin" variant="secondary" className="w-full">
             관리자 페이지
           </Button>
         </div>
       ) : null}
-      <div className={admin ? "mt-3" : "mt-5"}>
+      <div className={admin || teacher ? "mt-3" : "mt-5"}>
         <LogoutForm />
       </div>
       <div className="mt-4 flex flex-col">
