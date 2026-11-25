@@ -10,10 +10,9 @@ import {
   type RefObject,
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Search } from "lucide-react";
+import { Phone, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { lookupReservation } from "@/lib/reservations/lookup/actions";
-import { statusLabels } from "@/lib/reservations/lookup/display";
 import {
   lookupFailure,
   validateLookupValues,
@@ -26,49 +25,34 @@ import type {
   LookupValues,
 } from "@/lib/reservations/lookup/types";
 import { ReservationResult } from "./reservation-result";
+import { StatusBadge } from "./status-badge";
 
 const inputClass =
-  "mt-1 min-h-11 w-full min-w-0 rounded-input border bg-surface px-3 text-body";
+  "mt-1 h-13 w-full min-w-0 rounded-input border bg-surface px-3.5 text-base text-foreground placeholder:text-muted";
 const storeLinkClass =
-  "inline-flex min-h-11 w-full cursor-pointer items-center justify-center rounded-full border border-brand bg-surface px-3 text-center text-label font-bold text-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
+  "inline-flex min-h-11 w-full cursor-pointer items-center justify-center gap-1.5 rounded-full border border-brand bg-surface px-3 text-center text-label font-bold text-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
 const initialValues: LookupValues = { reservationNo: "", email: "" };
-const statusTone: Record<ReservationStatus, string> = {
-  pending_payment: "bg-halo text-foreground",
-  confirmed: "bg-brand text-on-brand",
-  completed: "bg-brand-soft text-brand-deep",
-  cancelled: "border border-border bg-surface-muted text-foreground",
-};
 const statusGuide: {
   status: ReservationStatus;
   description: string;
 }[] = [
   {
     status: "pending_payment",
-    description: "예약 신청 후 입금 확인을 기다리는 상태예요.",
+    description: "안내 계좌로 입금하면 매장에서 확인해요.",
   },
   {
     status: "confirmed",
-    description: "입금 또는 결제가 확인되어 예약이 확정된 상태예요.",
+    description: "예약 시간에 매장 전화로 연락드려요.",
   },
   {
     status: "completed",
-    description: "예약한 상담이 완료된 상태예요.",
+    description: "상담이 끝났어요. 후기를 남길 수 있어요.",
   },
   {
     status: "cancelled",
-    description:
-      "취소된 예약이에요. 취소 사유가 등록된 경우 조회 결과에서 확인할 수 있어요.",
+    description: "취소된 예약이에요. 사유는 조회 결과에서 확인해요.",
   },
 ];
-function StatusBadge({ status }: { status: ReservationStatus }) {
-  return (
-    <span
-      className={`inline-flex shrink-0 items-center rounded-full px-2 py-1 text-fine font-semibold ${statusTone[status]}`}
-    >
-      {statusLabels[status]}
-    </span>
-  );
-}
 function FieldError({ field, message }: { field: string; message?: string }) {
   return message ? (
     <p
@@ -164,7 +148,7 @@ export function ReservationLookup() {
       <header>
         <h1 className="text-display font-extrabold">예약 조회</h1>
         <p className="mt-1 text-body text-muted">
-          예약번호와 예약할 때 입력한 이메일로 예약 상태를 확인하세요.
+          예약번호와 예약할 때 입력한 이메일로 조회해요.
         </p>
       </header>
       <form
@@ -246,6 +230,7 @@ export function ReservationLookup() {
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
+              placeholder="example@email.com"
               value={values.email}
               onChange={(event) => change("email", event.target.value)}
               onBlur={(event) =>
@@ -263,20 +248,20 @@ export function ReservationLookup() {
             />
             <FieldError field="lookup-email" message={errors.email} />
           </div>
-          <Button
+          <button
             type="submit"
             aria-disabled={busy}
-            className={`w-full gap-1.5 ${busy ? "pointer-events-none opacity-50" : ""}`}
+            className={`inline-flex h-13 w-full cursor-pointer items-center justify-center gap-1.5 rounded-full bg-brand px-4 text-base font-bold text-on-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${busy ? "pointer-events-none opacity-50" : ""}`}
           >
             {busy ? (
               "조회 중…"
             ) : (
               <>
-                <Search size={16} aria-hidden="true" />
+                <Search size={18} aria-hidden="true" />
                 예약 조회하기
               </>
             )}
-          </Button>
+          </button>
         </div>
         <p
           id="lookup-status"
@@ -305,14 +290,19 @@ export function ReservationLookup() {
         aria-labelledby="lookup-status-guide"
         className="mt-7 rounded-card border border-border bg-surface p-3 @3xl/app:p-4"
       >
-        <h2 id="lookup-status-guide" className="text-title font-bold">
+        <h2
+          id="lookup-status-guide"
+          className="text-body font-extrabold text-foreground"
+        >
           예약 상태 안내
         </h2>
         <ul className="mt-3 space-y-3">
           {statusGuide.map(({ status, description }) => (
-            <li key={status} className="flex min-w-0 items-start gap-3">
+            <li key={status} className="flex min-w-0 items-center gap-2.5">
               <StatusBadge status={status} />
-              <p className="min-w-0 text-caption text-muted">{description}</p>
+              <p className="min-w-0 text-caption text-foreground">
+                {description}
+              </p>
             </li>
           ))}
         </ul>
@@ -323,11 +313,11 @@ export function ReservationLookup() {
       >
         <h2
           id="lookup-missing-number"
-          className="text-subtitle font-bold text-brand-deep"
+          className="text-body font-extrabold text-brand-deep"
         >
           예약번호를 잊으셨나요?
         </h2>
-        <p className="mt-2 text-body text-foreground">
+        <p className="mt-2 text-caption text-brand-deep">
           로그인하면 회원 이름과 이메일을 확인할 수 있어요. 예약 상태는 이
           화면에서 예약번호와 이메일로 확인해요.
           {contact.href.startsWith("tel:")
@@ -340,6 +330,7 @@ export function ReservationLookup() {
           </Button>
           {contact.href.startsWith("tel:") ? (
             <a href={contact.href} className={storeLinkClass}>
+              <Phone size={16} aria-hidden="true" />
               {contact.label}
             </a>
           ) : (

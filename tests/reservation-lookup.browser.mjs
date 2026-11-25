@@ -1,4 +1,4 @@
-// 실제 Supabase와 분리한 예약 조회 브라우저 검사. 포트 4333.
+// 실제 Supabase와 분리한 예약 조회 브라우저 검사. 포트 4373.
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { spawn, execFileSync } from "node:child_process";
@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
-const port = 4333;
+const port = 4373;
 const email = "test@example.invalid";
 const columns =
   "reservation_no,status,product_name,minutes,price,starts_at,ends_at,payment_method,cancel_reason,counselors(name)";
@@ -272,6 +272,15 @@ try {
   async function waitText(text) {
     await until(() => textIncludes(text), text);
   }
+  async function waitResult(status) {
+    await until(
+      () =>
+        evaluate(
+          `document.querySelector("form").getAttribute("aria-busy") !== "true" && Boolean(document.querySelector('[data-lookup-result] [data-reservation-status="${status}"]'))`,
+        ),
+      `lookup result ${status}`,
+    );
+  }
   async function click(selector) {
     await until(
       () =>
@@ -358,25 +367,79 @@ try {
     const image = await cdp("Page.captureScreenshot", { format: "png" });
     writeFileSync(join(shotDir, name), Buffer.from(image.data, "base64"));
   }
-  async function widthCheck(width) {
+  async function fullShot(name) {
+    await evaluate("window.scrollTo(0, 0)");
+    await delay(80);
+    const image = await cdp("Page.captureScreenshot", {
+      format: "png",
+      captureBeyondViewport: true,
+    });
+    writeFileSync(join(shotDir, name), Buffer.from(image.data, "base64"));
+  }
+  const frames = [
+    ["360", 360, false, 360],
+    ["390", 390, false, 390],
+    ["pc-560", 1280, true, 560],
+  ];
+  async function emulate(width, fine) {
     await cdp("Emulation.setDeviceMetricsOverride", {
       width,
       height: 900,
       deviceScaleFactor: 1,
-      mobile: false,
+      mobile: !fine,
     });
-    await delay(150);
-    assert.ok(
-      await evaluate("document.documentElement.scrollWidth <= innerWidth"),
-      `Horizontal overflow at ${width}`,
-    );
-    assert.ok(
-      await evaluate(
-        "Array.from(document.querySelectorAll('main input,main button,[data-lookup-result]')).every(el => {const r=el.getBoundingClientRect();return r.width===0 || r.right<=innerWidth+1;})",
-      ),
-      `Clipped content at ${width}`,
-    );
-    await shot(`result-${width}.png`);
+    await cdp("Emulation.setTouchEmulationEnabled", {
+      enabled: !fine,
+      maxTouchPoints: fine ? 1 : 5,
+    });
+    await cdp("Emulation.setEmulatedMedia", {
+      media: "screen",
+      features: fine
+        ? [
+            { name: "hover", value: "hover" },
+            { name: "pointer", value: "fine" },
+          ]
+        : [
+            { name: "hover", value: "none" },
+            { name: "pointer", value: "coarse" },
+          ],
+    });
+    await delay(180);
+  }
+  async function frameMetrics() {
+    return evaluate(`(() => {
+      const shell = document.querySelector("[data-app-shell]");
+      const nodes = document.querySelectorAll("main input, main button, main a, main section, [data-lookup-result]");
+      const clipped = [...nodes].some((el) => {
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.right > innerWidth + 1;
+      });
+      return {
+        app: shell ? Math.round(shell.getBoundingClientRect().width) : null,
+        overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        fine: matchMedia("(hover: hover) and (pointer: fine)").matches,
+        clipped,
+      };
+    })()`);
+  }
+  async function captureStates(state) {
+    for (const [name, width, fine, expected] of frames) {
+      await emulate(width, fine);
+      const metrics = await frameMetrics();
+      assert.equal(metrics.fine, fine, `${state} ${name} pointer`);
+      assert.equal(
+        metrics.app,
+        expected,
+        `${state} ${name} app ${metrics.app}`,
+      );
+      assert.ok(
+        metrics.overflow <= 1,
+        `${state} ${name} overflow ${metrics.overflow}`,
+      );
+      assert.equal(metrics.clipped, false, `${state} ${name} clipped`);
+      await fullShot(`${state}-${name}.png`);
+    }
+    await emulate(360, false);
   }
   await cdp("Page.enable");
   await cdp("Runtime.enable");
@@ -410,6 +473,21 @@ try {
     ),
   );
   assert.equal(await textIncludes("로그인"), true);
+  assert.equal(await textIncludes("예약 상태 안내"), true);
+  assert.equal(await textIncludes("예약번호를 잊으셨나요?"), true);
+  assert.equal(
+    await evaluate(
+      "document.querySelector('#lookup-missing-number')?.parentElement.querySelector('a[href=\"tel:050714980232\"]')?.textContent.replace(/\\s+/g, ' ').trim()",
+    ),
+    "매장 문의",
+  );
+  assert.equal(
+    await evaluate(
+      "getComputedStyle(document.querySelector('#lookup-reservationNo')).fontSize",
+    ),
+    "16px",
+  );
+  await captureStates("before");
   const beforeEmpty = reads;
   await button("예약 조회하기");
   await waitText("예약번호를 R-20261102-0001 형식으로 입력해 주세요.");
@@ -432,6 +510,7 @@ try {
     await evaluate("document.activeElement.getAttribute('role')"),
     "alert",
   );
+  await captureStates("failure");
   assert.equal(await textIncludes("테스트 비공개상담사"), false);
   await fill("#lookup-email", ` ${email.toUpperCase()} `);
   await button("예약 조회하기");
@@ -448,6 +527,13 @@ try {
   await waitText("무통장입금");
   await waitText("현재 시안의 예시 계좌");
   await waitText("입금이 확인되면 예약이 확정돼요.");
+  assert.equal(
+    await evaluate(
+      "getComputedStyle(document.querySelector('[data-lookup-result] [data-reservation-status=\"pending_payment\"]')).backgroundColor",
+    ),
+    "rgb(255, 231, 128)",
+  );
+  await captureStates("success");
   assert.equal(await textIncludes("테스트비밀이름"), false);
   assert.equal(await textIncludes("010-9999-0000"), false);
   assert.equal(await textIncludes("테스트입금자"), false);
@@ -462,14 +548,17 @@ try {
   );
   assert.ok(
     await evaluate(
-      "['#lookup-reservationNo','#lookup-email','button[type=submit]'].every(sel => document.querySelector(sel).getBoundingClientRect().height >= 44)",
+      "['#lookup-reservationNo','#lookup-email','button[type=submit]'].every(sel => document.querySelector(sel).getBoundingClientRect().height >= 52)",
     ),
   );
   await fill("#lookup-email", "wrong@example.invalid");
   assert.equal(await textIncludes("테스트 비공개상담사"), false);
   await button("예약 조회하기");
   await waitText("예약번호와 이메일을 다시 확인해 주세요.");
-  assert.equal(await textIncludes("입금 대기"), false);
+  assert.equal(
+    await evaluate("Boolean(document.querySelector('[data-lookup-result]'))"),
+    false,
+  );
   fail = true;
   await fill("#lookup-email", email);
   await button("예약 조회하기");
@@ -481,7 +570,7 @@ try {
   await evaluate(
     "document.querySelector('form').requestSubmit();document.querySelector('form').requestSubmit()",
   );
-  await waitText("입금 대기");
+  await waitResult("pending_payment");
   assert.equal(reads, beforeDouble + 1);
   await navigate("/booking/lookup");
   await fill("#lookup-reservationNo", "R-20261112-0006");
@@ -499,21 +588,21 @@ try {
   );
   await key("Enter", "Enter");
   await waitText("카드결제");
-  await waitText("예약 확정");
+  await waitResult("confirmed");
   assert.equal(
     await evaluate("document.activeElement.id"),
     "lookup-result-title",
   );
   assert.equal(await textIncludes("예시 계좌"), false);
-  for (const [number, label] of [
-    ["R-20261112-0002", "예약 확정"],
-    ["R-20261112-0003", "상담 완료"],
-    ["R-20261112-10000", "R-20261112-10000"],
+  for (const [number, status] of [
+    ["R-20261112-0002", "confirmed"],
+    ["R-20261112-0003", "completed"],
+    ["R-20261112-10000", "confirmed"],
   ]) {
     await fill("#lookup-reservationNo", number);
     await fill("#lookup-email", email);
     await button("예약 조회하기");
-    await waitText(label);
+    await waitResult(status);
   }
   assert.equal(
     await evaluate(
@@ -523,7 +612,7 @@ try {
   );
   await fill("#lookup-reservationNo", "R-20261112-0004");
   await button("예약 조회하기");
-  await waitText("예약 취소");
+  await waitResult("cancelled");
   await waitText("<b>일반 텍스트</b>");
   assert.equal(
     await evaluate(
@@ -531,7 +620,17 @@ try {
     ),
     0,
   );
-  for (const width of [360, 768, 1024]) await widthCheck(width);
+  for (const [name, width, fine, expected] of frames) {
+    await emulate(width, fine);
+    const metrics = await frameMetrics();
+    assert.equal(metrics.app, expected, `cancelled ${name} app ${metrics.app}`);
+    assert.ok(
+      metrics.overflow <= 1,
+      `cancelled ${name} overflow ${metrics.overflow}`,
+    );
+    assert.equal(metrics.clipped, false, `cancelled ${name} clipped`);
+    await shot(`result-${name}.png`);
+  }
   await evaluate("window.scrollTo(0, document.documentElement.scrollHeight)");
   assert.ok(
     await evaluate(
@@ -597,12 +696,16 @@ try {
     resolve(profile).startsWith(resolve(tmpdir()) + "/") ||
     resolve(profile).startsWith(resolve(tmpdir()) + "\\")
   ) {
-    await delay(400);
-    rmSync(profile, {
-      recursive: true,
-      force: true,
-      maxRetries: 10,
-      retryDelay: 200,
-    });
+    await delay(800);
+    try {
+      rmSync(profile, {
+        recursive: true,
+        force: true,
+        maxRetries: 10,
+        retryDelay: 200,
+      });
+    } catch (error) {
+      console.error(`profile cleanup skipped: ${error.code ?? error}`);
+    }
   }
 }
