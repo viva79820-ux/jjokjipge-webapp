@@ -7,4 +7,8 @@ export const appShellClass = `@container/app mx-auto min-h-screen min-w-0 bg-bac
 
 export const appFixedBarClass = `fixed bottom-0 left-1/2 z-20 -translate-x-1/2 ${appWidthClass}`;
 
-export const appMainClass = "pb-[calc(7rem+env(safe-area-inset-bottom))]";
+// Bottom tab is 4.5rem. The center phone control rises 1.25rem above it
+// (-mt-5). The next 1.25rem keeps the last content off that control.
+// Safe-area is added for devices with a home indicator.
+export const appMainClass =
+  "pb-[calc(4.5rem+1.25rem+1.25rem+env(safe-area-inset-bottom))]";

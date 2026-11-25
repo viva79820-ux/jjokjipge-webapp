@@ -476,6 +476,35 @@ test("Seoul schedule labels and customer-facing status text", () => {
   });
 });
 
+test("temporary store number opens store info and an approved number calls", () => {
+  const site = loadModule("../lib/site-config.ts");
+  const storeInfo = { href: "/stores", label: "매장 정보 보기" };
+  const approved = { href: "tel:0212345678", label: "매장 문의" };
+  assert.equal(site.siteConfig.phone, "0507-1498-0232");
+  assert.equal(
+    site.siteConfig.representativeCounselorId,
+    "db5580e4-cffb-4b0e-8bec-5d012c06f9f7",
+  );
+  assert.deepEqual(site.representativeContact(site.siteConfig.phone), {
+    href: "tel:050714980232",
+    label: "매장 문의",
+  });
+  for (const phone of [
+    "",
+    "   ",
+    "010-0000-0000",
+    "01000000000",
+    "javascript:alert(1)",
+    "12345",
+  ])
+    assert.deepEqual(site.representativeContact(phone), storeInfo, phone);
+  assert.deepEqual(site.representativeContact("02-1234-5678"), approved);
+  assert.deepEqual(site.representativeContact("+82 10 1234 5678"), {
+    href: "tel:+821012345678",
+    label: "매장 문의",
+  });
+});
+
 test("lookup files stay inside the reservation module and do not cache personal data", () => {
   const action = readFileSync(
     new URL("../lib/reservations/lookup/actions.ts", import.meta.url),
@@ -499,6 +528,10 @@ test("lookup files stay inside the reservation module and do not cache personal 
     new URL("../app/(site)/booking/lookup/page.tsx", import.meta.url),
     "utf8",
   );
+  const badge = readFileSync(
+    new URL("../components/booking-lookup/status-badge.tsx", import.meta.url),
+    "utf8",
+  );
   assert.match(action, /createAdminClient/);
   assert.match(action, /server-only/);
   assert.doesNotMatch(
@@ -511,6 +544,52 @@ test("lookup files stay inside the reservation module and do not cache personal 
   );
   assert.match(result, /bookingConfig/);
   assert.doesNotMatch(result, /000-0000-0000|예시은행|자동 취소|메일을 보냈/);
+  for (const text of [
+    "예약 정보 입력",
+    "예약 상태 안내",
+    "예약번호를 잊으셨나요?",
+    "로그인",
+    "예약 조회하기",
+    "예약 완료 화면이나 안내 메일에서 예약번호를 확인할 수 있어요.",
+    "회원 이름과 이메일",
+    "안내 계좌로 입금하면 매장에서 확인해요.",
+    "예약 시간에 매장 전화로 연락드려요.",
+    "상담이 끝났어요. 후기를 남길 수 있어요.",
+    "취소된 예약이에요. 사유는 조회 결과에서 확인해요.",
+    "example@email.com",
+    "h-13",
+    "text-base",
+    "tel:",
+  ])
+    assert.equal(form.includes(text), true, text);
+  for (const tone of [
+    "bg-halo text-foreground",
+    "bg-brand text-on-brand",
+    "bg-brand-soft text-brand-deep",
+    "bg-border text-foreground",
+  ])
+    assert.equal(badge.includes(tone), true, tone);
+  for (const status of [
+    "pending_payment",
+    "confirmed",
+    "completed",
+    "cancelled",
+  ]) {
+    assert.match(form, new RegExp(`status: "${status}"`));
+    assert.match(badge, new RegExp(`${status}:`));
+  }
+  assert.match(badge, /statusLabels\[status\]/);
+  assert.match(badge, /data-reservation-status/);
+  assert.match(result, /StatusBadge/);
+  assert.doesNotMatch(result, /statusLabels\[result\.status\]/);
+  assert.match(form, /representativeContact\(siteConfig\.phone\)/);
+  assert.match(form, /contact\.href/);
+  assert.match(form, /contact\.label/);
+  assert.match(form, /href="\/login"/);
+  assert.match(form, /<Search/);
+  assert.match(form, /min-h-11/);
+  assert.doesNotMatch(form, /href=\{`tel:\$\{siteConfig\.phone\}`\}/);
+  assert.doesNotMatch(form, /010-0000-0000/);
   assert.doesNotMatch(
     `${form}\n${result}\n${page}`,
     /localStorage|sessionStorage|document\.cookie|searchParams|dangerouslySetInnerHTML/,

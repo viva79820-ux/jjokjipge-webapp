@@ -4,9 +4,9 @@ import { counselorHeading } from "@/lib/counselors/rules";
 import {
   formatSchedule,
   paymentLabels,
-  statusLabels,
 } from "@/lib/reservations/lookup/display";
 import type { LookupResult } from "@/lib/reservations/lookup/types";
+import { StatusBadge } from "./status-badge";
 
 export function ReservationResult({ result }: { result: LookupResult }) {
   const schedule = formatSchedule(result.startsAt, result.endsAt);
@@ -31,7 +31,7 @@ export function ReservationResult({ result }: { result: LookupResult }) {
           <div>
             <dt className="mb-1 text-caption text-muted">예약 상태</dt>
             <dd>
-              <Badge>{statusLabels[result.status]}</Badge>
+              <StatusBadge status={result.status} />
             </dd>
           </div>
           <div className="min-w-0">
