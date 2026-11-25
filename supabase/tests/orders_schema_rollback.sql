@@ -61,6 +61,7 @@ drop function private.order_request_matches(
 );
 drop table public.order_items;
 drop table public.orders;
+drop function if exists private.enforce_order_transition();
 drop function private.set_order_no();
 drop table private.order_counters;
 
@@ -70,6 +71,7 @@ begin
     or to_regclass('public.order_items') is not null
     or to_regclass('private.order_counters') is not null
     or to_regprocedure('private.set_order_no()') is not null
+    or to_regprocedure('private.enforce_order_transition()') is not null
     or to_regprocedure(
       'public.create_shop_order(uuid,uuid,text,text,text,text,text,text,numeric,jsonb)'
     ) is not null

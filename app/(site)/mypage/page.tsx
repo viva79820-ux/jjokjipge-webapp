@@ -81,6 +81,9 @@ async function MemberPage({
         <Link href="/booking/lookup" className={linkClass}>
           비회원 예약 조회
         </Link>
+        <Link href="/shop/order/lookup" className={linkClass}>
+          비회원 주문 조회
+        </Link>
         <Link href="/support/lookup" className={linkClass}>
           문의 조회
         </Link>

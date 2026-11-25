@@ -87,10 +87,14 @@ export function OrderComplete({ order }: { order: OrderSuccess }) {
       </div>
 
       <p className="text-caption text-muted">
-        주문 조회 기능은 다음 단계에서 제공할 예정이에요. 지금은 주문번호를
-        기록해 주세요.
+        주문번호와 주문할 때 입력한 이메일로 배송 상태를 확인할 수 있어요.
       </p>
-      <Button href="/shop">상품 목록으로</Button>
+      <div className="flex flex-wrap gap-2">
+        <Button href="/shop/order/lookup">주문 조회</Button>
+        <Button href="/shop" variant="secondary">
+          상품 목록으로
+        </Button>
+      </div>
     </section>
   );
 }

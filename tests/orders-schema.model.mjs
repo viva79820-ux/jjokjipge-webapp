@@ -40,6 +40,9 @@ const baseMigrations = [
 const migration = read(
   "../supabase/migrations/20261125004138_orders_schema.sql",
 );
+const adminMigration = read(
+  "../supabase/migrations/20261125013636_order_lookup_admin.sql",
+);
 const preflight = read("../supabase/tests/orders_schema_preflight.sql");
 const rollback = read("../supabase/tests/orders_schema_rollback.sql");
 
@@ -187,6 +190,7 @@ try {
   await model.run("rollback");
 
   await model.run(migration);
+  await model.run(adminMigration);
   const catalog = (
     await model.db.query(`
       select
@@ -204,6 +208,8 @@ try {
           as authenticated_insert,
         has_column_privilege('authenticated', 'public.orders', 'status', 'UPDATE')
           as authenticated_status_update,
+        has_column_privilege('authenticated', 'public.orders', 'tracking_number', 'UPDATE')
+          as authenticated_tracking_update,
         has_column_privilege('authenticated', 'public.orders', 'customer_name', 'UPDATE')
           as authenticated_name_update
     `)
@@ -216,6 +222,7 @@ try {
     authenticated_select: true,
     authenticated_insert: false,
     authenticated_status_update: true,
+    authenticated_tracking_update: true,
     authenticated_name_update: false,
   });
 
@@ -338,6 +345,59 @@ try {
       begin;
       set local role authenticated;
       select set_config('request.jwt.claim.sub', '${adminId}', true);
+      update public.orders set status = 'completed';
+      commit;
+    `,
+    "P0001",
+    /^ORDER_STATUS_TRANSITION_INVALID$/,
+  );
+  await model.run("rollback");
+  await expectError(
+    model.run,
+    `
+      begin;
+      set local role authenticated;
+      select set_config('request.jwt.claim.sub', '${adminId}', true);
+      update public.orders set status = 'shipping';
+      commit;
+    `,
+    "P0001",
+    /^ORDER_TRACKING_NUMBER_REQUIRED$/,
+  );
+  await model.run("rollback");
+  const shipped = await model.run(`
+    begin;
+    set local role authenticated;
+    select set_config('request.jwt.claim.sub', '${adminId}', true);
+    update public.orders
+    set status = 'shipping', tracking_number = 'TRACK-1234'
+    returning status, tracking_number, shipped_at is not null as shipped;
+    commit;
+  `);
+  assert.deepEqual(shipped.at(-2).rows[0], {
+    status: "shipping",
+    tracking_number: "TRACK-1234",
+    shipped: true,
+  });
+  const completed = await model.run(`
+    begin;
+    set local role authenticated;
+    select set_config('request.jwt.claim.sub', '${adminId}', true);
+    update public.orders
+    set status = 'completed'
+    returning status, completed_at is not null as completed;
+    commit;
+  `);
+  assert.deepEqual(completed.at(-2).rows[0], {
+    status: "completed",
+    completed: true,
+  });
+  await expectError(
+    model.run,
+    `
+      begin;
+      set local role authenticated;
+      select set_config('request.jwt.claim.sub', '${adminId}', true);
       update public.orders set customer_name = '변경';
       commit;
     `,
@@ -376,5 +436,5 @@ try {
 }
 
 console.log(
-  "PASS: 주문 가격 스냅샷, 판매 중지·비공개 거부, 중복 요청, 고객 직접 조회 차단, 관리자 상태 변경, 빈 스키마 롤백을 검증했습니다.",
+  "PASS: 주문 가격 스냅샷, 판매 중지·비공개 거부, 중복 요청, 고객 직접 조회 차단, 관리자 상태 전이·송장 처리, 빈 스키마 롤백을 검증했습니다.",
 );
