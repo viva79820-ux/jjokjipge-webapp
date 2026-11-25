@@ -1,12 +1,21 @@
 "use client";
 
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
+import { createClient } from "@/lib/supabase/client";
 import {
-  confirmContentDeletion,
+  confirmContent,
+  prepareContentUpload,
   reloadContent,
   saveContent,
   type Result,
@@ -15,29 +24,86 @@ import {
   adminEditUrl,
   channelLabels,
   channels,
-  contentMatches,
   contentPatch,
   deletedListUrl,
+  publicThumbnailUrl,
   type Channel,
   type ContentRecord,
 } from "@/lib/contents/rules";
 import { submitContentAttempt } from "@/lib/contents/submit";
+import {
+  inspectImage,
+  uploadImage,
+  uploadLookupMessage,
+} from "@/lib/contents/upload";
+import { ContentThumbnail } from "./thumbnail";
+
+const pendingContentCleanups = new Map<
+  string,
+  ReadonlyArray<() => Promise<boolean>>
+>();
+const cleanupListeners = new Set<() => void>();
+
+function notifyCleanup() {
+  for (const listener of cleanupListeners) listener();
+}
+
+function subscribeCleanup(listener: () => void) {
+  cleanupListeners.add(listener);
+  return () => cleanupListeners.delete(listener);
+}
+
+function readCleanup(id?: string) {
+  if (!id) return null;
+  const jobs = pendingContentCleanups.get(id);
+  return jobs?.length ? jobs : null;
+}
+
+function rememberCleanup(id: string, job: () => Promise<boolean>) {
+  const current = pendingContentCleanups.get(id) ?? [];
+  if (current.includes(job)) return;
+  pendingContentCleanups.set(id, [...current, job]);
+  notifyCleanup();
+}
+
+function forgetCleanup(id: string, job: () => Promise<boolean>) {
+  const current = pendingContentCleanups.get(id);
+  if (!current?.includes(job)) return;
+  const next = current.filter((item) => item !== job);
+  if (next.length) pendingContentCleanups.set(id, next);
+  else pendingContentCleanups.delete(id);
+  notifyCleanup();
+}
 
 export function ContentEditor({
   initial,
   returnTo,
   saved,
+  initialCleanup,
 }: {
   initial: ContentRecord | null;
   returnTo: string;
   saved: boolean;
+  initialCleanup?: (expected?: FormData) => Promise<boolean>;
 }) {
+  const handed = useSyncExternalStore(
+    subscribeCleanup,
+    () => readCleanup(initial?.id),
+    () => null,
+  );
   const [original, setOriginal] = useState(initial);
   const [draftId, setDraftId] = useState("");
   const [title, setTitle] = useState(initial?.title || "");
   const [description, setDescription] = useState(initial?.description || "");
   const [channel, setChannel] = useState<Channel | "">(initial?.channel || "");
   const [externalUrl, setExternalUrl] = useState(initial?.external_url || "");
+  const [thumbnail, setThumbnail] = useState(initial?.thumbnail_path || "");
+  const [thumbnailAlt, setThumbnailAlt] = useState(
+    initial?.thumbnail_alt || "",
+  );
+  const [postedOn, setPostedOn] = useState(initial?.posted_on || "");
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState("");
   const [published, setPublished] = useState(initial?.is_published || false);
   const [sortOrder, setSortOrder] = useState(
     initial ? String(initial.sort_order) : "0",
@@ -53,11 +119,34 @@ export function ContentEditor({
   const [conflict, setConflict] = useState(false);
   const [uncertain, setUncertain] = useState(false);
   const [gone, setGone] = useState(false);
+  const [removed, setRemoved] = useState(false);
+  const [cleanupPending, setCleanupPending] = useState(false);
+  const [attemptMode, setAttemptMode] = useState<
+    "create" | "update" | "delete" | ""
+  >("");
   const lock = useRef(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const uploaded = useRef<string | null>(null);
+  const uploadedFile = useRef<File | null>(null);
+  const uploadToken = useRef<
+    ((expected?: FormData) => Promise<boolean>) | null
+  >(null);
+  const confirmToken = useRef<
+    | (() => Promise<
+        | "present"
+        | "missing"
+        | "rejected"
+        | "forbidden"
+        | "unavailable"
+        | "unknown"
+      >)
+    | null
+  >(null);
+  const originalCleanup = useRef(initialCleanup);
+  const cleanupJobs = useRef<Array<() => Promise<boolean>>>([]);
+  const attemptRef = useRef<FormData | null>(null);
   const baseline = useRef(initial);
   const leaving = useRef(false);
-  const deleting = useRef(false);
-  const deleteAttempt = useRef<{ id: string; version: string } | null>(null);
   const shown = useRef(true);
   const pendingHref = useRef<string | null>(null);
   const reloadRef = useRef<HTMLDivElement>(null);
@@ -94,6 +183,15 @@ export function ContentEditor({
     return () => cancelAnimationFrame(frame);
   }, []);
   useEffect(() => {
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    const frame = requestAnimationFrame(() => setPreview(url));
+    return () => {
+      cancelAnimationFrame(frame);
+      URL.revokeObjectURL(url);
+    };
+  }, [file]);
+  useEffect(() => {
     if (!saved || !initial) return;
     const frame = requestAnimationFrame(() =>
       document.getElementById(`${prefix}-status`)?.focus(),
@@ -116,6 +214,10 @@ export function ContentEditor({
         description !== "" ||
         channel !== "" ||
         externalUrl !== "" ||
+        thumbnail !== "" ||
+        thumbnailAlt !== "" ||
+        postedOn !== "" ||
+        file !== null ||
         published ||
         sortOrder !== "0"
       );
@@ -124,6 +226,10 @@ export function ContentEditor({
       description !== (original.description || "") ||
       channel !== original.channel ||
       externalUrl !== (original.external_url || "") ||
+      thumbnail !== (original.thumbnail_path || "") ||
+      thumbnailAlt !== (original.thumbnail_alt || "") ||
+      postedOn !== (original.posted_on || "") ||
+      file !== null ||
       published !== original.is_published ||
       sortOrder !== String(original.sort_order)
     );
@@ -135,25 +241,63 @@ export function ContentEditor({
     setDescription(row.description || "");
     setChannel(row.channel);
     setExternalUrl(row.external_url || "");
+    setThumbnail(row.thumbnail_path || "");
+    setThumbnailAlt(row.thumbnail_alt || "");
+    setPostedOn(row.posted_on || "");
+    setFile(null);
+    uploaded.current = null;
+    uploadedFile.current = null;
+    uploadToken.current = null;
+    confirmToken.current = null;
+    if (fileRef.current) fileRef.current.value = "";
     setPublished(row.is_published);
     setSortOrder(String(row.sort_order));
   }
-  function form() {
+  function form(
+    mode: "create" | "update" | "delete" = baseline.current
+      ? "update"
+      : "create",
+    nextThumbnail = thumbnail,
+  ) {
     const source = baseline.current;
     const data = new FormData();
     for (const [key, value] of Object.entries({
       id: source?.id || draftId,
-      mode: source ? "update" : "create",
+      mode,
       version: source?.updated_at || "",
       title,
       description,
       channel,
       external_url: externalUrl,
+      thumbnail_path: nextThumbnail,
+      thumbnail_alt: thumbnailAlt,
+      posted_on: postedOn,
       is_published: String(published),
       sort_order: sortOrder,
     }))
       data.set(key, value);
     return data;
+  }
+  function remember(data: FormData) {
+    const copy = new FormData();
+    for (const [key, value] of data.entries())
+      if (typeof value === "string") copy.append(key, value);
+    attemptRef.current = copy;
+    const mode = copy.get("mode");
+    setAttemptMode(
+      mode === "create" || mode === "update" || mode === "delete" ? mode : "",
+    );
+  }
+  function forgetAttempt() {
+    attemptRef.current = null;
+    setAttemptMode("");
+  }
+  function addCleanup(job?: () => Promise<boolean>) {
+    if (!job || cleanupJobs.current.includes(job)) return;
+    cleanupJobs.current = [...cleanupJobs.current, job];
+    const id = initial?.id || original?.id;
+    if (id) rememberCleanup(id, job);
+    setCleanupPending(true);
   }
   function go(href: string) {
     if (shown.current) {
@@ -171,18 +315,29 @@ export function ContentEditor({
   function finish(result: Result) {
     setModal(null);
     setErrors(result.errors || {});
+    if (result.state !== "unknown") forgetAttempt();
+    if (result.recovery) originalCleanup.current = result.recovery;
     if (result.deleted) {
+      addCleanup(result.cleanup);
+      setRemoved(true);
       setMessage(result.message);
-      go(deletedListUrl(returnTo));
+      setConflict(false);
+      setUncertain(false);
+      if (!result.cleanup && !cleanupJobs.current.length)
+        go(deletedListUrl(returnTo));
+      else focusStatus();
       return;
     }
     if (result.state === "saved" && result.row) {
       const created = !baseline.current;
+      addCleanup(result.cleanup);
+      if (created)
+        for (const job of cleanupJobs.current)
+          rememberCleanup(result.row.id, job);
       applyRow(result.row);
       setConflict(false);
       setUncertain(false);
       setGone(false);
-      deleting.current = false;
       setMessage(result.message);
       if (created) go(adminEditUrl(result.row.id, returnTo, true));
       else focusStatus();
@@ -231,19 +386,111 @@ export function ContentEditor({
         const source = baseline.current;
         if (!source) return;
         const attempt = { id: source.id, version: source.updated_at };
-        deleteAttempt.current = attempt;
-        deleting.current = true;
-        const data = form();
-        data.set("mode", "delete");
+        const data = form("delete");
         data.set("id", attempt.id);
         data.set("version", attempt.version);
-        const result = await submitContentAttempt(() => saveContent(data));
-        if (result.state !== "unknown") deleteAttempt.current = null;
+        remember(data);
+        const result = await saveContent(data);
         finish(result);
         return;
       }
-      deleting.current = false;
-      finish(await submitContentAttempt(() => saveContent(form())));
+      if (!file) {
+        const data = form();
+        remember(data);
+        finish(await submitContentAttempt(() => saveContent(data)));
+        return;
+      }
+      const attempt = await submitContentAttempt(
+        {
+          upload: async () => {
+            if (uploaded.current && uploadedFile.current === file)
+              return uploaded.current;
+            let ext = "";
+            try {
+              ext = (await inspectImage(file)).ext;
+            } catch (error) {
+              throw Object.assign(
+                error instanceof Error
+                  ? error
+                  : Error("썸네일을 확인해 주세요."),
+                { definite: true },
+              );
+            }
+            const reserved = await prepareContentUpload(ext);
+            if (!reserved)
+              throw Object.assign(
+                Error("관리자 업로드 권한을 확인해 주세요."),
+                { definite: true },
+              );
+            const previousCleanup = uploadToken.current;
+            const replacing = Boolean(
+              uploaded.current && uploadedFile.current !== file,
+            );
+            uploadToken.current = reserved.cleanup;
+            confirmToken.current = reserved.confirm;
+            uploaded.current = reserved.path;
+            uploadedFile.current = file;
+            if (replacing && previousCleanup)
+              addCleanup(() => previousCleanup());
+            try {
+              return await uploadImage(createClient(), file, reserved.path);
+            } catch (error) {
+              let uploadState = "unknown";
+              try {
+                uploadState = await reserved.confirm();
+              } catch {
+                uploadState = "unknown";
+              }
+              if (uploadState === "missing") {
+                uploaded.current = null;
+                uploadedFile.current = null;
+                uploadToken.current = null;
+                confirmToken.current = null;
+                throw Object.assign(Error("썸네일 업로드에 실패했습니다."), {
+                  definite: true,
+                });
+              }
+              throw Object.assign(
+                error instanceof Error ? error : Error("업로드 응답 불명"),
+                { definite: false },
+              );
+            }
+          },
+          save: (path) => saveContent(form(undefined, path)),
+          discard: async () =>
+            uploadToken.current ? await uploadToken.current() : false,
+          pendingUpload: () => uploaded.current,
+        },
+        thumbnail,
+        true,
+      );
+      uploaded.current = attempt.uploaded;
+      if (!attempt.uploaded) uploadedFile.current = null;
+      if (
+        attempt.uploaded &&
+        (attempt.result.state === "rejected" ||
+          attempt.result.state === "conflict") &&
+        uploadToken.current
+      ) {
+        const orphanPath = attempt.uploaded;
+        const cleanup = uploadToken.current;
+        addCleanup(async () => {
+          const cleared = await cleanup();
+          if (cleared && uploaded.current === orphanPath) {
+            uploaded.current = null;
+            uploadedFile.current = null;
+            uploadToken.current = null;
+            confirmToken.current = null;
+          }
+          return cleared;
+        });
+      }
+      const savedForm = form(
+        baseline.current ? "update" : "create",
+        attempt.uploaded || thumbnail,
+      );
+      remember(savedForm);
+      finish(attempt.result);
     } catch {
       setUncertain(true);
       setModal(null);
@@ -256,91 +503,158 @@ export function ContentEditor({
     }
   }
   async function reconcile() {
-    if (lock.current || leaving.current) return;
+    const attempt = attemptRef.current;
+    const mode = attempt?.get("mode");
+    const id = attempt?.get("id");
+    if (
+      !attempt ||
+      typeof id !== "string" ||
+      lock.current ||
+      leaving.current ||
+      removed
+    )
+      return;
     lock.current = true;
     setBusy(true);
     try {
-      if (deleting.current) {
-        const attempt = deleteAttempt.current;
-        if (!attempt) {
-          setMessage(
-            "저장 결과를 확인하지 못했습니다. 입력은 유지하고 다시 확인해 주세요.",
-          );
-          return;
+      let thumbnailState = "";
+      if (uploaded.current && confirmToken.current && mode !== "delete") {
+        try {
+          thumbnailState = await confirmToken.current();
+        } catch {
+          thumbnailState = "unknown";
         }
-        const checked = await confirmContentDeletion(
-          attempt.id,
-          attempt.version,
+      }
+      const checked = await confirmContent(id, attempt);
+      const thumbnailNote =
+        thumbnailState && thumbnailState !== "present"
+          ? uploadLookupMessage(thumbnailState)
+          : "";
+      if (checked.state === "unknown") {
+        setMessage(
+          thumbnailNote
+            ? `${thumbnailNote} ${checked.message}`
+            : checked.message,
         );
+        focusStatus();
+        return;
+      }
+      if (mode === "delete") {
         if (checked.deleted) {
-          deleteAttempt.current = null;
-          deleting.current = false;
-          setUncertain(false);
-          setConflict(false);
+          const pending = originalCleanup.current;
           finish({
-            state: "saved",
-            deleted: true,
-            message: checked.message,
+            ...checked,
+            cleanup: pending ? () => pending(attempt) : undefined,
           });
           return;
         }
-        if (checked.state === "conflict") {
-          deleteAttempt.current = null;
-          deleting.current = false;
+        if (checked.unchanged || checked.state === "conflict") {
+          if (checked.recovery) originalCleanup.current = checked.recovery;
+          forgetAttempt();
           setUncertain(false);
-          setConflict(true);
-          setGone(false);
+          setConflict(checked.state === "conflict");
           setMessage(checked.message);
           focusStatus();
           return;
         }
-        if (checked.unchanged) {
-          deleteAttempt.current = null;
-          deleting.current = false;
-          setUncertain(false);
-          setConflict(false);
-          setMessage(checked.message);
-          focusStatus();
-          return;
-        }
-        setUncertain(true);
-        setMessage(checked.message);
-        return;
       }
-      const loaded = await reloadContent(baseline.current?.id || draftId);
-      if (
-        loaded.state === "unknown" ||
-        (loaded.state === "rejected" && !loaded.missing)
-      ) {
-        setMessage(loaded.message);
-        return;
-      }
-      if (!baseline.current && loaded.missing) {
+      if (checked.unchanged) {
+        forgetAttempt();
         setUncertain(false);
-        setMessage(
-          "저장은 반영되지 않았습니다. 입력은 유지됩니다. 다시 저장할 수 있습니다.",
-        );
+        setConflict(false);
+        if (thumbnailState === "missing") {
+          uploaded.current = null;
+          uploadedFile.current = null;
+          uploadToken.current = null;
+          confirmToken.current = null;
+          setMessage(
+            "업로드된 파일이 없습니다. 콘텐츠는 수정 전 버전 그대로입니다. 다시 저장할 수 있습니다.",
+          );
+        } else
+          setMessage(
+            thumbnailNote
+              ? `${checked.message} ${thumbnailNote}`
+              : checked.message,
+          );
+        focusStatus();
         return;
       }
-      if (loaded.row && contentMatches(loaded.row, form())) {
+      if (checked.state === "saved" && checked.row) {
+        const previous = baseline.current?.thumbnail_path;
+        const pending =
+          previous && previous !== checked.row.thumbnail_path
+            ? originalCleanup.current
+            : undefined;
         finish({
-          ...loaded,
-          state: "saved",
-          message: "저장 결과를 확인했습니다.",
+          ...checked,
+          cleanup: pending ? () => pending(attempt) : undefined,
+          message: thumbnailNote
+            ? `저장 결과를 확인했습니다. ${thumbnailNote}`
+            : "저장 결과를 확인했습니다.",
         });
         return;
       }
+      forgetAttempt();
       setUncertain(false);
-      if (loaded.missing && baseline.current) setGone(true);
-      if (loaded.row) setConflict(true);
-      setMessage(
-        loaded.missing
-          ? "콘텐츠가 없습니다."
-          : "현재 저장 내용과 일치하지 않습니다. 최신 내용을 확인하거나 다시 저장해 주세요.",
-      );
+      if (checked.state === "conflict") setConflict(true);
+      if (checked.missing && mode === "create")
+        setMessage(
+          "저장은 반영되지 않았습니다. 입력은 유지됩니다. 다시 저장할 수 있습니다.",
+        );
+      else
+        setMessage(
+          thumbnailNote
+            ? `${checked.message} ${thumbnailNote}`
+            : checked.message,
+        );
+      focusStatus();
     } catch {
       setMessage(
-        "저장 결과를 확인하지 못했습니다. 입력은 유지하고 다시 확인해 주세요.",
+        mode === "delete"
+          ? "삭제 결과를 확인하지 못했습니다. 다시 확인해 주세요."
+          : "저장 결과를 확인하지 못했습니다. 입력은 유지하고 다시 확인해 주세요.",
+      );
+    } finally {
+      if (!leaving.current) {
+        lock.current = false;
+        setBusy(false);
+      }
+    }
+  }
+  async function retryCleanup() {
+    const id = initial?.id || original?.id;
+    const local = cleanupJobs.current[0];
+    const job = local ?? readCleanup(id)?.[0];
+    if (!id || !job || lock.current || leaving.current) return;
+    lock.current = true;
+    setBusy(true);
+    try {
+      if (await job()) {
+        if (local)
+          cleanupJobs.current = cleanupJobs.current.filter(
+            (item) => item !== local,
+          );
+        forgetCleanup(id, job);
+        const pending =
+          cleanupJobs.current.length > 0 || Boolean(readCleanup(id)?.length);
+        setCleanupPending(cleanupJobs.current.length > 0);
+        setMessage(
+          removed && !pending
+            ? "콘텐츠를 삭제했습니다."
+            : "썸네일 정리를 마쳤습니다.",
+        );
+        if (removed && !pending) go(deletedListUrl(returnTo));
+      } else
+        setMessage(
+          removed
+            ? "콘텐츠 삭제는 반영됐습니다. 썸네일 정리만 다시 시도해 주세요."
+            : "콘텐츠 저장은 반영됐습니다. 썸네일 정리만 다시 시도해 주세요.",
+        );
+    } catch {
+      setMessage(
+        removed
+          ? "콘텐츠 삭제는 반영됐습니다. 썸네일 정리 응답을 확인하지 못했습니다."
+          : "콘텐츠 저장은 반영됐습니다. 썸네일 정리 응답을 확인하지 못했습니다.",
       );
     } finally {
       if (!leaving.current) {
@@ -354,9 +668,30 @@ export function ContentEditor({
     "description",
     "channel",
     "external_url",
+    "thumbnail_path",
+    "thumbnail_alt",
+    "posted_on",
     "is_published",
     "sort_order",
   ];
+  const thumbnailSrc = file ? preview : publicThumbnailUrl(thumbnail);
+  const cleanupLeft = cleanupPending || Boolean(handed?.length);
+  if (removed)
+    return (
+      <div className="min-w-0 space-y-4" data-content-editor="removed">
+        <p role="status" className="text-body text-brand">
+          {busy ? "처리 중…" : message || "이 콘텐츠는 삭제되었습니다."}
+        </p>
+        {cleanupLeft && (
+          <Button type="button" disabled={busy} onClick={retryCleanup}>
+            썸네일 정리 다시 시도
+          </Button>
+        )}
+        <Button href={returnTo} variant="secondary">
+          콘텐츠 목록
+        </Button>
+      </div>
+    );
   return (
     <div className="min-w-0 space-y-4">
       <Link
@@ -387,11 +722,27 @@ export function ContentEditor({
           event.preventDefault();
           if (busy || uncertain || gone || (!baseline.current && !draftId))
             return;
-          const parsed = contentPatch(form());
+          const parsed = contentPatch(
+            form(undefined, file ? `contents/${draftId}.png` : thumbnail),
+          );
           setErrors(parsed.errors);
           if (!parsed.patch) {
             const key = fieldOrder.find((name) => parsed.errors[name]);
             document.getElementById(`${prefix}-${key}`)?.focus();
+            return;
+          }
+          if (file) {
+            void inspectImage(file)
+              .then(() => setModal("save"))
+              .catch((error: unknown) => {
+                setErrors({
+                  thumbnail_path:
+                    error instanceof Error
+                      ? error.message
+                      : "썸네일을 확인해 주세요.",
+                });
+                document.getElementById(`${prefix}-thumbnail_path`)?.focus();
+              });
             return;
           }
           setModal("save");
@@ -520,6 +871,130 @@ export function ContentEditor({
               {errors.external_url}
             </p>
           </div>
+          <div>
+            <label
+              htmlFor={`${prefix}-thumbnail_path`}
+              className="flex min-h-11 items-center text-label font-semibold"
+            >
+              썸네일
+            </label>
+            <input
+              ref={fileRef}
+              id={`${prefix}-thumbnail_path`}
+              name="thumbnail_file"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className={`${control} cursor-pointer`}
+              aria-invalid={Boolean(errors.thumbnail_path)}
+              aria-describedby={`${prefix}-thumbnail-help ${prefix}-thumbnail_path-error`}
+              onChange={(event) => setFile(event.target.files?.[0] || null)}
+            />
+            <p
+              id={`${prefix}-thumbnail-help`}
+              className="text-caption text-muted"
+            >
+              JPEG·PNG·WebP, 5MiB 이하 한 장입니다. 바꾸거나 빼기 전에는 저장된
+              썸네일이 유지됩니다.
+            </p>
+            <p
+              id={`${prefix}-thumbnail_path-error`}
+              role={errors.thumbnail_path ? "alert" : undefined}
+              className="text-error"
+            >
+              {errors.thumbnail_path}
+            </p>
+            <div className="mt-3 max-w-60">
+              <ContentThumbnail
+                src={thumbnailSrc}
+                alt={thumbnailAlt || "콘텐츠 썸네일"}
+                channel={channel || "blog"}
+              />
+            </div>
+            {(file || thumbnail) && (
+              <Button
+                type="button"
+                variant="secondary"
+                className="mt-3"
+                onClick={() => {
+                  const retire = uploadToken.current;
+                  const hadUpload = uploaded.current;
+                  setFile(null);
+                  setThumbnail("");
+                  setThumbnailAlt("");
+                  uploaded.current = null;
+                  uploadedFile.current = null;
+                  uploadToken.current = null;
+                  confirmToken.current = null;
+                  if (hadUpload && retire && !uncertain)
+                    addCleanup(() => retire());
+                  if (fileRef.current) fileRef.current.value = "";
+                }}
+              >
+                썸네일 빼기
+              </Button>
+            )}
+          </div>
+          <div>
+            <label
+              htmlFor={`${prefix}-thumbnail_alt`}
+              className="flex min-h-11 items-center text-label font-semibold"
+            >
+              썸네일 대체 설명
+            </label>
+            <input
+              id={`${prefix}-thumbnail_alt`}
+              name="thumbnail_alt"
+              value={thumbnailAlt}
+              onChange={(event) => setThumbnailAlt(event.target.value)}
+              className={control}
+              aria-invalid={Boolean(errors.thumbnail_alt)}
+              aria-describedby={`${prefix}-thumbnail_alt-help ${prefix}-thumbnail_alt-error`}
+            />
+            <p
+              id={`${prefix}-thumbnail_alt-help`}
+              className="text-caption text-muted"
+            >
+              썸네일이 있을 때 필수입니다. 200자 이하로 입력해 주세요.
+            </p>
+            <p
+              id={`${prefix}-thumbnail_alt-error`}
+              role={errors.thumbnail_alt ? "alert" : undefined}
+              className="text-error"
+            >
+              {errors.thumbnail_alt}
+            </p>
+          </div>
+          <div>
+            <label
+              htmlFor={`${prefix}-posted_on`}
+              className="flex min-h-11 items-center text-label font-semibold"
+            >
+              원본 게시일
+            </label>
+            <input
+              id={`${prefix}-posted_on`}
+              name="posted_on"
+              type="date"
+              value={postedOn}
+              onChange={(event) => setPostedOn(event.target.value)}
+              className={control}
+              aria-invalid={Boolean(errors.posted_on)}
+              aria-describedby={`${prefix}-posted_on-help ${prefix}-posted_on-error`}
+            />
+            <p
+              id={`${prefix}-posted_on-help`}
+              className="text-caption text-muted"
+            >
+              선택 사항입니다. 원본 채널에 게시된 날짜를 입력해 주세요.
+            </p>
+            <p
+              id={`${prefix}-posted_on-error`}
+              role={errors.posted_on ? "alert" : undefined}
+              className="text-error"
+            >
+              {errors.posted_on}
+            </p>
+          </div>
           <label className="flex min-h-11 cursor-pointer items-center gap-2 text-label font-semibold">
             <input
               id={`${prefix}-is_published`}
@@ -600,9 +1075,26 @@ export function ContentEditor({
       >
         {busy ? "처리 중…" : message}
       </p>
+      {handed?.length ? (
+        <p className="text-body text-brand">
+          이전 썸네일은 썸네일 정리 버튼으로만 지웁니다.
+        </p>
+      ) : null}
       {uncertain && (
         <Button type="button" disabled={busy} onClick={reconcile}>
-          저장 결과 다시 확인
+          {attemptMode === "delete"
+            ? "삭제 결과 다시 확인"
+            : "저장 결과 다시 확인"}
+        </Button>
+      )}
+      {cleanupLeft && !removed && (
+        <Button
+          type="button"
+          disabled={busy || uncertain}
+          variant="secondary"
+          onClick={retryCleanup}
+        >
+          썸네일 정리 다시 시도
         </Button>
       )}
       {gone && (
@@ -661,15 +1153,98 @@ export function ContentEditor({
               않습니다.
             </p>
           ) : modal === "delete" ? (
-            <p>이 콘텐츠를 삭제하면 고객 화면에서도 사라집니다.</p>
-          ) : (
             <p>
-              {published ? "공개" : "비공개"}로 저장합니다. 공개 내용은 고객
-              콘텐츠 목록에 표시됩니다.
+              이 콘텐츠를 삭제하면 고객 화면에서도 사라집니다. 저장된 썸네일도
+              사용 여부를 확인한 뒤 정리합니다.
             </p>
+          ) : (
+            <>
+              <p>
+                {published ? "공개" : "비공개"}로 저장합니다. 공개 내용은 고객
+                콘텐츠 목록에 표시됩니다.
+              </p>
+              <p>
+                {file
+                  ? "새 썸네일을 올립니다."
+                  : thumbnail
+                    ? "저장된 썸네일을 유지합니다."
+                    : "썸네일 없음"}
+              </p>
+              <p>
+                {postedOn ? `원본 게시일 ${postedOn}` : "원본 게시일 미입력"}
+              </p>
+            </>
           )}
         </Modal>
       )}
+    </div>
+  );
+}
+
+export function ContentDeletedCleanup({
+  id,
+  returnTo,
+}: {
+  id: string;
+  returnTo: string;
+}) {
+  const jobs = useSyncExternalStore(
+    subscribeCleanup,
+    () => readCleanup(id),
+    () => null,
+  );
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState(
+    "콘텐츠 삭제를 확인했습니다. 썸네일은 정리 버튼으로만 지웁니다.",
+  );
+  const router = useRouter();
+  if (!jobs?.length)
+    return (
+      <div className="space-y-4">
+        <p role="status">콘텐츠가 없습니다.</p>
+        <Button href={returnTo} variant="secondary">
+          콘텐츠 목록
+        </Button>
+      </div>
+    );
+  return (
+    <div className="space-y-4" data-content-editor="removed">
+      <p role="status" className="text-body text-brand">
+        {busy ? "처리 중…" : message}
+      </p>
+      <Button
+        type="button"
+        disabled={busy}
+        onClick={async () => {
+          const job = readCleanup(id)?.[0];
+          if (!job || busy) return;
+          setBusy(true);
+          try {
+            if (await job()) {
+              forgetCleanup(id, job);
+              if (readCleanup(id)?.length) {
+                setMessage("썸네일 정리를 마쳤습니다.");
+                return;
+              }
+              router.replace(deletedListUrl(returnTo));
+            } else
+              setMessage(
+                "콘텐츠 삭제는 반영됐습니다. 썸네일 정리만 다시 시도해 주세요.",
+              );
+          } catch {
+            setMessage(
+              "콘텐츠 삭제는 반영됐습니다. 썸네일 정리 응답을 확인하지 못했습니다.",
+            );
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        썸네일 정리 다시 시도
+      </Button>
+      <Button href={returnTo} variant="secondary">
+        콘텐츠 목록
+      </Button>
     </div>
   );
 }

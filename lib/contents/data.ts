@@ -4,6 +4,7 @@ import { createPublicClient } from "@/lib/supabase/public";
 import { createClient } from "@/lib/supabase/server";
 import {
   columns,
+  contentRecord,
   pageSize,
   presentPublic,
   publicColumns,
@@ -58,7 +59,7 @@ export async function publicContentList(
   if (channel) query = query.eq("channel", channel);
   const { data, error, count } = await query
     .order("sort_order", { ascending: true })
-    .order("created_at", { ascending: false })
+    .order("posted_on", { ascending: false, nullsFirst: false })
     .order("id", { ascending: false })
     .range((page - 1) * pageSize, page * pageSize - 1);
   if (outOfRange(error, page)) {
@@ -107,7 +108,7 @@ export async function adminContentList(
   if (status) query = query.eq("is_published", status === "public");
   const { data, error, count } = await query
     .order("sort_order", { ascending: true })
-    .order("created_at", { ascending: false })
+    .order("posted_on", { ascending: false, nullsFirst: false })
     .order("id", { ascending: false })
     .range((page - 1) * pageSize, page * pageSize - 1);
   if (outOfRange(error, page)) {
@@ -125,7 +126,10 @@ export async function adminContentList(
       };
   }
   if (error || !data || count === null) return { error: true };
-  const rows = data as ContentRecord[];
+  const rows = data
+    .map((row) => contentRecord(row))
+    .filter((row): row is ContentRecord => row !== null);
+  if (rows.length !== data.length) return { error: true };
   if (count > 0 || !status)
     return { error: false, rows, count, catalogTotal: count };
   const catalog = await db
@@ -151,5 +155,7 @@ export async function adminContent(id: string) {
     .maybeSingle();
   if (error) return { error: true as const };
   if (!data) return { missing: true as const };
-  return { row: data as ContentRecord };
+  const row = contentRecord(data);
+  if (!row) return { error: true as const };
+  return { row };
 }
