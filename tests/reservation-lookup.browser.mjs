@@ -446,7 +446,7 @@ try {
   await waitText("15,000원");
   await waitText("예시 가격");
   await waitText("무통장입금");
-  await waitText("현재 시안의 예시 계좌");
+  await waitText("[입금 계좌 준비 중]");
   await waitText("입금이 확인되면 예약이 확정돼요.");
   assert.equal(await textIncludes("테스트비밀이름"), false);
   assert.equal(await textIncludes("010-9999-0000"), false);

@@ -639,7 +639,7 @@ try {
   await go(`/shop/${soldId}`);
   await text("줄바꿈첫줄");
   await text("줄바꿈둘째줄");
-  await text("주문과 결제는 준비 중입니다.");
+  await text("장바구니에서 배송지를 입력하고 주문할 수 있습니다.");
   await text("품절");
   await text("18,000원");
   await text("상품 사진을 불러오지 못했습니다.");
@@ -1533,7 +1533,7 @@ try {
     else assert.equal(box.width, width);
     await screenshot(`customer-list-${width}.png`);
     await go(`/shop/${soldId}`);
-    await text("주문과 결제는 준비 중입니다.");
+    await text("장바구니에서 배송지를 입력하고 주문할 수 있습니다.");
     box = await measure();
     assert.equal(box.overflow, false, `detail overflow ${width}`);
     assert.equal(box.covered, false, `detail covered ${width}`);
