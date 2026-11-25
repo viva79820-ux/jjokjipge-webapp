@@ -440,7 +440,7 @@ try {
   await waitText("예약 조회");
   await fill("reservationNo", "R-20261113-0001");
   await fill("email", "guest-test@example.invalid");
-  await click("button", "조회");
+  await click("button", "예약 조회하기");
   await waitText("테스트상담사");
 
   await goto("/admin");
