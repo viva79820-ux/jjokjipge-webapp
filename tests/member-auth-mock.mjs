@@ -155,6 +155,33 @@ export function startAuthMock() {
         writes += 1;
         return fail(res, 405, "no_write");
       }
+      if (apiKey === publicKey) {
+        const user = userFromRequest(req);
+        const requestedUser = url.searchParams
+          .get("user_id")
+          ?.replace(/^eq\./, "");
+        if (!user || requestedUser !== user.id) return json(res, []);
+        return json(res, [
+          {
+            id: "33333333-3333-4333-8333-333333333331",
+            reservation_no: "R-20261125-0001",
+            status: "confirmed",
+            product_name: "회원 예약 상담",
+            starts_at: "2026-11-25T03:00:00.000Z",
+            ends_at: "2026-11-25T03:30:00.000Z",
+            counselors: { name: "상담사 A" },
+          },
+          {
+            id: "33333333-3333-4333-8333-333333333332",
+            reservation_no: "R-20261124-0001",
+            status: "completed",
+            product_name: "완료된 회원 상담",
+            starts_at: "2026-11-24T05:00:00.000Z",
+            ends_at: "2026-11-24T05:30:00.000Z",
+            counselors: { name: "상담사 B" },
+          },
+        ]);
+      }
       if (apiKey !== secretKey) return fail(res, 401, "no_authorization");
       const number = url.searchParams.get("reservation_no");
       const email = decodeURIComponent(

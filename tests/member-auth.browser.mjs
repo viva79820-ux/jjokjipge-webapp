@@ -516,6 +516,14 @@ try {
   assert.match(await evaluate("location.pathname"), /^\/mypage$/);
   assert.match(await textOf(), /MY/);
   assert.equal((await textOf()).includes(password), false);
+  await waitText("예약·상담 내역");
+  await waitText("회원 예약 상담");
+  const mypageText = await textOf();
+  assert.match(mypageText, /예약 확정/);
+  assert.match(mypageText, /상담 완료/);
+  assert.match(mypageText, /상담사 A 선생님/);
+  assert.match(mypageText, /회원 예약 상담/);
+  assert.match(mypageText, /2026년 11월 25일/);
 
   await assertWidths("mypage", {
     tabs: true,
