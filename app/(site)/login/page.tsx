@@ -44,8 +44,8 @@ async function LoginContent() {
   await connection();
   if (await getMember()) redirect("/mypage");
   return (
-    <AuthScreenMain className="pt-7">
-      <div className="flex flex-col items-center gap-2.5 text-center">
+    <AuthScreenMain className="gap-4 pt-4">
+      <div className="flex flex-col items-center gap-1.5 text-center">
         <Image
           src="/images/brand/logo-angel-mark.png"
           alt=""
@@ -62,7 +62,7 @@ async function LoginContent() {
         </p>
       </div>
       <LoginForm />
-      <section className="flex flex-col gap-2.5 rounded-card bg-brand-soft p-4">
+      <section className="flex flex-col gap-2 rounded-card bg-brand-soft p-3">
         <h2 className="m-0 text-body font-extrabold text-brand-deep">
           회원이 아니어도 괜찮아요
         </h2>
