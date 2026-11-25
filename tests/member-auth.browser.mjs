@@ -326,6 +326,17 @@ try {
           document.documentElement.clientWidth,
         pad: main ? Number.parseFloat(getComputedStyle(main).paddingBottom) : 0,
         barHeight: bar ? Math.round(bar.getBoundingClientRect().height) : 0,
+        phoneRise: (() => {
+          const phone = bar?.querySelector("#bottom-phone-call span");
+          if (!bar || !phone) return 0;
+          return Math.max(
+            0,
+            Math.round(
+              bar.getBoundingClientRect().top -
+                phone.getBoundingClientRect().top,
+            ),
+          );
+        })(),
         fine: matchMedia("(hover: hover) and (pointer: fine)").matches,
         hover: matchMedia("(hover: hover)").matches,
         pointer: matchMedia("(pointer: fine)").matches,
@@ -369,7 +380,7 @@ try {
         assert.equal(metrics.bookings, 0, `${name} ${width} booking`);
         assert.equal(metrics.bar, expected, `${name} ${width} tab width`);
         assert.ok(
-          metrics.pad + 1 >= metrics.barHeight,
+          metrics.pad + 1 >= metrics.barHeight + metrics.phoneRise,
           `${name} ${width} 하단 메뉴 가림`,
         );
         assert.deepEqual(metrics.labels, options.labels);
