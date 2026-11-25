@@ -20,9 +20,9 @@ export default function Page() {
   return (
     <>
       <AuthScreenHeader title="비밀번호 재설정" backHref="/login" />
-      <AuthScreenMain className="pt-8">
-        <div className="flex flex-col items-center gap-3 text-center">
-          <span className="flex size-18 items-center justify-center rounded-full bg-brand-soft text-brand">
+      <AuthScreenMain className="gap-4 pt-5">
+        <div className="flex flex-col items-center gap-2 text-center">
+          <span className="flex size-16 items-center justify-center rounded-full bg-brand-soft text-brand">
             <Mail size={34} aria-hidden="true" />
           </span>
           <h1 className="m-0 text-display font-extrabold">
