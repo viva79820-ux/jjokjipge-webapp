@@ -49,6 +49,9 @@ function form(extra = {}) {
     description: "  첫째 줄\n둘째 줄  ",
     field: "tarot",
     video_url: "https://example.com/watch",
+    is_online: "true",
+    poster_path: "",
+    poster_alt: "",
     is_published: "false",
     sort_order: "0",
     ...extra,
@@ -117,6 +120,22 @@ function memory(world) {
         },
       };
       return api;
+    },
+    storage: {
+      from() {
+        return {
+          info: async (path) => {
+            const file = world.files?.[path];
+            if (!file) return { data: null, error: { status: 404 } };
+            return { data: file, error: null };
+          },
+          remove: async (paths) => {
+            for (const path of paths) delete world.files?.[path];
+            world.removed = [...(world.removed || []), ...paths];
+            return { error: null };
+          },
+        };
+      },
     },
   };
 }
@@ -228,6 +247,9 @@ function world(extra = {}) {
         description: "기존 설명",
         field: "saju",
         video_url: "https://example.com/existing",
+        is_online: true,
+        poster_path: null,
+        poster_alt: null,
         is_published: true,
         sort_order: 2,
         created_at: version,
@@ -239,6 +261,9 @@ function world(extra = {}) {
         description: "비밀 본문",
         field: "tarot",
         video_url: "https://secret.example/hidden",
+        is_online: true,
+        poster_path: null,
+        poster_alt: null,
         is_published: false,
         sort_order: 0,
         created_at: "2026-11-18T00:00:02.000000+00:00",
@@ -310,6 +335,37 @@ function modules(state, auth) {
     "@/lib/admin/support-rules": support,
     "@/lib/supabase/server": server,
     "./rules": rules,
+    "node:crypto": {
+      randomUUID: () => "33333333-3333-4333-8333-333333333333",
+    },
+    "./cleanup": {
+      classifyStorageInfo(result) {
+        if (!result.error && result.data) {
+          const mime = result.data.contentType || "";
+          const ok = ["image/jpeg", "image/png", "image/webp"].includes(mime);
+          const size = result.data.size;
+          return ok && Number.isInteger(size) && size > 0 && size <= 5242880
+            ? "present"
+            : "rejected";
+        }
+        const status = result.error?.status ?? result.error?.statusCode;
+        if (status === 400 || status === 404) return "missing";
+        if (status === 401 || status === 403) return "forbidden";
+        return "unknown";
+      },
+      cleanupAction: () => async () => false,
+      confirmUploadAction: () => async () => "present",
+      removeUnreferenced: async (db, path) => {
+        const refs = await db
+          .from("classes")
+          .select("id", { head: true, count: "exact" })
+          .eq("poster_path", path);
+        if (refs.error || refs.count === null) return false;
+        if (refs.count > 0) return true;
+        await db.storage.from("public-images").remove([path]);
+        return true;
+      },
+    },
   });
   const data = load("lib/classes/data.ts", {
     "server-only": {},
@@ -376,6 +432,9 @@ test("class text, url, publication and sort order stay strict", () => {
   assert.equal(parsed.patch.description, "첫째 줄\n둘째 줄");
   assert.equal(parsed.patch.field, "tarot");
   assert.equal(parsed.patch.video_url, "https://example.com/watch");
+  assert.equal(parsed.patch.is_online, true);
+  assert.equal(parsed.patch.poster_path, null);
+  assert.equal(parsed.patch.poster_alt, null);
   assert.equal(parsed.patch.is_published, false);
   assert.equal(parsed.patch.sort_order, 0);
   assert.equal(rules.charLength("👍".repeat(100)), 100);
@@ -446,6 +505,18 @@ test("class text, url, publication and sort order stay strict", () => {
     rules.parseClass(form({ video_url: "", is_published: "false" })).errors,
     {},
   );
+  assert.deepEqual(
+    rules.parseClass(
+      form({ video_url: "", is_published: "true", is_online: "false" }),
+    ).errors,
+    {},
+  );
+  assert.equal(
+    rules.parseClass(
+      form({ video_url: "", is_published: "true", is_online: "false" }),
+    ).patch.is_online,
+    false,
+  );
   for (const order of ["", "1.5", "-1", "01", "2147483648", "1e2", " 1", "+3"])
     assert.ok(
       rules.parseClass(form({ sort_order: order })).errors.sort_order,
@@ -479,7 +550,119 @@ test("class text, url, publication and sort order stay strict", () => {
     page: 2,
     status: "private",
     result: "",
+    field: "",
   });
+  assert.equal(rules.classFilters({ field: "online" }), null);
+  assert.equal(rules.classFilters({ delivery: "offline" }), null);
+  assert.deepEqual(rules.classFilters({ field: "saju", page: "2" }), {
+    page: 2,
+    status: "",
+    result: "",
+    field: "saju",
+  });
+  assert.equal(
+    rules.classListUrl(false, 2, "", "", "tarot"),
+    "/class?page=2&field=tarot",
+  );
+  assert.equal(
+    rules.classListUrl(false, 1, "", "", "saju"),
+    "/class?field=saju",
+  );
+  assert.equal(rules.classListUrl(false), "/class");
+});
+
+test("offline classes can publish without video and posters stay paired", async () => {
+  const poster = "classes/12345678-1234-4234-8234-123456789abc.jpg";
+  assert.equal(rules.posterPath(poster), true);
+  assert.equal(rules.posterPath(`classes/../${poster}`), false);
+  assert.equal(
+    rules.posterPath("products/12345678-1234-4234-8234-123456789abc.jpg"),
+    false,
+  );
+  assert.ok(
+    rules.parseClass(
+      form({
+        poster_path: poster,
+        poster_alt: "",
+      }),
+    ).errors.poster_alt,
+  );
+  assert.deepEqual(
+    rules.parseClass(
+      form({
+        poster_path: poster,
+        poster_alt: "사주 수업 포스터",
+      }),
+    ).errors,
+    {},
+  );
+  const state = world();
+  const api = modules(state, adminAuth);
+  const offline = await api.saveClass(
+    form({
+      title: "테스트 오프라인",
+      video_url: "",
+      is_online: "false",
+      is_published: "true",
+    }),
+  );
+  assert.equal(offline.state, "saved");
+  assert.equal(offline.row.is_online, false);
+  assert.equal(offline.row.video_url, null);
+  assert.equal(offline.row.is_published, true);
+  const missingPoster = await api.saveClass(
+    form({
+      title: "테스트 포스터없음",
+      version: offline.row.updated_at,
+      is_online: "false",
+      is_published: "true",
+      video_url: "",
+      poster_path: poster,
+      poster_alt: "없는 포스터",
+    }),
+  );
+  assert.equal(missingPoster.state, "rejected");
+  state.files = { [poster]: { size: 1200, contentType: "image/jpeg" } };
+  state.classes.find((row) => row.id === otherId).poster_path = poster;
+  const shared = await api.saveClass(
+    form({
+      title: "테스트 포스터공유",
+      version: offline.row.updated_at,
+      is_online: "false",
+      is_published: "true",
+      video_url: "",
+      poster_path: poster,
+      poster_alt: "공유 포스터",
+    }),
+  );
+  assert.equal(shared.state, "rejected");
+  state.classes.find((row) => row.id === otherId).poster_path = null;
+  const attached = await api.saveClass(
+    form({
+      title: "테스트 포스터연결",
+      version: offline.row.updated_at,
+      is_online: "false",
+      is_published: "true",
+      video_url: "",
+      poster_path: poster,
+      poster_alt: "사주 수업 포스터",
+    }),
+  );
+  assert.equal(attached.state, "saved");
+  assert.equal(attached.row.poster_path, poster);
+  assert.equal(attached.row.poster_alt, "사주 수업 포스터");
+  const listed = await api.publicClassList(1, "tarot");
+  assert.deepEqual(
+    listed.data.map((row) => row.title),
+    ["테스트 포스터연결"],
+  );
+  assert.equal(listed.data[0].poster_path, poster);
+  assert.equal(listed.data[0].is_online, false);
+  const saju = await api.publicClassList(1, "saju");
+  assert.equal(
+    saju.data.some((row) => row.id === classId),
+    false,
+  );
 });
 
 test("lost save response is not treated as success", async () => {
@@ -924,6 +1107,16 @@ async function openEditor(state, props = {}) {
     "@/lib/classes/actions": api,
     "@/lib/classes/submit": submit,
     "@/lib/classes/rules": rules,
+    "@/lib/classes/content": load("lib/classes/content.ts"),
+    "@/lib/classes/upload": {
+      inspectImage: async () => ({ ext: "jpg", mime: "image/jpeg" }),
+      uploadImage: async (_client, _file, path) => path,
+    },
+    "@/lib/supabase/client": {
+      createClient: () => ({
+        storage: { from: () => ({ upload: async () => ({ error: null }) }) },
+      }),
+    },
   });
   const initial =
     props.initial === undefined

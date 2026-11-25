@@ -275,12 +275,12 @@ export function publicImageUrl(path: string | null) {
 export function counselorHeading(name: string) {
   const trimmed = name.trim();
   if (!trimmed) return "";
-  if (/(?:선생님|쌤|샘)$/.test(trimmed)) return trimmed;
+  if (/(?:선생님|원장님|쌤|샘)$/.test(trimmed)) return trimmed;
   return `${trimmed} 선생님`;
 }
 export function counselorNeedsHonorific(name: string) {
   const trimmed = name.trim();
-  return Boolean(trimmed) && !/(?:선생님|쌤|샘)$/.test(trimmed);
+  return Boolean(trimmed) && !/(?:선생님|원장님|쌤|샘)$/.test(trimmed);
 }
 export function displayChips(input: {
   field: CounselorField;

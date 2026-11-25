@@ -6,6 +6,7 @@ import {
   columns,
   fieldLabel,
   pageSize,
+  posterPath,
   publicDetailColumns,
   publicListColumns,
   publicVideoHref,
@@ -19,25 +20,34 @@ function rangeError(error: { code?: string } | null, page: number) {
   return error?.code === "PGRST103" && page > 1;
 }
 
-export async function publicClassList(page: number) {
-  if (!Number.isInteger(page) || page < 1 || page > 9999999)
+export async function publicClassList(page: number, field = "") {
+  if (
+    !Number.isInteger(page) ||
+    page < 1 ||
+    page > 9999999 ||
+    !["", "saju", "tarot"].includes(field)
+  )
     throw Error("목록 조건이 올바르지 않습니다.");
   const db = createPublicClient();
-  const { data, error, count } = await db
+  let list = db
     .from("classes")
     .select(publicListColumns, { count: "exact" })
-    .eq("is_published", true)
+    .eq("is_published", true);
+  if (field === "saju" || field === "tarot") list = list.eq("field", field);
+  const { data, error, count } = await list
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .range((page - 1) * pageSize, page * pageSize - 1);
   if (rangeError(error, page)) {
-    const total = await db
+    let total = db
       .from("classes")
       .select("id", { head: true, count: "exact" })
       .eq("is_published", true);
-    if (!total.error && total.count !== null)
-      return { data: [] as PublicClassSummary[], count: total.count };
+    if (field === "saju" || field === "tarot") total = total.eq("field", field);
+    const totalResult = await total;
+    if (!totalResult.error && totalResult.count !== null)
+      return { data: [] as PublicClassSummary[], count: totalResult.count };
   }
   if (error || !data || count === null)
     throw Error("클래스 목록을 불러오지 못했습니다.");
@@ -108,20 +118,39 @@ export async function adminClassDetail(id: string) {
   return { row: data as ClassRecord };
 }
 
+function posterOf(path: unknown, alt: unknown) {
+  if (path == null && (alt == null || alt === ""))
+    return { poster_path: null, poster_alt: null };
+  if (
+    !posterPath(path) ||
+    typeof alt !== "string" ||
+    !alt.trim() ||
+    Array.from(alt).length > 200
+  )
+    return { poster_path: null, poster_alt: null };
+  return { poster_path: path, poster_alt: alt };
+}
+
 function toSummary(row: {
   id: string;
   title: string;
   description: string;
   field: string;
+  is_online: boolean;
+  poster_path: string | null;
+  poster_alt: string | null;
   sort_order: number;
   created_at: string;
 }): PublicClassSummary {
-  if (!fieldLabel(row.field)) throw Error("클래스를 불러오지 못했습니다.");
+  if (!fieldLabel(row.field) || typeof row.is_online !== "boolean")
+    throw Error("클래스를 불러오지 못했습니다.");
   return {
     id: row.id,
     title: row.title,
     description: row.description,
     field: row.field as PublicClassSummary["field"],
+    is_online: row.is_online,
+    ...posterOf(row.poster_path, row.poster_alt),
     sort_order: row.sort_order,
     created_at: row.created_at,
   };

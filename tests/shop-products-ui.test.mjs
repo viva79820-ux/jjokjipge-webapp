@@ -32,6 +32,7 @@ function load(file, adapters = {}) {
 }
 
 const rules = load("lib/products/rules.ts");
+const cart = load("lib/products/cart.ts", { "./rules": rules });
 const support = load("lib/admin/support-rules.ts", {
   "../inquiries/validation": { categoryLabels: { other: "기타" } },
 });
@@ -329,6 +330,7 @@ function harness(state) {
     },
     "@/lib/supabase/server": server,
     "./rules": rulesModule,
+    "./cart": cart,
   });
   return { world, ...actions, ...data, cleanup };
 }
@@ -780,9 +782,14 @@ test("고객 화면 문구에 구매 버튼을 만들지 않는다", () => {
     new URL("components/products/editor.tsx", root),
     "utf8",
   );
-  assert.match(pages, /구매 기능 준비 중/);
+  assert.match(
+    pages +
+      readFileSync(new URL("components/products/cart-link.tsx", root), "utf8"),
+    /href="\/shop\/cart"/,
+  );
   assert.equal(pages.includes("구매하기"), false);
   assert.equal(pages.includes("결제하기"), false);
+  assert.equal(pages.includes("구매 기능 준비 중"), false);
   assert.match(editor, /삭제 결과 다시 확인/);
   assert.match(editor, /사진 정리 다시 시도/);
   assert.match(editor, /사진 정리 버튼으로만 지웁니다/);

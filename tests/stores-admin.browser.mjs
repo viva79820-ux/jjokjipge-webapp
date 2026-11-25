@@ -914,7 +914,7 @@ try {
     await page.evaluate(
       `document.querySelector('[data-store-slug="store-a"] a[href^="tel:"]').getAttribute("href")`,
     ),
-    "tel:010-0000-0000",
+    "tel:0507-1498-0232",
   );
   assert.equal(
     await page.evaluate(

@@ -7,11 +7,7 @@ export const channelLabels: Record<Channel, string> = {
   instagram: "인스타그램",
   youtube: "유튜브",
 };
-export const channelLinkLabels: Record<Channel, string> = {
-  blog: "블로그에서 보기",
-  instagram: "인스타그램에서 보기",
-  youtube: "유튜브에서 보기",
-};
+export const publicChannels = ["youtube", "instagram", "blog"] as const;
 
 export type ContentRecord = {
   id: string;
@@ -19,6 +15,9 @@ export type ContentRecord = {
   description: string | null;
   channel: Channel;
   external_url: string | null;
+  thumbnail_path: string | null;
+  thumbnail_alt: string | null;
+  posted_on: string | null;
   is_published: boolean;
   sort_order: number;
   created_at: string;
@@ -30,6 +29,9 @@ export type ContentPatch = {
   description: string | null;
   channel: Channel;
   external_url: string | null;
+  thumbnail_path: string | null;
+  thumbnail_alt: string | null;
+  posted_on: string | null;
   is_published: boolean;
   sort_order: number;
 };
@@ -37,23 +39,31 @@ export type ContentPatch = {
 export type PublicCard = {
   id: string;
   title: string;
-  description: string | null;
   channel: Channel;
   href: string | null;
+  thumbnail_path: string | null;
+  thumbnail_alt: string | null;
+  thumbnail_url: string | null;
+  posted_on: string | null;
 };
 
 export const columns =
-  "id,title,description,channel,external_url,is_published,sort_order,created_at,updated_at";
+  "id,title,description,channel,external_url,thumbnail_path,thumbnail_alt,posted_on,is_published,sort_order,created_at,updated_at";
 export const publicColumns =
-  "id,title,description,channel,external_url,is_published,sort_order,created_at";
+  "id,title,channel,external_url,thumbnail_path,thumbnail_alt,posted_on,is_published,sort_order";
+export const bucket = "public-images";
+export const maxBytes = 5242880;
 export const pageSize = 20;
 export const titleLimit = 100;
 export const descriptionLimit = 1000;
+export const altLimit = 200;
 export const urlLimit = 2048;
 export const sortMax = 2147483647;
 
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const thumbnailPattern =
+  /^contents\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|jpeg|png|webp)$/;
 const storedUrlPattern =
   /^https:\/\/(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?)(?::[0-9]{1,5})?(?:[/?#][^\u0000-\u001F\u007F-\u009F\s]*)?$/;
 const authorityPattern =
@@ -82,14 +92,92 @@ export function textLength(value: string) {
 }
 
 export function compareContents<
-  T extends { sort_order: number; created_at: string; id: string },
+  T extends { sort_order: number; posted_on: string | null; id: string },
 >(left: T, right: T) {
   if (left.sort_order !== right.sort_order)
     return left.sort_order - right.sort_order;
-  if (left.created_at !== right.created_at)
-    return left.created_at < right.created_at ? 1 : -1;
+  if (left.posted_on !== right.posted_on) {
+    if (left.posted_on === null) return 1;
+    if (right.posted_on === null) return -1;
+    return left.posted_on < right.posted_on ? 1 : -1;
+  }
   if (left.id !== right.id) return left.id < right.id ? 1 : -1;
   return 0;
+}
+
+export const thumbnailPath = (value: unknown): value is string =>
+  typeof value === "string" && thumbnailPattern.test(value);
+
+export function imageKind(bytes: Uint8Array) {
+  const ext =
+    bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255
+      ? "jpg"
+      : bytes.length >= 8 &&
+          bytes.slice(0, 8).join(",") === "137,80,78,71,13,10,26,10"
+        ? "png"
+        : bytes.length >= 12 &&
+            String.fromCharCode(...bytes.slice(0, 4)) === "RIFF" &&
+            String.fromCharCode(...bytes.slice(8, 12)) === "WEBP"
+          ? "webp"
+          : null;
+  if (!ext) return null;
+  return {
+    ext,
+    mime: ext === "jpg" ? "image/jpeg" : `image/${ext}`,
+  } as const;
+}
+
+export function imageMetadataValid(
+  info: { size?: number; contentType?: string | null },
+  path?: string,
+) {
+  const mime = info.contentType || "";
+  const ext =
+    mime === "image/jpeg"
+      ? "jpg"
+      : mime === "image/png"
+        ? "png"
+        : mime === "image/webp"
+          ? "webp"
+          : null;
+  const pathExt = path?.split(".").at(-1);
+  return (
+    ext !== null &&
+    typeof info.size === "number" &&
+    Number.isInteger(info.size) &&
+    info.size > 0 &&
+    info.size <= maxBytes &&
+    (!path ||
+      (thumbnailPath(path) &&
+        (pathExt === ext ||
+          (mime === "image/jpeg" &&
+            (pathExt === "jpg" || pathExt === "jpeg")))))
+  );
+}
+
+export function publicThumbnailUrl(path: unknown) {
+  if (!thumbnailPath(path)) return null;
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!base) return null;
+  return `${base}/storage/v1/object/public/${bucket}/${path}`;
+}
+
+export function strictDate(value: unknown): string | null | undefined {
+  if (value === "") return null;
+  if (typeof value !== "string") return undefined;
+  const matched = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!matched) return undefined;
+  const year = Number(matched[1]);
+  const month = Number(matched[2]);
+  const day = Number(matched[3]);
+  if (year < 1 || month < 1 || month > 12 || day < 1) return undefined;
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return day <= days[month - 1] ? value : undefined;
+}
+
+export function formatPostedOn(value: string | null) {
+  return value ? value.replaceAll("-", ".") : "게시일 미입력";
 }
 
 function forbiddenUrlChar(value: string) {
@@ -135,6 +223,17 @@ export function parseExternalUrl(
   )
     return { state: "invalid" };
   return { state: "ok", href };
+}
+
+export function confirmedSocialHref(value: string) {
+  const parsed = parseExternalUrl(value);
+  if (parsed.state !== "ok") return null;
+  const hostname = new URL(parsed.href).hostname
+    .replace(/\.$/, "")
+    .toLowerCase();
+  if (hostname === "example.com" || hostname.endsWith(".example.com"))
+    return null;
+  return parsed.href;
 }
 
 export function publicFilters(query: Query): PublicFilters | null {
@@ -263,6 +362,9 @@ export function contentPatch(form: FormData): {
   const description = scalar(form, "description");
   const channel = scalar(form, "channel");
   const externalUrl = scalar(form, "external_url");
+  const thumbnailText = scalar(form, "thumbnail_path");
+  const altText = scalar(form, "thumbnail_alt");
+  const postedText = scalar(form, "posted_on");
   const published = scalar(form, "is_published");
   const orderText = scalar(form, "sort_order");
   let trimmedTitle = "";
@@ -300,6 +402,31 @@ export function contentPatch(form: FormData): {
         "외부 주소는 사용자 정보가 없는 HTTPS 주소로 입력해 주세요.";
     else storedUrl = parsed.state === "ok" ? parsed.href : null;
   }
+  let thumbnail: string | null = null;
+  if (thumbnailText === null)
+    errors.thumbnail_path = "썸네일 경로를 한 칸의 글자로 보내 주세요.";
+  else if (thumbnailText !== "" && !thumbnailPath(thumbnailText))
+    errors.thumbnail_path = "썸네일 경로를 확인해 주세요.";
+  else thumbnail = thumbnailText || null;
+  let thumbnailAlt: string | null = null;
+  if (altText === null)
+    errors.thumbnail_alt = "썸네일 대체 설명을 한 칸의 글자로 입력해 주세요.";
+  else if (titleControl.test(altText))
+    errors.thumbnail_alt =
+      "대체 설명에는 줄바꿈이나 제어문자를 넣을 수 없습니다.";
+  else {
+    const trimmed = altText.trim();
+    if (thumbnail && !trimmed)
+      errors.thumbnail_alt = "썸네일이 있으면 대체 설명을 입력해 주세요.";
+    else if (trimmed && textLength(trimmed) > altLimit)
+      errors.thumbnail_alt =
+        "대체 설명은 공백을 제외하고 200자 이하로 입력해 주세요.";
+    else thumbnailAlt = trimmed || null;
+  }
+  const postedOn = strictDate(postedText);
+  if (postedOn === undefined)
+    errors.posted_on =
+      "게시일은 실제 존재하는 YYYY-MM-DD 날짜로 입력해 주세요.";
   if (published !== "true" && published !== "false")
     errors.is_published = "공개 여부를 확인해 주세요.";
   if (published === "true" && !storedUrl && !errors.external_url)
@@ -317,6 +444,9 @@ export function contentPatch(form: FormData): {
       description: storedDescription,
       channel,
       external_url: storedUrl,
+      thumbnail_path: thumbnail,
+      thumbnail_alt: thumbnailAlt,
+      posted_on: postedOn ?? null,
       is_published: published === "true",
       sort_order: sortOrder,
     },
@@ -329,6 +459,9 @@ export function sameContent(row: ContentRecord, patch: ContentPatch) {
     row.description === patch.description &&
     row.channel === patch.channel &&
     row.external_url === patch.external_url &&
+    row.thumbnail_path === patch.thumbnail_path &&
+    row.thumbnail_alt === patch.thumbnail_alt &&
+    row.posted_on === patch.posted_on &&
     row.is_published === patch.is_published &&
     row.sort_order === patch.sort_order
   );
@@ -343,26 +476,96 @@ export function contentMatches(row: ContentRecord, form: FormData) {
 export function presentPublic(row: {
   id?: unknown;
   title?: unknown;
-  description?: unknown;
   channel?: unknown;
   external_url?: unknown;
+  thumbnail_path?: unknown;
+  thumbnail_alt?: unknown;
+  posted_on?: unknown;
   is_published?: unknown;
 }): PublicCard | null {
   if (row.is_published !== true) return null;
-  if (typeof row.id !== "string" || typeof row.title !== "string") return null;
+  if (!uuid(row.id) || typeof row.title !== "string") return null;
   if (!isChannel(row.channel)) return null;
-  const description =
-    typeof row.description === "string" ? row.description : null;
   let href: string | null = null;
   if (typeof row.external_url === "string" && row.external_url) {
     const parsed = parseExternalUrl(row.external_url);
     if (parsed.state === "ok") href = parsed.href;
   }
+  const validPath = thumbnailPath(row.thumbnail_path)
+    ? row.thumbnail_path
+    : null;
+  const validAlt =
+    validPath &&
+    typeof row.thumbnail_alt === "string" &&
+    row.thumbnail_alt.trim() &&
+    textLength(row.thumbnail_alt.trim()) <= altLimit
+      ? row.thumbnail_alt.trim()
+      : null;
+  const postedOn =
+    row.posted_on === null ? null : strictDate(row.posted_on) || null;
   return {
     id: row.id,
     title: row.title,
-    description,
     channel: row.channel,
     href,
+    thumbnail_path: validAlt ? validPath : null,
+    thumbnail_alt: validAlt,
+    thumbnail_url: validAlt ? publicThumbnailUrl(validPath) : null,
+    posted_on: postedOn,
+  };
+}
+
+export function contentRecord(row: {
+  id?: unknown;
+  title?: unknown;
+  description?: unknown;
+  channel?: unknown;
+  external_url?: unknown;
+  thumbnail_path?: unknown;
+  thumbnail_alt?: unknown;
+  posted_on?: unknown;
+  is_published?: unknown;
+  sort_order?: unknown;
+  created_at?: unknown;
+  updated_at?: unknown;
+}): ContentRecord | null {
+  const path = row.thumbnail_path === null ? null : row.thumbnail_path;
+  const alt = row.thumbnail_alt === null ? null : row.thumbnail_alt;
+  const posted = row.posted_on === null ? null : strictDate(row.posted_on);
+  if (
+    !uuid(row.id) ||
+    typeof row.title !== "string" ||
+    (row.description !== null && typeof row.description !== "string") ||
+    !isChannel(row.channel) ||
+    (row.external_url !== null && typeof row.external_url !== "string") ||
+    (path !== null && !thumbnailPath(path)) ||
+    (alt !== null &&
+      (typeof alt !== "string" ||
+        !alt.trim() ||
+        textLength(alt.trim()) > altLimit)) ||
+    (path !== null && alt === null) ||
+    posted === undefined ||
+    typeof row.is_published !== "boolean" ||
+    typeof row.sort_order !== "number" ||
+    !Number.isInteger(row.sort_order) ||
+    row.sort_order < 0 ||
+    row.sort_order > sortMax ||
+    typeof row.created_at !== "string" ||
+    typeof row.updated_at !== "string"
+  )
+    return null;
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    channel: row.channel,
+    external_url: row.external_url,
+    thumbnail_path: path,
+    thumbnail_alt: alt,
+    posted_on: posted,
+    is_published: row.is_published,
+    sort_order: row.sort_order,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
   };
 }

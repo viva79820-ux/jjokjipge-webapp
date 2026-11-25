@@ -108,6 +108,17 @@ rows.push(
     updated_at: "2026-11-18T00:00:04.000000+00:00",
   },
 );
+for (const row of rows) {
+  row.thumbnail_path ??= null;
+  row.thumbnail_alt ??= null;
+  row.posted_on ??= null;
+}
+rows[1].thumbnail_path = "contents/11111111-1111-4111-8111-111111111111.png";
+rows[1].thumbnail_alt = "테스트 블로그 썸네일";
+rows[1].posted_on = "2026-11-20";
+rows[2].thumbnail_path = "contents/22222222-2222-4222-8222-222222222222.png";
+rows[2].thumbnail_alt = "불러오기 실패 썸네일";
+rows[2].posted_on = "2026-11-19";
 let admin = true;
 let listFail = false;
 let forceEmpty = false;
@@ -115,6 +126,12 @@ let hideYoutube = false;
 let loseResponse = false;
 let delayList = 0;
 let seq = 0;
+const pngFile = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+  "base64",
+);
+const files = new Map([[rows[1].thumbnail_path, pngFile]]);
+let cleanupFail = false;
 const contentsRequests = [];
 const stamp = () =>
   `2026-11-18T03:00:00.${String(++seq).padStart(6, "0")}+00:00`;
@@ -163,6 +180,8 @@ function sortRows(list, order) {
     for (const part of order.split(",")) {
       const [column, direction] = part.split(".");
       if (left[column] === right[column]) continue;
+      if (left[column] == null) return 1;
+      if (right[column] == null) return -1;
       const compared = left[column] > right[column] ? 1 : -1;
       return direction === "desc" ? -compared : compared;
     }
@@ -225,6 +244,77 @@ async function handle(req, res) {
     for await (const chunk of req) chunks.push(chunk);
   else req.resume();
   const role = roleOf(req);
+  if (url.pathname.startsWith("/storage/v1/")) {
+    const path = decodeURIComponent(
+      url.pathname.split("/public-images/")[1] || "",
+    );
+    const bucketDelete =
+      req.method === "DELETE" &&
+      url.pathname.replace(/\/$/, "").endsWith("/object/public-images");
+    if (!bucketDelete && !path.startsWith("contents/")) {
+      res.writeHead(400);
+      res.end(JSON.stringify({ message: "path" }));
+      return;
+    }
+    if (url.pathname.includes("/object/info/")) {
+      if (role !== "admin" || !files.has(path)) {
+        res.writeHead(404);
+        res.end("{}");
+        return;
+      }
+      res.end(
+        JSON.stringify({
+          size: files.get(path).length,
+          content_type: "image/png",
+        }),
+      );
+      return;
+    }
+    if (req.method === "POST") {
+      if (role !== "admin" || req.headers["x-upsert"] !== "false") {
+        res.writeHead(401);
+        res.end(JSON.stringify({ message: "upload denied" }));
+        return;
+      }
+      if (files.has(path)) {
+        res.writeHead(409);
+        res.end(JSON.stringify({ message: "exists" }));
+        return;
+      }
+      const raw = Buffer.concat(chunks);
+      const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+      const start = raw.indexOf(signature);
+      const image = start >= 0 ? raw.subarray(start) : raw;
+      const end = image.indexOf("\r\n--");
+      files.set(path, end >= 0 ? image.subarray(0, end) : image);
+      res.end(JSON.stringify({ Key: path }));
+      return;
+    }
+    if (req.method === "DELETE") {
+      if (role !== "admin") {
+        res.writeHead(401);
+        res.end("{}");
+        return;
+      }
+      if (cleanupFail) {
+        res.writeHead(503);
+        res.end(JSON.stringify({ message: "cleanup", statusCode: "503" }));
+        return;
+      }
+      const paths =
+        JSON.parse(Buffer.concat(chunks).toString() || "{}").prefixes || [];
+      for (const item of paths) {
+        const used = rows.some((row) => row.thumbnail_path === item);
+        if (!used) files.delete(item);
+      }
+      res.end("[]");
+      return;
+    }
+    if (files.has(path)) res.setHeader("Content-Type", "image/png");
+    res.writeHead(files.has(path) ? 200 : 404);
+    res.end(files.get(path) || "");
+    return;
+  }
   const table = url.pathname.split("/").at(-1);
   if (table === "profiles") {
     res.end(JSON.stringify([{ role: role === "admin" ? "admin" : "user" }]));
@@ -415,6 +505,17 @@ try {
       el.dispatchEvent(new Event("input", { bubbles: true }));
     })()`);
   };
+  const choosePng = async (name = "thumbnail.png") => {
+    await page.evaluate(`(() => {
+      const bytes = Uint8Array.from(atob(${JSON.stringify(pngFile.toString("base64"))}), (char) => char.charCodeAt(0));
+      const file = new File([bytes], ${JSON.stringify(name)}, { type: "image/png" });
+      const transfer = new DataTransfer();
+      transfer.items.add(file);
+      const input = Array.from(document.querySelectorAll('input[name="thumbnail_file"]')).find((item) => item.checkVisibility());
+      Object.defineProperty(input, "files", { configurable: true, value: transfer.files });
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    })()`);
+  };
   const fieldValue = (name) =>
     page.evaluate(`(() => {
       const el = Array.from(document.querySelectorAll(${JSON.stringify(`[name="${name}"]`)})).find((item) => item.checkVisibility());
@@ -502,10 +603,11 @@ try {
   await text("총 22건");
   await text(longTitle);
   await text("인스타 공개글");
-  await text("첫 줄");
-  await text("둘째 줄");
+  await absent("긴 설명");
+  await absent("첫 줄");
+  await absent("둘째 줄");
   await text("잘못된주소글");
-  await text("주소를 확인할 수 없어 링크를 표시하지 않습니다.");
+  await text("외부 주소를 사용할 수 없습니다.");
   await absent("SECRET_PRIVATE_TITLE");
   await absent("SECRET_PRIVATE_BODY");
   await absent("둘째쪽 콘텐츠");
@@ -517,8 +619,34 @@ try {
     await page.evaluate("document.querySelectorAll('iframe').length"),
     0,
   );
+  const thumbnails = await page.evaluate(`(() => {
+    const failed = document.querySelector('[role="img"][aria-label="인스타그램 썸네일을 불러오지 못했습니다"]');
+    const missing = Array.from(document.querySelectorAll("a"))
+      .find((item) => item.textContent.includes("가운데 블로그"))
+      ?.querySelector('[role="img"][aria-label="블로그 썸네일 없음"]');
+    const missingMark = missing?.querySelector("img");
+    return {
+      valid: Boolean(document.querySelector('img[alt="테스트 블로그 썸네일"]')),
+      failed: Boolean(failed),
+      failedMark: failed?.querySelector("img")?.getAttribute("src"),
+      missing: Boolean(missing),
+      missingMark: missingMark?.getAttribute("src"),
+      missingFit: missingMark ? getComputedStyle(missingMark).objectFit : null,
+      missingFilter: missingMark ? getComputedStyle(missingMark).filter : null,
+    };
+  })()`);
+  assert.equal(thumbnails.valid, true);
+  assert.equal(thumbnails.failed, true);
+  assert.equal(thumbnails.failedMark, "/images/channels/channel-instagram.png");
+  assert.equal(thumbnails.missing, true);
+  assert.equal(
+    thumbnails.missingMark,
+    "/images/channels/channel-naver-blog.png",
+  );
+  assert.equal(thumbnails.missingFit, "contain");
+  assert.equal(thumbnails.missingFilter, "none");
   const link = await page.evaluate(`(() => {
-    const el = Array.from(document.querySelectorAll("a")).find((item) => item.checkVisibility() && item.textContent.includes("인스타그램에서 보기"));
+    const el = Array.from(document.querySelectorAll("a")).find((item) => item.checkVisibility() && item.textContent.includes("인스타 공개글"));
     return { href: el.href, target: el.target, rel: el.rel, text: el.textContent };
   })()`);
   assert.equal(link.href, "https://example.com/instagram/post");
@@ -541,6 +669,13 @@ try {
   await text("둘째쪽 콘텐츠");
   await text("공개 유튜브");
   await text("2 / 2");
+  assert.equal(
+    await page.evaluate(`(() => Array.from(document.querySelectorAll("a"))
+      .find((item) => item.textContent.includes("공개 유튜브"))
+      ?.querySelector('[role="img"] img')
+      ?.getAttribute("src"))()`),
+    "/images/channels/channel-youtube.png",
+  );
   await absent(longTitle);
   await page.evaluate("history.back()");
   await until(
@@ -591,8 +726,14 @@ try {
     assert.equal(measured.covered, false, `covered ${width}`);
     assert.deepEqual(measured.small, [], `touch ${width} ${measured.small}`);
     const wideTouch = !fine && width >= 768;
+    const cardColumns = await page.evaluate(`(() => {
+      const card = Array.from(document.querySelectorAll("a")).find((item) => item.textContent.includes(${JSON.stringify(longTitle)}));
+      const grid = card?.parentElement;
+      return grid ? getComputedStyle(grid).gridTemplateColumns.split(" ").length : 0;
+    })()`);
+    assert.equal(cardColumns, wideTouch ? 2 : 1, `columns ${width}`);
     assert.equal(measured.padding, wideTouch ? "24px" : "16px", width);
-    if (fine) assert.ok(measured.shell <= 560, measured.shell);
+    if (fine) assert.equal(measured.shell, 560, measured.shell);
     await screenshot(`customer-${width}.png`);
   }
   await go("/contents?channel=blog&channel=instagram");
@@ -604,22 +745,113 @@ try {
   listFail = true;
   await go("/contents");
   await text("콘텐츠 목록을 불러오지 못했습니다.");
-  await absent("등록된 콘텐츠가 없습니다.");
+  await absent("아직 올라온 소식이 없어요.");
   await screenshot("customer-error.png");
   listFail = false;
   await page.button("다시 시도");
   await text("총 22건");
   forceEmpty = true;
-  await go("/contents");
-  await text("등록된 콘텐츠가 없습니다.");
-  await absent("선택한 채널의 콘텐츠가 없습니다.");
-  await screenshot("customer-empty.png");
+  const expectedChannels = [
+    ["유튜브", "https://www.youtube.com/channel/UCQW1dFMrN1ndpsT77BK-9KA"],
+    ["인스타그램", "https://www.instagram.com/kjm_chnam/"],
+    ["블로그", "https://blog.naver.com/taro93"],
+  ];
+  for (const [width, fine] of [
+    [360, false],
+    [390, false],
+    [1280, true],
+  ]) {
+    await emulate(width, fine);
+    await go("/contents");
+    await text("총 0건");
+    await text("아직 올라온 소식이 없어요.");
+    await absent("선택한 채널의 콘텐츠가 없습니다.");
+    assert.equal(
+      await page.evaluate(
+        "Boolean(document.querySelector('[aria-label=\"콘텐츠 페이지\"]'))",
+      ),
+      false,
+    );
+    const official = await page.evaluate(`(() => {
+      const section = document.querySelector('[aria-label="공식 채널"]');
+      const links = Array.from(section.querySelectorAll("a"));
+      const shell = document.querySelector("[data-app-shell]");
+      const sectionBox = section.getBoundingClientRect();
+      const textOutside = (el) => {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const text = range.getBoundingClientRect();
+        const box = el.getBoundingClientRect();
+        if (text.width === 0) return false;
+        return (
+          text.left < box.left - 1 ||
+          text.right > box.right + 1 ||
+          text.top < box.top - 1 ||
+          text.bottom > box.bottom + 1
+        );
+      };
+      return {
+        shell: shell ? Math.round(shell.getBoundingClientRect().width) : 0,
+        overflow: document.documentElement.scrollWidth <= window.innerWidth + 1,
+        clipped: links.some((node) => {
+          const card = node.getBoundingClientRect();
+          if (card.left < sectionBox.left - 1 || card.right > sectionBox.right + 1)
+            return true;
+          return [...node.querySelectorAll("span")].some(textOutside);
+        }),
+        cards: links.map((node) => {
+          const rect = node.getBoundingClientRect();
+          return {
+            href: node.href,
+            target: node.target,
+            rel: node.rel,
+            text: node.innerText.replace(/\\s+/g, " ").trim(),
+            top: Math.round(rect.top),
+            left: Math.round(rect.left),
+            width: Math.round(rect.width),
+            height: Math.round(rect.height),
+          };
+        }),
+      };
+    })()`);
+    assert.equal(official.overflow, true, `channel overflow ${width}`);
+    assert.equal(official.clipped, false, `channel clip ${width}`);
+    assert.equal(official.cards.length, 3, `channel count ${width}`);
+    if (fine) assert.equal(official.shell, 560, official.shell);
+    expectedChannels.forEach(([label, href], index) => {
+      const card = official.cards[index];
+      assert.equal(card.href, href, `${label} ${width}`);
+      assert.equal(card.target, "_blank", label);
+      assert.match(card.rel, /noopener/);
+      assert.match(card.rel, /noreferrer/);
+      assert.match(card.text, new RegExp(label));
+      assert.match(card.text, /새 창으로 열기/);
+      assert.ok(card.height >= 44, `${label} touch ${card.height}`);
+      assert.ok(
+        card.width < official.shell / 2,
+        `${label} column ${width} ${card.width}`,
+      );
+    });
+    const row =
+      Math.abs(official.cards[0].top - official.cards[1].top) <= 2 &&
+      Math.abs(official.cards[1].top - official.cards[2].top) <= 2 &&
+      official.cards[0].left < official.cards[1].left &&
+      official.cards[1].left < official.cards[2].left;
+    assert.equal(row, true, `channel row ${width}`);
+    await screenshot(
+      width === 360
+        ? "customer-empty.png"
+        : width === 390
+          ? "customer-channels-390.png"
+          : "customer-channels-pc.png",
+    );
+  }
   forceEmpty = false;
   hideYoutube = true;
   await go("/contents?channel=youtube");
   await text("선택한 채널의 콘텐츠가 없습니다.");
   await absent("SECRET_PRIVATE_TITLE");
-  await absent("등록된 콘텐츠가 없습니다.");
+  await absent("아직 올라온 소식이 없어요.");
   await screenshot("customer-filter-empty.png");
   hideYoutube = false;
 
@@ -753,6 +985,9 @@ try {
   assert.equal(await statusValue(), "public");
   await go("/admin/contents/new?returnTo=%2Fadmin%2Fcontents");
   await setField("title", "연속 저장 제목");
+  await setField("thumbnail_alt", "연속 저장 테스트 썸네일");
+  await setField("posted_on", "2024-02-29");
+  await choosePng("first.png");
   await page.evaluate(`(() => {
     const el = Array.from(document.querySelectorAll('input[name="channel"][value="blog"]')).find((item) => item.checkVisibility());
     el.click();
@@ -771,6 +1006,11 @@ try {
   assert.ok(created);
   assert.equal(created.is_published, false);
   assert.equal(created.external_url, null);
+  assert.match(created.thumbnail_path, /^contents\/[0-9a-f-]+\.png$/);
+  assert.equal(created.thumbnail_alt, "연속 저장 테스트 썸네일");
+  assert.equal(created.posted_on, "2024-02-29");
+  assert.equal(files.has(created.thumbnail_path), true);
+  const firstThumbnail = created.thumbnail_path;
   const editPath = await page.evaluate("location.pathname");
   await setField("external_url", "https://example.com/created");
   await page.evaluate(`(() => {
@@ -833,6 +1073,35 @@ try {
     beforeDouble,
   );
   assert.equal(created.description, "다시 적은 설명");
+  await choosePng("replacement.png");
+  await page.button("저장 전 확인");
+  await confirm();
+  await waitStatus();
+  const replacementThumbnail = created.thumbnail_path;
+  assert.notEqual(replacementThumbnail, firstThumbnail);
+  assert.equal(files.has(replacementThumbnail), true);
+  assert.equal(files.has(firstThumbnail), false);
+
+  cleanupFail = true;
+  await choosePng("cleanup-retry.png");
+  await page.button("저장 전 확인");
+  await confirm();
+  await waitStatus();
+  const retryThumbnail = created.thumbnail_path;
+  assert.notEqual(retryThumbnail, replacementThumbnail);
+  assert.equal(files.has(replacementThumbnail), true);
+  cleanupFail = false;
+  await page.button("썸네일 정리 다시 시도");
+  await waitStatus();
+  assert.equal(files.has(replacementThumbnail), false);
+  await page.button("썸네일 빼기");
+  await page.button("저장 전 확인");
+  await confirm();
+  await waitStatus();
+  assert.equal(created.thumbnail_path, null);
+  assert.equal(created.thumbnail_alt, null);
+  assert.equal(files.has(retryThumbnail), false);
+
   const previousVersion = created.updated_at;
   created.updated_at = stamp();
   created.title = "서버에서 바꾼 제목";
@@ -906,6 +1175,13 @@ try {
     async () => (await fieldValue("title")) === "서버에서 바꾼 제목",
     "서버에서 바꾼 제목",
   );
+  await setField("thumbnail_alt", "삭제할 썸네일");
+  await choosePng("delete.png");
+  await page.button("저장 전 확인");
+  await confirm();
+  await waitStatus();
+  const deletedThumbnail = created.thumbnail_path;
+  assert.equal(files.has(deletedThumbnail), true);
   await page.button("삭제 전 확인");
   await page.button("돌아가기");
   assert.equal(
@@ -929,6 +1205,7 @@ try {
     rows.some((row) => row.id === created.id),
     false,
   );
+  assert.equal(files.has(deletedThumbnail), false);
   await go(editPath);
   await text("콘텐츠가 없습니다.");
 

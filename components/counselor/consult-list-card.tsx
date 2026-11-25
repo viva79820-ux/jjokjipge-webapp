@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { CounselorName } from "./name";
 import { CounselorPhoto } from "./photo";
+import { RepresentativeBadge } from "./representative-badge";
 
 const focus =
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
@@ -33,15 +34,18 @@ export function ConsultListCard({ counselor }: { counselor: Counselor }) {
           />
         </Link>
         <div className="flex min-w-0 flex-1 flex-col gap-1.25">
-          <Link
-            href={href}
-            className={`block max-w-full cursor-pointer text-subtitle font-bold ${focus}`}
-          >
-            <CounselorName
-              name={counselor.name}
-              honorificClassName="text-caption font-medium text-muted"
-            />
-          </Link>
+          <div className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-1">
+            <Link
+              href={href}
+              className={`min-w-0 cursor-pointer text-subtitle font-bold ${focus}`}
+            >
+              <CounselorName
+                name={counselor.name}
+                honorificClassName="text-caption font-medium text-muted"
+              />
+            </Link>
+            <RepresentativeBadge counselorId={counselor.id} tone="brand" />
+          </div>
           {storeName ? (
             <p className="text-fine wrap-anywhere text-muted">{storeName}</p>
           ) : null}

@@ -401,6 +401,18 @@ Storage 검사는 SELECT·INSERT·UPDATE 메타데이터 SQL·정책·버킷 설
 
 `node --test tests/classes-contents-schema.test.mjs`는 마이그레이션·사전 검사 본문 동기화와 안전 조건을 정적으로 확인한다. `node tests/classes-contents-schema.model.mjs`는 준비된 PGlite에서 CHECK·RLS·GRANT·성공 예외·전체 롤백을 실제 SQL로 실행한다. 격리 검사는 실제 Supabase Data API나 실제 로그인 세션을 검증하지 않는다.
 
+### 콘텐츠 썸네일·게시일 후속 마이그레이션
+
+후속 마이그레이션은 `supabase/migrations/20261124030951_contents_thumbnail_fields.sql`이다. `thumbnail_path`, `thumbnail_alt`, `posted_on`은 모두 null을 허용해 기존 콘텐츠를 그대로 유지한다. 썸네일 경로는 `contents/<소문자 UUID>.<jpg|jpeg|png|webp>`만 허용하고, 경로가 있으면 공백이 아닌 200자 이하 대체 설명이 필수다.
+
+기존 `contents_published_sort_idx`가 원본 정의와 정확히 일치할 때만 같은 이름으로 `(is_published, sort_order ASC, posted_on DESC NULLS LAST, id DESC)` 인덱스로 교체한다. 기존 콘텐츠 RLS·정책·권한·트리거와 `public-images` 버킷·객체·Storage 정책은 변경하지 않는다.
+
+1. 다른 작업이 없는 새 SQL Editor에서 `supabase/tests/contents_thumbnail_preflight.sql` 전체를 실행한다. 마지막 SQLSTATE P0001의 `CONTENTS_THUMBNAIL_PREFLIGHT_OK`만 성공이며 DETAIL의 baseline JSON을 별도로 보관한다.
+2. `supabase/tests/contents_thumbnail_rollback_check.sql`을 복사한 실행본에서만 `baseline jsonb := null`을 DETAIL 원본으로 바꾸고 전체를 별도로 실행한다. `CONTENTS_THUMBNAIL_ROLLBACK_OK`와 기존 정렬 인덱스 복원을 확인한다. 저장소 원본은 null로 유지한다.
+3. 두 검사가 성공한 뒤에만 마이그레이션을 반영한다. 적용 후 운영 역방향 SQL이 필요하면 롤백 확인 파일 끝의 주석 SQL을 별도로 검토해 사용한다.
+
+`node --test tests/contents-thumbnail-schema.test.mjs`는 본문 동기화·변경 범위·역방향 SQL을 정적으로 확인한다. `node tests/contents-thumbnail-schema.model.mjs`는 준비된 PGlite에서 기존 행 보존, CHECK, 인덱스 교체, 원자적 실패, baseline 롤백을 실행한다. 실제 Storage API·파일 존재·MIME·크기는 검증하지 않는다.
+
 ## 11. 타로샵 상품
 
 마이그레이션은 `supabase/migrations/20261119010000_shop_products_schema.sql`이다. 옵션 없는 단일 실물 상품과 관리자의 수동 공개·품절 설정만 준비한다. 실제 상품·사진·운영용 샘플은 넣지 않으며 주문·장바구니·배송비·결제·재고 수량·자동 차감·SKU는 다음 단계다.

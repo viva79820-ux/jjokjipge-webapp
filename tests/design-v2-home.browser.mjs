@@ -626,16 +626,20 @@ try {
       failedPlaceholder: document.querySelector('[data-home-banner-slide="photo-fail"] [aria-label="상담사 사진 자리"]') ? false : null,
       plainPlaceholder: !!document.querySelector('[data-home-recommend-card="no-photo"] [aria-label="상담사 사진 자리"]'),
       loadedPhoto: !!document.querySelector('[data-home-banner-slide="long-name"] [data-counselor-photo]'),
+      noProductBannerCta: document.querySelector('[data-home-banner-reserve="no-photo"]')?.textContent.trim(),
+      noProductDirectoryCta: document.querySelector('[data-home-list-item="no-photo"] [data-home-booking-unavailable]')?.textContent.trim(),
     };
   })()`);
-  assert.equal(home.index.replace(/\s/g, ""), "1/2");
-  assert.equal(home.slides, 2);
+  assert.equal(home.index.replace(/\s/g, ""), "1/3");
+  assert.equal(home.slides, 3);
   assert.equal(home.fallback, false);
-  assert.equal(home.noPhotoInBanner, false);
+  assert.equal(home.noPhotoInBanner, true);
   assert.equal(home.overlaps, false);
   assert.ok(home.bannerHeight >= 228);
   assert.equal(home.loadedPhoto, true);
   assert.equal(home.plainPlaceholder, true);
+  assert.equal(home.noProductBannerCta, "선생님 소개 보기");
+  assert.equal(home.noProductDirectoryCta, "예약 준비 중");
   assert.deepEqual(home.categories, [
     ["all", "/consult"],
     ["tarot", "/consult?type=tarot"],
@@ -658,7 +662,7 @@ try {
   assert.equal(home.notice, `/notices/${pinnedId}`);
   assert.equal(home.noticeStatus, "ready");
   assert.equal(home.reviews, true);
-  assert.equal(home.footer.includes("쪽집게천사 운명나라"), true);
+  assert.equal(home.footer.includes("쪽집게천사 운세통"), true);
   assert.equal(home.footer.includes("1호점 · 2호점 · 3호점"), true);
   assert.equal(home.footer.includes("[대표자명]"), true);
   assert.equal(home.footer.includes("이용약관"), false);
@@ -748,9 +752,8 @@ try {
       const footer = document.querySelector("[data-home-footer]").getBoundingClientRect();
       const items = [...document.querySelectorAll("[data-home-list-item]")].map((item) => {
         const photo = item.querySelector("a").getBoundingClientRect();
-        const button = item.querySelector('a[href*="/consult/"]');
         const buttons = [...item.querySelectorAll("a")];
-        const reserve = buttons.at(-1).getBoundingClientRect();
+        const reserve = (item.querySelector("[data-home-booking-unavailable]") ?? buttons.at(-1)).getBoundingClientRect();
         const intersects = photo.right > reserve.left + 1 && photo.left < reserve.right && photo.bottom > reserve.top && photo.top < reserve.bottom;
         return intersects;
       });
@@ -969,10 +972,12 @@ try {
     fallback: !!document.querySelector("[data-home-banner-fallback]"),
     index: !!document.querySelector("[data-home-banner-index]"),
     placeholder: document.querySelectorAll('[data-home-recommend] [aria-label="상담사 사진 자리"]').length,
+    bannerPlaceholder: document.querySelectorAll('[data-home-banner] [aria-label="상담사 사진 자리"]').length,
   }))()`);
-  assert.equal(missing.fallback, true);
-  assert.equal(missing.index, false);
+  assert.equal(missing.fallback, false);
+  assert.equal(missing.index, true);
   assert.ok(missing.placeholder >= 1);
+  assert.ok(missing.bannerPlaceholder >= 1);
 
   await setMode("notice-empty");
   await go("/");
