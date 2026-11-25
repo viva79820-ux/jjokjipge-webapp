@@ -16,7 +16,7 @@ const focus =
 
 const textLink = `inline-flex min-h-11 cursor-pointer items-center text-label font-semibold hover:text-brand-deep ${focus}`;
 
-const submitClass = `mt-1 inline-flex h-13 w-full cursor-pointer items-center justify-center rounded-full bg-brand px-4 text-base font-bold text-on-brand disabled:cursor-not-allowed disabled:opacity-50 ${focus}`;
+const submitClass = `inline-flex h-13 w-full cursor-pointer items-center justify-center rounded-full bg-brand px-4 text-base font-bold text-on-brand disabled:cursor-not-allowed disabled:opacity-50 ${focus}`;
 
 export function LoginForm() {
   const [formRef, formResetRef] = useFormResetRef();
@@ -74,7 +74,7 @@ export function LoginForm() {
         noValidate
         aria-busy={pending}
         onSubmit={onSubmit}
-        className="flex flex-col gap-4"
+        className="flex flex-col gap-3"
       >
         <div>
           <EmailField
