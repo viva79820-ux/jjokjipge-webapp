@@ -5,10 +5,12 @@ import { redirect } from "next/navigation";
 import { LogoutForm } from "@/components/member-auth/logout-form";
 import { ReloadRestoredPage } from "@/components/member-auth/navigation-reset";
 import { ReservationHistory } from "@/components/member-auth/reservation-history";
+import { MyReviews } from "@/components/member-auth/my-reviews";
 import { linkClass, noteClass } from "@/components/member-auth/styles";
 import { Button } from "@/components/ui/button";
 import { getAdmin } from "@/lib/admin/auth";
 import { getMemberReservations } from "@/lib/member-auth/reservations";
+import { listMyReviews } from "@/lib/reviews/member-data";
 import { getMember } from "@/lib/member-auth/session";
 import { siteConfig } from "@/lib/site-config";
 import type { Metadata } from "next";
@@ -40,9 +42,13 @@ async function MemberPage({
   await connection();
   const member = await getMember();
   if (!member) redirect("/login");
-  const [admin, reservations] = await Promise.all([
+  const [admin, reservations, reviews] = await Promise.all([
     getAdmin(),
     getMemberReservations(member.id),
+    listMyReviews().then(
+      (rows) => ({ rows, unavailable: false }),
+      () => ({ rows: [], unavailable: true }),
+    ),
   ]);
   const notice = (await searchParams).notice;
   return (
@@ -52,6 +58,16 @@ async function MemberPage({
       {notice === "password" && (
         <p role="status" className="mt-3 text-label font-semibold text-brand">
           비밀번호를 변경했어요.
+        </p>
+      )}
+      {notice === "review-saved" && (
+        <p role="status" className="mt-3 text-label font-semibold text-brand">
+          후기를 저장했어요.
+        </p>
+      )}
+      {notice === "review-deleted" && (
+        <p role="status" className="mt-3 text-label font-semibold text-brand">
+          후기를 삭제했어요.
         </p>
       )}
       <p className={`mt-3 ${noteClass}`}>
@@ -72,7 +88,18 @@ async function MemberPage({
           </dd>
         </div>
       </dl>
-      <ReservationHistory reservations={reservations} />
+      <ReservationHistory
+        reservations={reservations}
+        reviewedReservationIds={
+          new Set(
+            reviews.rows
+              .map((review) => review.reservation_id)
+              .filter((id): id is string => Boolean(id)),
+          )
+        }
+        reviewsReady={!reviews.unavailable}
+      />
+      <MyReviews reviews={reviews.rows} unavailable={reviews.unavailable} />
       {admin ? (
         <div className="mt-5">
           <Button href="/admin" variant="secondary" className="w-full">
