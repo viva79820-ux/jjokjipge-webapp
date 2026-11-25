@@ -68,6 +68,8 @@ test("주문·주문항목은 금액 스냅샷과 다섯 상태를 고정한다"
     /line_total numeric generated always as \(unit_price \* quantity\) stored/,
   );
   assert.match(migration, /total = subtotal \+ shipping_fee/);
+  assert.match(migration, /subtotal <= 6378026431590/);
+  assert.match(migration, /total <= 6380173915237/);
 });
 
 test("서버 전용 RPC가 상품 상태·DB 가격·멱등 키를 원자적으로 처리한다", () => {

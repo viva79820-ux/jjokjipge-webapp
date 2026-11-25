@@ -104,7 +104,7 @@ create table public.orders (
   subtotal numeric not null constraint orders_subtotal_check
     check (
       subtotal >= 1
-      and subtotal <= 6375342077190
+      and subtotal <= 6378026431590
       and subtotal = trunc(subtotal)
     ),
   shipping_fee numeric not null constraint orders_shipping_fee_check
@@ -116,7 +116,7 @@ create table public.orders (
   total numeric not null constraint orders_total_check
     check (
       total = subtotal + shipping_fee
-      and total <= 6377489560837
+      and total <= 6380173915237
       and total = trunc(total)
     ),
   status text not null default 'pending_payment'
