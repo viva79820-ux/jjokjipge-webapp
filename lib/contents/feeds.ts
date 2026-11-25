@@ -14,7 +14,8 @@ type FeedResponse = {
   text: () => Promise<string>;
 };
 
-export function addressKeys(href: string) {
+export function addressKeys(href: string | null) {
+  if (!href) return [];
   let url: URL;
   try {
     url = new URL(href);
@@ -61,7 +62,7 @@ export function parseYoutubeFeed(xml: string) {
       channel: "youtube",
       href,
       thumbnail:
-        attribute(block, "media:thumbnail", "url") ||
+        attribute(block, "media:thumbnail", null, null, "url") ||
         (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : null),
       postedAt,
     });

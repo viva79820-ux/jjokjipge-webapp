@@ -115,6 +115,21 @@ test("채널별 최근 건수만 남긴다", () => {
   );
 });
 
+test("공개 목록은 피드를 섞고 읽기 실패를 오류 화면으로 올리지 않는다", () => {
+  const source = readFileSync("lib/contents/data.ts", "utf8");
+  const fn = source.slice(
+    source.indexOf("export async function publicContentList"),
+    source.indexOf("export async function adminContentList"),
+  );
+  assert.match(fn, /loadExternalContents\(/);
+  assert.match(fn, /mergePublicContents\(/);
+  assert.match(fn, /catch \{/);
+  assert.match(fn, /catalogTotal: merged\.length/);
+  const thumbnail = readFileSync("components/contents/thumbnail.tsx", "utf8");
+  assert.match(thumbnail, /<img/);
+  assert.match(thumbnail, /storage\/v1\/object\/public/);
+});
+
 test("피드를 읽지 못하면 빈 목록을 반환한다", async () => {
   const failed = await readExternalFeed(
     blogFeedUrl,
