@@ -23,6 +23,7 @@ import {
   publicProductDetail,
   publicProductList,
 } from "@/lib/products/data";
+import { appContentSizes, productGridSizes } from "@/lib/images";
 import {
   formatWon,
   pageSize,
@@ -60,6 +61,7 @@ function ProductCard({
           alt={row.image_alt || `${row.name} 사진`}
           missing={!row.image_path}
           variant={admin ? "square" : "strip"}
+          sizes={admin ? appContentSizes : productGridSizes}
         />
         <div className="space-y-2 p-3 @3xl/app:p-4">
           <h2

@@ -81,7 +81,6 @@ export function ContentThumbnail({
         />
       ) : (
         <Image
-          unoptimized
           fill
           src={src}
           alt={alt || ""}
