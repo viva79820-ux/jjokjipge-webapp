@@ -66,6 +66,8 @@ export async function signUp(
       const failure = authFailure(error);
       if (failure === "exists") redirect("/auth/verify");
       if (failure === "rate") return { message: messages.rate };
+      if (failure === "emailNotAuthorized")
+        return { message: messages.emailNotAuthorized };
       if (failure === "weak") return { errors: { password: messages.weak } };
       logAuthFailure("member signup failed", error);
       return { message: messages.unavailable };
@@ -171,6 +173,8 @@ export async function requestPasswordReset(
     if (error) {
       const failure = authFailure(error);
       if (failure === "rate") return { message: messages.rate };
+      if (failure === "emailNotAuthorized")
+        return { message: messages.emailNotAuthorized };
       if (
         failure === "exists" ||
         failure === "credentials" ||

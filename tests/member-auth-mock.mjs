@@ -155,6 +155,33 @@ export function startAuthMock() {
         writes += 1;
         return fail(res, 405, "no_write");
       }
+      if (apiKey === publicKey) {
+        const user = userFromRequest(req);
+        const requestedUser = url.searchParams
+          .get("user_id")
+          ?.replace(/^eq\./, "");
+        if (!user || requestedUser !== user.id) return json(res, []);
+        return json(res, [
+          {
+            id: "33333333-3333-4333-8333-333333333331",
+            reservation_no: "R-20261125-0001",
+            status: "confirmed",
+            product_name: "회원 예약 상담",
+            starts_at: "2026-11-25T03:00:00.000Z",
+            ends_at: "2026-11-25T03:30:00.000Z",
+            counselors: { name: "상담사 A" },
+          },
+          {
+            id: "33333333-3333-4333-8333-333333333332",
+            reservation_no: "R-20261124-0001",
+            status: "completed",
+            product_name: "완료된 회원 상담",
+            starts_at: "2026-11-24T05:00:00.000Z",
+            ends_at: "2026-11-24T05:30:00.000Z",
+            counselors: { name: "상담사 B" },
+          },
+        ]);
+      }
       if (apiKey !== secretKey) return fail(res, 401, "no_authorization");
       const number = url.searchParams.get("reservation_no");
       const email = decodeURIComponent(
@@ -187,8 +214,10 @@ export function startAuthMock() {
         writes += 1;
         return fail(res, 405, "no_write");
       }
-      if (apiKey !== publicKey) return fail(res, 401, "no_authorization");
+      if (apiKey !== publicKey && apiKey !== secretKey)
+        return fail(res, 401, "no_authorization");
       const row = {
+        id: "22222222-2222-4222-8222-222222222222",
         slug: "a",
         name: "상담사 A",
         field: "tarot",
@@ -229,6 +258,24 @@ export function startAuthMock() {
       return json(res, asObject ? row : [row]);
     }
 
+    if (url.pathname === "/rest/v1/consult_products") {
+      if (req.method !== "GET") {
+        writes += 1;
+        return fail(res, 405, "no_write");
+      }
+      if (apiKey !== secretKey) return fail(res, 401, "no_authorization");
+      const row = {
+        id: "11111111-1111-4111-8111-111111111111",
+        counselor_id: "22222222-2222-4222-8222-222222222222",
+        name: "테스트 상담",
+        minutes: 30,
+        price: 10000,
+        is_active: true,
+      };
+      const asObject = String(req.headers.accept ?? "").includes("object+json");
+      return json(res, asObject ? row : [row]);
+    }
+
     if (url.pathname === "/rest/v1/profiles") {
       if (req.method !== "GET") {
         writes += 1;
@@ -238,7 +285,13 @@ export function startAuthMock() {
       const user = userFromRequest(req);
       const id = url.searchParams.get("id");
       if (!user || id !== `eq.${user.id}`) return json(res, []);
-      return json(res, [{ name: user.name, role: user.role ?? "user" }]);
+      return json(res, [
+        {
+          name: user.name,
+          phone: user.phone ?? null,
+          role: user.role ?? "user",
+        },
+      ]);
     }
 
     if (url.pathname === "/rest/v1/member_consents") {
@@ -290,6 +343,7 @@ export function startAuthMock() {
         email,
         password: body.password,
         name: body.data?.name ?? "",
+        phone: "01012345678",
         confirmed: false,
       };
       users.set(email, user);

@@ -304,7 +304,7 @@ const adminAuth = {
   blockClient: false,
 };
 
-function reservationModules(state) {
+function reservationModules(state, session = null) {
   const bookingTime = load("lib/booking-time.ts", {
     "@/lib/booking-config": load("lib/booking-config.ts"),
   });
@@ -324,10 +324,13 @@ function reservationModules(state) {
     "@/lib/supabase/server": {
       createClient: async () => ({
         auth: {
-          getClaims: async () => ({
-            data: null,
-            error: { name: "AuthSessionMissingError" },
-          }),
+          getClaims: async () =>
+            session
+              ? { data: { claims: session }, error: null }
+              : {
+                  data: null,
+                  error: { name: "AuthSessionMissingError" },
+                },
         },
       }),
     },
@@ -598,6 +601,42 @@ test("conflict, lost response, and permission failure do not pretend success", a
   const brokenApi = modules(broken, adminAuth);
   assert.equal((await brokenApi.saveProduct(form())).state, "unknown");
   assert.equal(broken.products[0].name, "테스트 기존상품");
+});
+
+test("member reservations derive user_id from the session and guests stay unlinked", async () => {
+  const memberId = "55555555-5555-4555-8555-555555555555";
+  for (const [session, expectedUserId] of [
+    [null, null],
+    [{ sub: memberId, email: "member@example.invalid" }, memberId],
+  ]) {
+    const state = world();
+    const booking = reservationModules(state, session);
+    const date = booking.bookingTime.bookingDates(new Date()).at(-1);
+    const slot = booking.bookingTime
+      .calculateSlots(date, 30, [], new Date())
+      .find((item) => item.available);
+    const bookingForm = new FormData();
+    for (const [key, value] of Object.entries({
+      name: "테스트손님",
+      phone: "01012345678",
+      email: "member@example.invalid",
+      depositor: "테스트손님",
+      counselorSlug: "test-counselor",
+      productId,
+      startsAt: slot.startsAt,
+      paymentMethod: "bank_transfer",
+      refundConsent: "on",
+      privacyConsent: "on",
+      user_id: "99999999-9999-4999-8999-999999999999",
+    })) {
+      bookingForm.set(key, value);
+    }
+
+    const created = await booking.createReservation(undefined, bookingForm);
+    assert.ok(created.success);
+    assert.equal(state.reservations.length, 1);
+    assert.equal(state.reservations[0].user_id, expectedUserId);
+  }
 });
 
 test("lists by sort order and keeps reservation snapshots", async () => {

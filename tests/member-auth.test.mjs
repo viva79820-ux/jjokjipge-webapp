@@ -560,6 +560,38 @@ test("legal documents keep the approved terms and match signup collection fields
   assert.match(signup, /만 14세 이상/);
 });
 
+test("signup and password reset explain unsupported email delivery", async () => {
+  const expected =
+    "지금은 이 주소로 메일을 보낼 수 없어요. 잠시 후 다시 시도하거나 매장으로 문의해 주세요.";
+  const signup = harness({
+    signUpError: authError("email_address_not_authorized", 403),
+  });
+  try {
+    const result = await settle(signup.signUp({}, signupForm()));
+    assert.equal(result.state.message, expected);
+    assert.equal(JSON.stringify(result.state).includes("raw "), false);
+  } finally {
+    signup.restore();
+  }
+
+  const reset = harness({
+    resetError: authError("email_address_not_authorized", 403),
+  });
+  try {
+    const result = await settle(
+      reset.requestPasswordReset(
+        {},
+        form([["email", "member@example.invalid"]]),
+      ),
+    );
+    assert.equal(result.state.message, expected);
+    assert.equal(result.state.status, undefined);
+    assert.equal(JSON.stringify(result.state).includes("raw "), false);
+  } finally {
+    reset.restore();
+  }
+});
+
 test("signup and recovery prefer the production host over a trusted Vercel alias", async () => {
   const savedHeaders = { ...headerState };
   const vercelEnv = {
