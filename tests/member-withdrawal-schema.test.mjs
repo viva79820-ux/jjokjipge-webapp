@@ -17,7 +17,11 @@ test("사전 검사는 탈퇴 마이그레이션 원문을 그대로 실행한�
   const preflight = read(preflightFile);
 
   assert.equal(
-    between(preflight, "-- BEGIN EXACT MIGRATION\n", "\n-- END EXACT MIGRATION"),
+    between(
+      preflight,
+      "-- BEGIN EXACT MIGRATION\n",
+      "\n-- END EXACT MIGRATION",
+    ),
     migration,
   );
 });
@@ -59,7 +63,10 @@ test("사전 검사와 롤백 확인은 기존 행 원본을 비교한다", () =
   assert.match(rollback, /^--[\s\S]*\nrollback;\n/);
   assert.match(rollback, /baseline jsonb := null;/);
   assert.match(preflight, /MEMBER_WITHDRAWAL_PREFLIGHT_OK/);
-  assert.match(preflight, /검사 예약은 남고 회원 연결만 끊기며 기존 예약 수는 유지/);
+  assert.match(
+    preflight,
+    /검사 예약은 남고 회원 연결만 끊기며 기존 예약 수는 유지/,
+  );
   assert.match(rollback, /MEMBER_WITHDRAWAL_ROLLBACK_OK/);
   assert.doesNotMatch(preflight, /\bcommit\s*;/i);
   assert.doesNotMatch(rollback, /\bcommit\s*;/i);

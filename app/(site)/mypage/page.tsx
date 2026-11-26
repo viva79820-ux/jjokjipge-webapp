@@ -2,12 +2,15 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { InquiryHistory } from "@/components/member-auth/inquiry-history";
 import { LogoutForm } from "@/components/member-auth/logout-form";
 import { ReloadRestoredPage } from "@/components/member-auth/navigation-reset";
+import { ProfileForm } from "@/components/member-auth/profile-form";
 import { ReservationHistory } from "@/components/member-auth/reservation-history";
 import { linkClass, noteClass } from "@/components/member-auth/styles";
 import { Button } from "@/components/ui/button";
 import { getAdmin } from "@/lib/admin/auth";
+import { getMemberInquiries } from "@/lib/member-auth/inquiries";
 import { getMemberReservations } from "@/lib/member-auth/reservations";
 import { getMember } from "@/lib/member-auth/session";
 import { siteConfig } from "@/lib/site-config";
@@ -40,9 +43,10 @@ async function MemberPage({
   await connection();
   const member = await getMember();
   if (!member) redirect("/login");
-  const [admin, reservations] = await Promise.all([
+  const [admin, reservations, inquiries] = await Promise.all([
     getAdmin(),
     getMemberReservations(member.id),
+    getMemberInquiries(member.id),
   ]);
   const notice = (await searchParams).notice;
   return (
@@ -58,13 +62,7 @@ async function MemberPage({
         회원 계정으로 예약한 내역만 보여요. 로그인 전에 남긴 비회원 예약은 예약
         조회에서 확인해 주세요.
       </p>
-      <dl className="mt-5 space-y-4 rounded-card border border-border bg-surface p-3 @3xl/app:p-4">
-        <div>
-          <dt className="text-caption text-muted">이름</dt>
-          <dd className="mt-1 text-subtitle font-bold wrap-anywhere">
-            {member.name ?? "등록된 이름이 없어요."}
-          </dd>
-        </div>
+      <dl className="mt-5 rounded-card border border-border bg-surface p-3 @3xl/app:p-4">
         <div>
           <dt className="text-caption text-muted">이메일</dt>
           <dd className="mt-1 text-subtitle font-bold break-all">
@@ -72,7 +70,9 @@ async function MemberPage({
           </dd>
         </div>
       </dl>
+      <ProfileForm name={member.name ?? ""} phone={member.phone ?? ""} />
       <ReservationHistory reservations={reservations} />
+      <InquiryHistory inquiries={inquiries} />
       {admin ? (
         <div className="mt-5">
           <Button href="/admin" variant="secondary" className="w-full">
@@ -89,6 +89,9 @@ async function MemberPage({
         </Link>
         <Link href="/support/lookup" className={linkClass}>
           문의 조회
+        </Link>
+        <Link href="/mypage/withdraw" className={linkClass}>
+          회원 탈퇴
         </Link>
       </div>
     </section>
