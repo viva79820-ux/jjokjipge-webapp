@@ -1,3 +1,5 @@
+import { normalizePhone } from "@/lib/inquiries/validation";
+
 export type SignupValues = {
   name: string;
   email: string;
@@ -25,6 +27,13 @@ export type PasswordChangeValues = {
   password: string;
   passwordConfirm: string;
 };
+
+export type ProfileValues = {
+  name: string;
+  phone: string;
+};
+
+export type ProfileErrors = Partial<Record<keyof ProfileValues, string>>;
 
 const invalidInput = "입력한 내용을 확인해 주세요.";
 
@@ -170,5 +179,32 @@ export function validatePasswordChange(values: PasswordChangeValues) {
   if (passwordError) errors.password = passwordError;
   else if (values.password !== values.passwordConfirm)
     errors.passwordConfirm = "비밀번호 확인이 일치하지 않아요.";
+  return errors;
+}
+
+export const profileRoleMessage = "회원 등급은 변경할 수 없어요.";
+export const profilePhoneMessage =
+  "010으로 시작하는 휴대폰 번호 11자리를 입력해 주세요.";
+
+export function readProfile(form: FormData) {
+  const name = readText(form, "name");
+  const phone = readText(form, "phone");
+  if (name === null || phone === null) return { message: invalidInput };
+  if (form.getAll("role").length > 0) return { message: profileRoleMessage };
+  return { values: { name, phone } };
+}
+
+export function profilePhone(value: string) {
+  const phone = value.trim();
+  if (!phone) return null;
+  return normalizePhone(phone);
+}
+
+export function validateProfile(values: ProfileValues) {
+  const errors: ProfileErrors = {};
+  const nameError = validateName(values.name);
+  if (nameError) errors.name = nameError;
+  if (values.phone.trim() && !profilePhone(values.phone))
+    errors.phone = profilePhoneMessage;
   return errors;
 }

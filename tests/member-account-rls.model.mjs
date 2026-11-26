@@ -248,9 +248,7 @@ try {
       `update public.profiles set name = '가로챈 이름' where id = '${memberB}'`,
     );
     return (
-      await db.query(
-        `select name from public.profiles where id = '${memberB}'`,
-      )
+      await db.query(`select name from public.profiles where id = '${memberB}'`)
     ).rows;
   });
   assert.deepEqual(blockedProfile, []);
@@ -282,13 +280,19 @@ try {
   await db.exec("reset role");
 
   assert.equal(
-    (await db.query(`select count(*)::int as count from auth.users where id = '${memberA}'`))
-      .rows[0].count,
+    (
+      await db.query(
+        `select count(*)::int as count from auth.users where id = '${memberA}'`,
+      )
+    ).rows[0].count,
     0,
   );
   assert.equal(
-    (await db.query(`select count(*)::int as count from public.profiles where id = '${memberA}'`))
-      .rows[0].count,
+    (
+      await db.query(
+        `select count(*)::int as count from public.profiles where id = '${memberA}'`,
+      )
+    ).rows[0].count,
     0,
   );
   assert.deepEqual(
@@ -339,8 +343,11 @@ try {
     [{ reservation_no: "R-20261125-0002", user_id: memberB }],
   );
   assert.equal(
-    (await db.query(`select count(*)::int as count from auth.users where id = '${memberB}'`))
-      .rows[0].count,
+    (
+      await db.query(
+        `select count(*)::int as count from auth.users where id = '${memberB}'`,
+      )
+    ).rows[0].count,
     1,
   );
   await db.exec("rollback");

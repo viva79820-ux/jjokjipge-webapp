@@ -2,14 +2,17 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { InquiryHistory } from "@/components/member-auth/inquiry-history";
 import { LogoutForm } from "@/components/member-auth/logout-form";
 import { ReloadRestoredPage } from "@/components/member-auth/navigation-reset";
 import { OrderHistory } from "@/components/member-auth/order-history";
+import { ProfileForm } from "@/components/member-auth/profile-form";
 import { ReservationHistory } from "@/components/member-auth/reservation-history";
 import { MyReviews } from "@/components/member-auth/my-reviews";
 import { linkClass, noteClass } from "@/components/member-auth/styles";
 import { Button } from "@/components/ui/button";
 import { getAdmin } from "@/lib/admin/auth";
+import { getMemberInquiries } from "@/lib/member-auth/inquiries";
 import { getMemberOrders } from "@/lib/member-auth/orders";
 import { getMemberReservations } from "@/lib/member-auth/reservations";
 import { listMyReviews } from "@/lib/reviews/member-data";
@@ -45,7 +48,7 @@ async function MemberPage({
   await connection();
   const member = await getMember();
   if (!member) redirect("/login");
-  const [admin, orders, reservations, reviews] = await Promise.all([
+  const [admin, orders, reservations, reviews, inquiries] = await Promise.all([
     getAdmin(),
     getMemberOrders(member.id),
     getMemberReservations(member.id),
@@ -53,6 +56,7 @@ async function MemberPage({
       (rows) => ({ rows, unavailable: false }),
       () => ({ rows: [], unavailable: true }),
     ),
+    getMemberInquiries(member.id),
   ]);
   const notice = (await searchParams).notice;
   const reviewedReservationIds = new Set(
@@ -114,6 +118,8 @@ async function MemberPage({
         writableCount={writableCount}
       />
       <OrderHistory orders={orders} />
+      <InquiryHistory inquiries={inquiries} />
+      <ProfileForm name={member.name ?? ""} phone={member.phone ?? ""} />
       {admin ? (
         <div className="mt-5">
           <Button href="/admin" variant="secondary" className="w-full">
@@ -133,6 +139,9 @@ async function MemberPage({
         </Link>
         <Link href="/support/lookup" className={linkClass}>
           문의 조회
+        </Link>
+        <Link href="/mypage/withdraw" className={linkClass}>
+          회원 탈퇴
         </Link>
       </div>
     </section>

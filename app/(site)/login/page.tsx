@@ -27,7 +27,10 @@ const guestLink = `inline-flex h-11 w-full min-w-0 cursor-pointer items-center j
 export default function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string | string[] }>;
+  searchParams: Promise<{
+    next?: string | string[];
+    notice?: string | string[];
+  }>;
 }) {
   return (
     <>
@@ -48,14 +51,29 @@ export default function Page({
 async function LoginContent({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string | string[] }>;
+  searchParams: Promise<{
+    next?: string | string[];
+    notice?: string | string[];
+  }>;
 }) {
   await connection();
-  const requested = (await searchParams).next;
-  const next = safeNext(Array.isArray(requested) ? null : requested, "/mypage");
+  const params = await searchParams;
+  const next = safeNext(
+    Array.isArray(params.next) ? null : params.next,
+    "/mypage",
+  );
+  const notice = params.notice;
   if (await getMember()) redirect(next);
   return (
     <AuthScreenMain className="gap-4 pt-4">
+      {notice === "withdrawn" && (
+        <p
+          role="status"
+          className="text-label font-semibold wrap-anywhere text-brand"
+        >
+          탈퇴가 완료되었어요. 이 계정으로는 다시 로그인할 수 없어요.
+        </p>
+      )}
       <div className="flex flex-col items-center gap-1.5 text-center">
         <Image
           src="/images/brand/logo-angel-mark.png"

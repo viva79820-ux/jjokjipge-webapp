@@ -73,6 +73,7 @@ export function startAuthMock() {
   const refreshes = new Map();
   const requests = [];
   const unexpected = [];
+  const preserved = [];
   let latest = null;
   let delayMs = 0;
   let signupMode = "ok";
@@ -147,6 +148,38 @@ export function startAuthMock() {
       if (!user) return json(res, { ok: false });
       user.role = body.role === "admin" ? "admin" : "user";
       return json(res, { ok: true, role: user.role });
+    }
+    if (url.pathname === "/__test/seed" && req.method === "POST") {
+      const body = await readBody(req);
+      const email = String(body.email ?? "");
+      const user = {
+        id: typeof body.id === "string" ? body.id : randomUUID(),
+        email,
+        password: String(body.password ?? ""),
+        name: typeof body.name === "string" ? body.name : "테스트",
+        phone: typeof body.phone === "string" ? body.phone : null,
+        confirmed: true,
+        role: "user",
+        inquiries: Array.isArray(body.inquiries) ? body.inquiries : [],
+      };
+      users.set(email, user);
+      usersById.set(user.id, user);
+      preserved.push({
+        email,
+        reservation_no: "R-20261125-0001",
+        user_id: user.id,
+      });
+      return json(res, { id: user.id });
+    }
+    if (url.pathname === "/__test/account") {
+      return json(res, {
+        users: [...users.values()].map((user) => ({
+          email: user.email,
+          name: user.name,
+          phone: user.phone,
+        })),
+        preserved,
+      });
     }
 
     const apiKey = req.headers.apikey;
@@ -277,6 +310,26 @@ export function startAuthMock() {
     }
 
     if (url.pathname === "/rest/v1/profiles") {
+      if (req.method === "PATCH") {
+        if (apiKey !== publicKey) return fail(res, 401, "no_authorization");
+        const body = await readBody(req);
+        const user = userFromRequest(req);
+        const id = url.searchParams.get("id")?.replace(/^eq\./, "");
+        const keys = Object.keys(body);
+        if (!user || id !== user.id) return json(res, []);
+        if (keys.some((key) => key !== "name" && key !== "phone")) {
+          writes += 1;
+          return fail(res, 403, "column_privilege");
+        }
+        if (typeof body.name === "string") user.name = body.name;
+        user.phone = typeof body.phone === "string" ? body.phone : null;
+        requests.push({ kind: "profile-update", keys });
+        const row = { id: user.id, name: user.name, phone: user.phone };
+        const asObject = String(req.headers.accept ?? "").includes(
+          "object+json",
+        );
+        return json(res, asObject ? row : [row]);
+      }
       if (req.method !== "GET") {
         writes += 1;
         return fail(res, 405, "no_write");
@@ -292,6 +345,87 @@ export function startAuthMock() {
           role: user.role ?? "user",
         },
       ]);
+    }
+
+    if (url.pathname === "/rest/v1/inquiries") {
+      if (req.method !== "GET" && req.method !== "HEAD") {
+        writes += 1;
+        return fail(res, 405, "no_write");
+      }
+      if (apiKey !== publicKey) return fail(res, 401, "no_authorization");
+      const user = userFromRequest(req);
+      const requested = url.searchParams.get("user_id")?.replace(/^eq\./, "");
+      if (!user || requested !== user.id) return json(res, []);
+      return json(res, user.inquiries ?? []);
+    }
+
+    if (url.pathname === "/rest/v1/orders") {
+      if (req.method !== "GET" && req.method !== "HEAD") {
+        writes += 1;
+        return fail(res, 405, "no_write");
+      }
+      if (apiKey !== publicKey) return fail(res, 401, "no_authorization");
+      const user = userFromRequest(req);
+      const requested = url.searchParams.get("user_id")?.replace(/^eq\./, "");
+      if (!user || requested !== user.id) return json(res, []);
+      return json(res, [
+        {
+          id: "44444444-4444-4444-8444-444444444441",
+          user_id: user.id,
+          order_no: "O-20261126-0001",
+          created_at: "2026-11-26T00:01:00.000Z",
+          status: "pending_payment",
+          total: 12000,
+          order_items: [
+            { line_no: 1, product_name: "테스트 카드", quantity: 1 },
+          ],
+        },
+      ]);
+    }
+
+    if (
+      req.method === "POST" &&
+      url.pathname === "/rest/v1/rpc/list_my_reviews"
+    ) {
+      if (apiKey !== publicKey) return fail(res, 401, "no_authorization");
+      if (!userFromRequest(req)) return fail(res, 401, "session_not_found");
+      return json(res, [
+        {
+          id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          reservation_id: "66666666-6666-4666-8666-666666666666",
+          counselor_id: "22222222-2222-4222-8222-222222222222",
+          counselor_name: "상담사 B",
+          rating: 4,
+          body: "상담 내용을 짧게 남긴 비공개 후기입니다.",
+          is_published: false,
+          publish_consent: true,
+          hidden_by_admin: false,
+          created_at: "2026-11-24T15:00:00.000Z",
+          updated_at: "2026-11-24T15:10:00.000Z",
+        },
+      ]);
+    }
+
+    if (
+      req.method === "POST" &&
+      url.pathname === "/rest/v1/rpc/delete_own_account"
+    ) {
+      if (apiKey !== publicKey) return fail(res, 401, "no_authorization");
+      const user = userFromRequest(req);
+      if (!user) return fail(res, 401, "session_not_found");
+      for (const record of preserved) {
+        if (record.email === user.email) record.user_id = null;
+      }
+      users.delete(user.email);
+      usersById.delete(user.id);
+      for (const [token, id] of sessions) {
+        if (id === user.id) sessions.delete(token);
+      }
+      for (const [token, id] of refreshes) {
+        if (id === user.id) refreshes.delete(token);
+      }
+      requests.push({ kind: "withdraw", email: user.email });
+      return json(res, null);
     }
 
     if (url.pathname === "/rest/v1/member_consents") {
