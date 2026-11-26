@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import type { Store } from "@/lib/data/stores";
 import { InteriorGallery } from "./interior-gallery";
 import { StorePriceTable } from "./price-table";
 import {
-  resolveStoreSelection,
+  resolveStoreLocation,
   storeQueryKey,
   storeSelectionHref,
+  storeSlugFromHash,
 } from "./present";
 import { StoreCard } from "./store-card";
 
@@ -26,9 +27,12 @@ export function StorePriceHash() {
     const reveal = () => {
       if (window.location.hash !== "#store-prices") return;
       const target = document.getElementById("store-prices");
+      const header = document.querySelector("[data-site-header]");
       if (!target) return;
+      const limit = header?.getBoundingClientRect().bottom ?? 0;
       const top = target.getBoundingClientRect().top;
-      if (top > 120 || top < -40) target.scrollIntoView({ block: "start" });
+      if (top > limit + 12 || top < limit - 4)
+        target.scrollIntoView({ block: "start" });
     };
     reveal();
     const timer = window.setInterval(() => {
@@ -43,18 +47,46 @@ export function StorePriceHash() {
 
 export function StoreBoard({ entries }: { entries: StoreEntry[] }) {
   const searchParams = useSearchParams();
+  const [hash, setHash] = useState("");
   const values = searchParams.getAll(storeQueryKey);
   const stores = entries.map((entry) => entry.store);
-  const selection = resolveStoreSelection(stores, values);
+  const selection = resolveStoreLocation(stores, values, hash);
   const selected =
     entries.find((entry) => entry.store.id === selection.store?.id) ?? null;
+
+  useEffect(() => {
+    const sync = () => setHash(window.location.hash);
+    sync();
+    window.addEventListener("hashchange", sync);
+    window.addEventListener("popstate", sync);
+    return () => {
+      window.removeEventListener("hashchange", sync);
+      window.removeEventListener("popstate", sync);
+    };
+  }, []);
+
+  useEffect(() => {
+    const slug = storeSlugFromHash(hash);
+    if (!slug || selected?.store.id !== slug) return;
+    document.getElementById(`store-${slug}`)?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }, [hash, selected?.store.id]);
 
   function selectStore(id: string) {
     const href = storeSelectionHref(window.location.href, id);
     const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    if (href === current) return;
+    if (href === current) {
+      document.getElementById(`store-${id}`)?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+      return;
+    }
     // Next가 이 호출로 주소와 useSearchParams를 맞춘다.
     window.history.pushState(null, "", href);
+    setHash(`#store-${id}`);
   }
 
   return (
@@ -77,12 +109,14 @@ export function StoreBoard({ entries }: { entries: StoreEntry[] }) {
           </li>
         ))}
       </ul>
-      <section
-        id="store-detail"
-        className="flex min-w-0 scroll-mt-6 flex-col gap-4"
-      >
+      <section id="store-detail" className="flex min-w-0 flex-col gap-4">
         {selected ? (
-          <SelectedStore entry={selected} />
+          <div
+            id={`store-${selected.store.id}`}
+            className="flex scroll-mt-site-header flex-col gap-4"
+          >
+            <SelectedStore entry={selected} />
+          </div>
         ) : (
           <StoreChoicePrompt
             entries={entries}
@@ -138,7 +172,7 @@ function StoreChoicePrompt({
   return (
     <div
       id="store-prices"
-      className="flex scroll-mt-6 flex-col gap-3 rounded-card border border-border bg-surface p-4"
+      className="flex scroll-mt-site-header flex-col gap-3 rounded-card border border-border bg-surface p-4"
     >
       <h2 id="store-prices-title" className="text-title font-bold">
         사진과 참고 가격

@@ -263,6 +263,25 @@ try {
     );
     if (applied !== true) throw new Error(`입력하지 못했습니다: ${name}`);
   }
+  async function replace(name, value, expected = value) {
+    const selector = JSON.stringify(`[name="${name}"]`);
+    await until(
+      async () => evaluate(`Boolean(document.querySelector(${selector}))`),
+      name,
+    );
+    await evaluate(`(() => {
+      const field = document.querySelector(${selector});
+      field.focus();
+      field.select();
+    })()`);
+    await cdp("Input.insertText", { text: value });
+    await until(
+      async () =>
+        (await evaluate(`document.querySelector(${selector}).value`)) ===
+        expected,
+      `${name} 수정`,
+    );
+  }
   async function shot(name) {
     const image = await cdp("Page.captureScreenshot", { format: "png" });
     writeFileSync(join(shotDir, name), Buffer.from(image.data, "base64"));
@@ -527,6 +546,14 @@ try {
   assert.match(await evaluate("location.pathname"), /^\/mypage$/);
   assert.match(await textOf(), /MY/);
   assert.equal((await textOf()).includes(password), false);
+  await waitText("예약·상담 내역");
+  await waitText("회원 예약 상담");
+  const mypageText = await textOf();
+  assert.match(mypageText, /예약 확정/);
+  assert.match(mypageText, /상담 완료/);
+  assert.match(mypageText, /상담사 A 선생님/);
+  assert.match(mypageText, /회원 예약 상담/);
+  assert.match(mypageText, /2026년 11월 25일/);
 
   await assertWidths("mypage", {
     tabs: true,
@@ -538,6 +565,49 @@ try {
   const memberDetail = await textOf();
   assert.equal(memberDetail.includes(nameA), false);
   await assertWidths("consult-member", { tabs: false });
+
+  await goto("/consult/a/book?product=11111111-1111-4111-8111-111111111111");
+  await waitText("전화상담 예약");
+  assert.deepEqual(
+    await evaluate(`(() => {
+      const value = (name) =>
+        document.querySelector(\`[name="\${name}"]\`)?.value ?? null;
+      return {
+        name: value("name"),
+        phone: value("phone"),
+        email: value("email"),
+      };
+    })()`),
+    {
+      name: nameA,
+      phone: "010-1234-5678",
+      email: emailA,
+    },
+  );
+  await replace("name", nameB);
+  await replace("phone", "01099998888", "010-9999-8888");
+  await replace("email", emailB);
+  assert.deepEqual(
+    await evaluate(`(() => {
+      const value = (name) =>
+        document.querySelector(\`[name="\${name}"]\`)?.value ?? null;
+      return {
+        name: value("name"),
+        phone: value("phone"),
+        email: value("email"),
+      };
+    })()`),
+    {
+      name: nameB,
+      phone: "010-9999-8888",
+      email: emailB,
+    },
+  );
+  await assertWidths("member-booking", {
+    tabs: true,
+    labels: loggedInLabels,
+    account: "/mypage",
+  });
 
   const used = await (await fetch(`${mock.url}/__test/latest`)).json();
   await goto(
