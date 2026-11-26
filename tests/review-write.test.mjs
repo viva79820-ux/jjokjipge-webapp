@@ -310,11 +310,54 @@ test("화면은 완료 예약에서 후기를 쓰고 공개 이름은 가린다"
   const card = read("../components/reviews/card.tsx");
   const actions = read("../lib/reviews/member-actions.ts");
   assert.match(history, /후기 쓰기/);
-  assert.match(history, /status === "completed"/);
+  assert.match(history, /canWriteReview/);
+  assert.match(
+    read("../lib/reviews/member-rules.ts"),
+    /status === "completed"/,
+  );
   assert.match(mypage, /내 후기|MyReviews/);
   assert.match(reviews, /관리자에 의해 숨겨짐|reviewVisibilityLabel/);
   assert.match(reviews, /작성일/);
   assert.match(reviews, /공개 여부/);
   assert.match(card, /maskReviewAuthor/);
   assert.doesNotMatch(actions, /SUPABASE_SECRET_KEY|createAdminClient/);
+});
+
+test("후기 쓰기 진입은 목록과 빈 마이페이지에서 찾을 수 있다", () => {
+  assert.equal(rules.reviewWriteHref(true), "/mypage/reviews/new");
+  assert.equal(
+    rules.reviewWriteHref(false),
+    "/login?next=%2Fmypage%2Freviews%2Fnew",
+  );
+  assert.equal(
+    rules.canWriteReview({ id: "a", status: "completed" }, new Set()),
+    true,
+  );
+  assert.equal(
+    rules.canWriteReview({ id: "a", status: "completed" }, new Set(["a"])),
+    false,
+  );
+  assert.equal(
+    rules.canWriteReview({ id: "a", status: "pending_payment" }, new Set()),
+    false,
+  );
+  assert.equal(
+    rules.noWritableReviewMessage,
+    "상담이 완료되면 후기를 남길 수 있어요.",
+  );
+  const publicPage = read("../components/reviews/public-page.tsx");
+  const myReviews = read("../components/member-auth/my-reviews.tsx");
+  const entry = read("../app/(site)/mypage/reviews/new/page.tsx");
+  const login = read("../app/(site)/login/page.tsx");
+  const loginForm = read("../components/member-auth/login-form.tsx");
+  assert.match(publicPage, /운세통 후기/);
+  assert.match(publicPage, /후기 쓰기/);
+  assert.match(publicPage, /reviewWriteHref/);
+  assert.match(myReviews, /작성한 후기가 없어요/);
+  assert.match(myReviews, /후기 쓰기/);
+  assert.match(myReviews, /noWritableReviewMessage/);
+  assert.match(entry, /reviewWriteHref\(false\)/);
+  assert.match(entry, /canWriteReview/);
+  assert.match(login, /safeNext/);
+  assert.match(loginForm, /name="next"/);
 });

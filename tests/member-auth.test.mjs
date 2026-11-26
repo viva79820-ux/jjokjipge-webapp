@@ -1014,6 +1014,17 @@ test("callback and redirect allow only trusted origins and internal paths", asyn
     assert.equal(redirect.safeNext("/\\admin", "/mypage"), "/mypage");
     assert.equal(redirect.safeNext("/mypage", "/login"), "/mypage");
     assert.equal(
+      redirect.safeNext("/mypage/reviews/new", "/mypage"),
+      "/mypage/reviews/new",
+    );
+    assert.equal(
+      redirect.safeNext(
+        "/mypage/reviews/new/11111111-1111-4111-8111-111111111111",
+        "/mypage",
+      ),
+      "/mypage",
+    );
+    assert.equal(
       redirect.safeNext("/auth/update-password", "/mypage"),
       "/auth/update-password",
     );

@@ -13,6 +13,7 @@ import { getAdmin } from "@/lib/admin/auth";
 import { getMemberOrders } from "@/lib/member-auth/orders";
 import { getMemberReservations } from "@/lib/member-auth/reservations";
 import { listMyReviews } from "@/lib/reviews/member-data";
+import { canWriteReview } from "@/lib/reviews/member-rules";
 import { getMember } from "@/lib/member-auth/session";
 import { siteConfig } from "@/lib/site-config";
 import type { Metadata } from "next";
@@ -54,6 +55,16 @@ async function MemberPage({
     ),
   ]);
   const notice = (await searchParams).notice;
+  const reviewedReservationIds = new Set(
+    reviews.rows
+      .map((review) => review.reservation_id)
+      .filter((id): id is string => Boolean(id)),
+  );
+  const writableCount = reviews.unavailable
+    ? 0
+    : reservations.filter((reservation) =>
+        canWriteReview(reservation, reviewedReservationIds),
+      ).length;
   return (
     <section key={member.id} className="mx-auto w-full max-w-md min-w-0">
       <ReloadRestoredPage />
@@ -94,16 +105,14 @@ async function MemberPage({
       </dl>
       <ReservationHistory
         reservations={reservations}
-        reviewedReservationIds={
-          new Set(
-            reviews.rows
-              .map((review) => review.reservation_id)
-              .filter((id): id is string => Boolean(id)),
-          )
-        }
+        reviewedReservationIds={reviewedReservationIds}
         reviewsReady={!reviews.unavailable}
       />
-      <MyReviews reviews={reviews.rows} unavailable={reviews.unavailable} />
+      <MyReviews
+        reviews={reviews.rows}
+        unavailable={reviews.unavailable}
+        writableCount={writableCount}
+      />
       <OrderHistory orders={orders} />
       {admin ? (
         <div className="mt-5">

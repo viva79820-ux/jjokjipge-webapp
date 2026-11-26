@@ -2,6 +2,7 @@ import { StatusBadge } from "@/components/booking-lookup/status-badge";
 import { Button } from "@/components/ui/button";
 import { counselorHeading } from "@/lib/counselors/rules";
 import type { MemberReservation } from "@/lib/member-auth/reservations";
+import { canWriteReview } from "@/lib/reviews/member-rules";
 import { formatSchedule } from "@/lib/reservations/lookup/display";
 
 export function ReservationHistory({
@@ -38,8 +39,7 @@ export function ReservationHistory({
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <StatusBadge status={reservation.status} />
                     {reviewsReady &&
-                    reservation.status === "completed" &&
-                    !reviewedReservationIds.has(reservation.id) ? (
+                    canWriteReview(reservation, reviewedReservationIds) ? (
                       <Button href={`/mypage/reviews/new/${reservation.id}`}>
                         후기 쓰기
                       </Button>

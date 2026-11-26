@@ -37,6 +37,26 @@ const eligibilityMessage: Record<
   invalid: "후기를 저장하지 못했어요. 예약 정보를 확인해 주세요.",
 };
 
+export const reviewWritePath = "/mypage/reviews/new";
+
+export const noWritableReviewMessage =
+  "상담이 완료되면 후기를 남길 수 있어요.";
+
+export function reviewWriteHref(loggedIn: boolean) {
+  if (loggedIn) return reviewWritePath;
+  return `/login?next=${encodeURIComponent(reviewWritePath)}`;
+}
+
+export function canWriteReview(
+  reservation: { id: string; status: string },
+  reviewedReservationIds: ReadonlySet<string>,
+) {
+  return (
+    reservation.status === "completed" &&
+    !reviewedReservationIds.has(reservation.id)
+  );
+}
+
 export function reviewEligibilityMessage(result: ReviewEligibility) {
   if (result === "eligible") return "";
   return eligibilityMessage[result];

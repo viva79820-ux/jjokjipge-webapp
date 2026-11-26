@@ -14,6 +14,7 @@ const localOrigins = [
 const allowedNext = new Set([
   "/login",
   "/mypage",
+  "/mypage/reviews/new",
   "/auth/update-password",
   "/auth/verify",
 ]);
