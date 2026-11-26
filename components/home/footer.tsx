@@ -24,9 +24,9 @@ export function HomeFooter() {
       <nav aria-label="법적 고지">
         <Link
           href="/terms"
-          className="inline-flex min-h-11 cursor-pointer items-center font-bold text-foreground underline underline-offset-2"
+          className="-mx-[1.5px] inline-flex min-h-11 min-w-11 cursor-pointer items-center justify-center font-bold text-foreground"
         >
-          이용약관
+          <span className="underline underline-offset-2">이용약관</span>
         </Link>
       </nav>
       <p className="wrap-anywhere">
