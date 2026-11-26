@@ -32,6 +32,7 @@ type Props = {
   calendars: Record<string, { date: string; slots: Slot[] }[]>;
   initialProductId: string;
   initialDate: string;
+  initialContact?: Pick<ContactValues, "name" | "phone" | "email">;
 };
 const inputClass =
   "mt-1 min-h-11 w-full rounded-input border bg-surface px-3 text-body";
@@ -42,6 +43,7 @@ export function BookingForm({
   calendars,
   initialProductId,
   initialDate,
+  initialContact,
 }: Props) {
   const router = useRouter();
   const [productId, setProductId] = useState(initialProductId);
@@ -68,9 +70,9 @@ export function BookingForm({
     {},
   );
   const [contact, setContact] = useState<ContactValues>({
-    name: "",
-    phone: "",
-    email: "",
+    name: initialContact?.name ?? "",
+    phone: initialContact?.phone ?? "",
+    email: initialContact?.email ?? "",
     depositor: "",
   });
   const [sameDepositor, setSameDepositor] = useState(true);

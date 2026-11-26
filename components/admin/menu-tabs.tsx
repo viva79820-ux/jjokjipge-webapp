@@ -8,6 +8,7 @@ const menus = [
   ["대시보드", "/admin"],
   ["예약 관리", "/admin/reservations"],
   ["주문 관리", "/admin/orders"],
+  ["후기", "/admin/reviews"],
   ["고객센터", "/admin/support"],
   ["공지사항", "/admin/notices"],
   ["클래스", "/admin/classes"],
