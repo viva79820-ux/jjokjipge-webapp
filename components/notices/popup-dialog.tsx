@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { publicImageUrl, type NoticePopup } from "@/lib/notices/rules";
+import { noticePopupSizes } from "@/lib/images";
 import {
   noticePopupHidden,
   popupChangeEvent,
@@ -153,9 +154,9 @@ export function NoticePopupDialog({ notice }: { notice: NoticePopup | null }) {
               <p role="status">이미지를 불러오지 못했습니다.</p>
             ) : (
               <Image
-                unoptimized
                 width={1200}
                 height={1200}
+                sizes={noticePopupSizes}
                 src={src}
                 alt={notice.image_alt || "공지 이미지"}
                 onError={() => setFailed(true)}

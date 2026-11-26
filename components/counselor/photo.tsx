@@ -26,7 +26,6 @@ export function CounselorPhoto({
       data-counselor-photo-frame
     >
       <Image
-        unoptimized
         fill
         src={src}
         alt={alt}

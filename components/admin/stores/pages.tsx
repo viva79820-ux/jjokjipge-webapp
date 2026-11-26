@@ -118,7 +118,7 @@ export async function StoreAdminListPage({
             <StorePhoto
               src={publicImageUrl(store.image_path)}
               alt={`${store.name} 사진`}
-              sizes="144px"
+              sizes="(min-width: 640px) 144px, calc(100vw - 64px)"
               className="w-full sm:w-36 sm:shrink-0"
             />
             <div className="min-w-0 flex-1 space-y-1">

@@ -6,6 +6,7 @@ import { createHmac } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { browser, server, stop, until } from "./notices-browser-tools.mjs";
+import { rasterPng } from "./raster-png.mjs";
 
 const uid = "11111111-1111-4111-8111-111111111111";
 const sharedPhoto = "stores/cccccccc-cccc-4ccc-8ccc-cccccccccccc.png";
@@ -344,10 +345,9 @@ async function handle(req, res) {
         return;
       }
       if (dimensions) {
-        res.setHeader("Content-Type", "image/svg+xml");
-        res.end(
-          `<svg xmlns="http://www.w3.org/2000/svg" width="${dimensions.width}" height="${dimensions.height}"></svg>`,
-        );
+        res.setHeader("Content-Type", "image/png");
+        res.setHeader("Cache-Control", "no-store");
+        res.end(rasterPng(dimensions.width, dimensions.height));
         return;
       }
       res.setHeader("Content-Type", "image/png");
@@ -935,7 +935,7 @@ try {
   await until(
     () =>
       page.evaluate(
-        `document.querySelector('[data-store-slug="store-b"] [data-store-photo]')?.naturalWidth===160`,
+        `(()=>{const image=document.querySelector('[data-store-slug="store-b"] [data-store-photo]');return !!image&&image.complete&&image.naturalWidth===132&&image.naturalHeight===74&&image.src.includes('/_next/image')})()`,
       ),
     "store photo",
   );

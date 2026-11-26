@@ -39,7 +39,6 @@ export function StorePhoto({
   return (
     <div className={frame} data-store-photo-frame>
       <Image
-        unoptimized
         fill
         src={src}
         alt={alt}

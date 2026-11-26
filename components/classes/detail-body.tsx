@@ -13,6 +13,7 @@ import {
   publicPosterUrl,
   type PublicClassDetail,
 } from "@/lib/classes/rules";
+import { appFrameSizes } from "@/lib/images";
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   if (!value) return null;
@@ -126,6 +127,7 @@ export function ClassDetailBody({ row }: { row: PublicClassDetail }) {
         src={poster}
         alt={row.poster_alt || `${row.title} 포스터`}
         fit="contain"
+        sizes={appFrameSizes}
       />
       <div className="space-y-7 px-4 @3xl/app:px-6">
         <header className="space-y-3">

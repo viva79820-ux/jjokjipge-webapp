@@ -60,7 +60,6 @@ export function ContentThumbnail({
   return (
     <span className="relative h-21 w-28 shrink-0 overflow-hidden rounded-input bg-brand-soft">
       <Image
-        unoptimized
         fill
         src={src}
         alt={alt || ""}

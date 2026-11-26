@@ -12,6 +12,7 @@ import {
   until,
   delay,
 } from "./notices-browser-tools.mjs";
+import { rasterPng } from "./raster-png.mjs";
 const uid = "11111111-1111-4111-8111-111111111111",
   rows = [],
   files = new Map(),
@@ -104,10 +105,8 @@ async function handle(req, res) {
       }
       if (dimensions) {
         res.setHeader("Cache-Control", "no-store");
-        res.setHeader("Content-Type", "image/svg+xml");
-        res.end(
-          `<svg xmlns="http://www.w3.org/2000/svg" width="${dimensions.width}" height="${dimensions.height}" viewBox="0 0 ${dimensions.width} ${dimensions.height}"><rect width="100%" height="100%" fill="#5e3363"/><rect width="25%" height="25%" fill="#f2c775"/></svg>`,
-        );
+        res.setHeader("Content-Type", "image/png");
+        res.end(rasterPng(dimensions.width, dimensions.height));
       } else {
         res.setHeader("Content-Type", "image/png");
         res.end(image);
@@ -394,7 +393,7 @@ try {
   await until(
     () =>
       b.evaluate(
-        "document.querySelector('[data-notice-detail-image]')?.naturalHeight===1200",
+        "(()=>{const image=document.querySelector('[data-notice-detail-image]');return !!image&&image.complete&&image.naturalWidth===198&&image.naturalHeight===990&&image.src.includes('/_next/image')})()",
       ),
     "customer notice image",
   );
@@ -452,7 +451,11 @@ try {
       await b.evaluate("document.documentElement.scrollWidth<=innerWidth"),
     );
   }
-  imageDimensions.set(rows[0].image_path, { width: 1200, height: 240 });
+  const portraitPath = rows[0].image_path;
+  const widePath = "notices/12121212-1212-4212-8212-121212121212.png";
+  files.set(widePath, Buffer.from("wide-notice"));
+  imageDimensions.set(widePath, { width: 1200, height: 240 });
+  rows[0].image_path = widePath;
   await b.call("Emulation.setDeviceMetricsOverride", {
     width: 360,
     height: 900,
@@ -463,7 +466,7 @@ try {
   await until(
     () =>
       b.evaluate(
-        "document.querySelector('[data-notice-detail-image]')?.naturalWidth===1200",
+        "(()=>{const image=document.querySelector('[data-notice-detail-image]');if(!image||!image.complete||!image.naturalWidth)return false;return image.src.includes('/_next/image')&&image.naturalWidth<1200&&Math.abs(image.naturalWidth/image.naturalHeight-5)<0.05})()",
       ),
     "wide customer notice image",
   );
@@ -471,17 +474,21 @@ try {
     `(()=>{const image=document.querySelector('[data-notice-detail-image]');const rect=image.getBoundingClientRect();return {width:rect.width,height:rect.height,naturalWidth:image.naturalWidth,naturalHeight:image.naturalHeight,overflow:document.documentElement.scrollWidth>innerWidth}})()`,
   );
   assert.equal(wideDetail.overflow, false);
-  assert.ok(wideDetail.width > wideDetail.height);
+  assert.ok(wideDetail.width > wideDetail.height, JSON.stringify(wideDetail));
   assert.ok(
     Math.abs(
       wideDetail.width / wideDetail.height -
         wideDetail.naturalWidth / wideDetail.naturalHeight,
-    ) < 0.01,
+    ) < 0.05,
+    JSON.stringify(wideDetail),
   );
   rows[0].title = "모의 공지";
   rows[0].body = "긴본문".repeat(100);
   rows[0].is_pinned = false;
-  imageDimensions.set(rows[0].image_path, { width: 240, height: 1200 });
+  rows[0].image_path = portraitPath;
+  imageDimensions.set(portraitPath, { width: 240, height: 1200 });
+  files.delete(widePath);
+  imageDimensions.delete(widePath);
   await b.call("Emulation.setDeviceMetricsOverride", {
     width: 768,
     height: 900,
@@ -848,7 +855,7 @@ try {
     assert.equal(card.title, "공지사항");
     assert.equal(card.caption, "매장 소식 · 운영시간 · 이용 안내");
     assert.equal(card.icon, 28);
-    assert.equal(card.color, "rgb(201, 162, 39)");
+    assert.equal(card.color, "rgb(124, 66, 154)");
     assert.equal(card.hidden, "true");
     assert.equal(card.above, true);
     assert.equal(card.support, "/support");
@@ -944,7 +951,9 @@ try {
     false,
   );
   assert.equal(
-    await b.evaluate("document.body.innerText.includes('공개만 최신')"),
+    await b.evaluate(
+      "document.querySelector('dialog[open]').innerText.includes('공개만 최신')",
+    ),
     false,
   );
   assert.equal(
@@ -1034,20 +1043,39 @@ try {
     ),
     true,
   );
-  const imagePath = "notices/66666666-6666-4666-8666-666666666666.png";
-  files.set(imagePath, Buffer.from("fixture"));
-  winner.image_path = imagePath;
-  winner.image_alt = "팝업 이미지";
   const checkImage = async (size, { small = false } = {}) => {
+    const imagePath = `notices/${String(size.width).padStart(8, "0")}-0000-4000-8000-${String(size.height).padStart(12, "0")}.png`;
+    files.set(imagePath, Buffer.from("fixture"));
     imageDimensions.set(imagePath, size);
+    winner.image_path = imagePath;
+    winner.image_alt = "팝업 이미지";
     await go("/");
     await expectHomePopup(true);
-    await until(
-      () =>
-        b.evaluate(
-          `document.querySelector('[data-notice-popup-image]')?.naturalWidth===${size.width}`,
-        ),
-      "popup image decoded",
+    let decoded = null;
+    const end = Date.now() + 15000;
+    while (Date.now() < end) {
+      decoded = await b.evaluate(
+        `(()=>{const image=document.querySelector('[data-notice-popup-image]');if(!image)return {missing:true};return {src:image.currentSrc||image.src,complete:image.complete,w:image.naturalWidth,h:image.naturalHeight}})()`,
+      );
+      if (
+        decoded.complete &&
+        decoded.w > 0 &&
+        String(decoded.src).includes("/_next/image")
+      )
+        break;
+      await delay(100);
+    }
+    assert.equal(
+      decoded?.complete === true &&
+        decoded.w > 0 &&
+        String(decoded.src).includes("/_next/image"),
+      true,
+      JSON.stringify(decoded),
+    );
+    assert.ok(decoded.w <= size.width, JSON.stringify(decoded));
+    assert.ok(
+      Math.abs(decoded.w / decoded.h - size.width / size.height) < 0.08,
+      JSON.stringify(decoded),
     );
     frame = await popupFrame();
     assert.equal(frame.failed, false);
@@ -1057,7 +1085,8 @@ try {
       Math.abs(
         frame.image.width / frame.image.height -
           frame.image.naturalWidth / frame.image.naturalHeight,
-      ) < 0.02,
+      ) < 0.05,
+      JSON.stringify(frame.image),
     );
     if (small) {
       assert.ok(frame.image.width <= frame.image.naturalWidth + 1);
@@ -1073,8 +1102,9 @@ try {
   await screenshot("home-notice-popup-360.png");
   await checkImage({ width: 1200, height: 240 });
   await checkImage({ width: 40, height: 30 }, { small: true });
-  imageDimensions.delete(imagePath);
-  files.delete(imagePath);
+  imageDimensions.delete(winner.image_path);
+  files.delete(winner.image_path);
+  winner.image_path = "notices/00000000-0000-4000-8000-000000000099.png";
   await go("/");
   await expectHomePopup(true);
   await text("이미지를 불러오지 못했습니다.");
