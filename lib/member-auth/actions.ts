@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { redirect, unstable_rethrow } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { readConfirmSubmission } from "./confirm";
+import { recordSignupConsent } from "./consents";
 import { callbackUrl, resolveTrustedOrigin, safeNext } from "./redirect";
 import { authFailure, logAuthFailure, messages } from "./errors";
 import { getConfirmedUser } from "./session";
@@ -65,11 +66,16 @@ export async function signUp(
       const failure = authFailure(error);
       if (failure === "exists") redirect("/auth/verify");
       if (failure === "rate") return { message: messages.rate };
+      if (failure === "emailNotAuthorized")
+        return { message: messages.emailNotAuthorized };
       if (failure === "weak") return { errors: { password: messages.weak } };
       logAuthFailure("member signup failed", error);
       return { message: messages.unavailable };
     }
     if (!data.user) return { message: messages.unavailable };
+    if (data.user.identities?.length !== 0) {
+      await recordSignupConsent(data.user.id);
+    }
   } catch (error) {
     unstable_rethrow(error);
     logAuthFailure("member signup failed", error);
@@ -167,6 +173,8 @@ export async function requestPasswordReset(
     if (error) {
       const failure = authFailure(error);
       if (failure === "rate") return { message: messages.rate };
+      if (failure === "emailNotAuthorized")
+        return { message: messages.emailNotAuthorized };
       if (
         failure === "exists" ||
         failure === "credentials" ||

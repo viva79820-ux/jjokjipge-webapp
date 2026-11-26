@@ -11,6 +11,7 @@ import {
   publicDetailColumns,
   publicListColumns,
   publicSummary,
+  shopCategoryFilters,
   uuid,
   type ProductRecord,
   type PublicProductDetail,
@@ -21,25 +22,53 @@ function rangeError(error: { code?: string } | null, page: number) {
   return error?.code === "PGRST103" && page > 1;
 }
 
-export async function publicProductList(page: number) {
-  if (!Number.isInteger(page) || page < 1 || page > 9999999)
+export async function publicProductList(page: number, category = "") {
+  if (
+    !Number.isInteger(page) ||
+    page < 1 ||
+    page > 9999999 ||
+    !shopCategoryFilters.some((item) => item.value === category)
+  )
     throw Error("목록 조건이 올바르지 않습니다.");
   const db = createPublicClient();
-  const { data, error, count } = await db
+  let listed = db
     .from("products")
     .select(publicListColumns, { count: "exact" })
-    .eq("is_published", true)
+    .eq("is_published", true);
+  // 이름 조건은 shopCategoryOf와 같다. 천사부적이 오라클·타로보다 먼저다.
+  if (category === "charm") listed = listed.ilike("name", "%천사부적%");
+  else if (category === "oracle")
+    listed = listed
+      .ilike("name", "%오라클%")
+      .not("name", "ilike", "%천사부적%");
+  else if (category === "tarot")
+    listed = listed
+      .ilike("name", "%타로%")
+      .not("name", "ilike", "%천사부적%")
+      .not("name", "ilike", "%오라클%");
+  const { data, error, count } = await listed
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .range((page - 1) * pageSize, page * pageSize - 1);
   if (rangeError(error, page)) {
-    const total = await db
+    let total = db
       .from("products")
       .select("id", { head: true, count: "exact" })
       .eq("is_published", true);
-    if (!total.error && total.count !== null)
-      return { data: [] as PublicProductSummary[], count: total.count };
+    if (category === "charm") total = total.ilike("name", "%천사부적%");
+    else if (category === "oracle")
+      total = total
+        .ilike("name", "%오라클%")
+        .not("name", "ilike", "%천사부적%");
+    else if (category === "tarot")
+      total = total
+        .ilike("name", "%타로%")
+        .not("name", "ilike", "%천사부적%")
+        .not("name", "ilike", "%오라클%");
+    const result = await total;
+    if (!result.error && result.count !== null)
+      return { data: [] as PublicProductSummary[], count: result.count };
   }
   if (error || !data || count === null)
     throw Error("상품 목록을 불러오지 못했습니다.");

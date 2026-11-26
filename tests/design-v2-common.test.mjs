@@ -46,6 +46,7 @@ test("공통 헤더는 천사 로고와 20px 한 줄 이름이다", () => {
   assert.match(header, /logo-angel-mark\.png/);
   assert.match(header, /h-8\.5/);
   assert.match(header, /h-15/);
+  assert.match(header, /sticky top-0 z-30/);
   assert.match(header, /text-logo/);
   assert.match(header, /font-extrabold/);
   assert.match(header, /text-brand/);

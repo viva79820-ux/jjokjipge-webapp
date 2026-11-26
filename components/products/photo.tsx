@@ -8,21 +8,27 @@ export function ProductPhoto({
   alt,
   missing,
   sizes = "(max-width: 1024px) 100vw, 560px",
+  variant = "square",
 }: {
   src: string | null;
   alt: string;
   missing: boolean;
   sizes?: string;
+  variant?: "square" | "strip" | "fill";
 }) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const frame =
-    "relative flex aspect-square w-full items-center justify-center overflow-hidden rounded-card bg-brand-soft";
+    variant === "strip"
+      ? "relative flex h-[170px] w-full items-center justify-center overflow-hidden bg-brand-soft"
+      : variant === "fill"
+        ? "relative flex h-full w-full items-center justify-center overflow-hidden bg-brand-soft"
+        : "relative flex aspect-square w-full items-center justify-center overflow-hidden rounded-card bg-brand-soft";
   if (missing)
     return (
       <div
         role="img"
         aria-label="상품 사진 없음"
-        className={`${frame} flex-col gap-2`}
+        className={`${frame}${variant === "fill" ? "" : " flex-col gap-2"}`}
       >
         <Image
           src="/images/brand/logo-angel-mark.png"
@@ -31,7 +37,9 @@ export function ProductPhoto({
           height={450}
           className="h-auto w-3/5 object-contain"
         />
-        <span className="text-caption text-foreground">상품 사진 없음</span>
+        {variant === "fill" ? null : (
+          <span className="text-caption text-foreground">상품 사진 없음</span>
+        )}
       </div>
     );
   if (!src)

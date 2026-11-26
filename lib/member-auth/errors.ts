@@ -1,5 +1,6 @@
 export type AuthFailure =
   | "rate"
+  | "emailNotAuthorized"
   | "unconfirmed"
   | "credentials"
   | "exists"
@@ -29,6 +30,9 @@ export function authFailure(error: unknown): AuthFailure {
     status === 429
   ) {
     return "rate";
+  }
+  if (code === "email_address_not_authorized") {
+    return "emailNotAuthorized";
   }
   if (code === "email_not_confirmed") return "unconfirmed";
   if (code === "invalid_credentials") return "credentials";
@@ -68,6 +72,8 @@ export function logAuthFailure(scope: string, error: unknown) {
 export const messages = {
   invalidInput: "입력한 내용을 확인해 주세요.",
   rate: "요청이 많아 지금은 메일을 보내지 못했어요. 잠시 후 다시 시도해 주세요.",
+  emailNotAuthorized:
+    "지금은 이 주소로 메일을 보낼 수 없어요. 잠시 후 다시 시도하거나 매장으로 문의해 주세요.",
   loginRate: "요청이 많아 잠시 후 다시 시도해 주세요.",
   unavailable: "일시적인 문제로 처리하지 못했어요. 잠시 후 다시 시도해 주세요.",
   credentials: "이메일 또는 비밀번호가 맞지 않아요.",

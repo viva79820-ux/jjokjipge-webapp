@@ -82,9 +82,34 @@ export function resolveStoreSelection<T extends { id: string }>(
     : { store: null as T | null, invalid: true };
 }
 
+const storeSlugPattern = /^[a-z0-9-]+$/;
+
+export function storeSlugFromHash(hash: string) {
+  if (!hash.startsWith("#store-")) return null;
+  let slug = hash.slice("#store-".length);
+  try {
+    slug = decodeURIComponent(slug);
+  } catch {
+    return null;
+  }
+  if (slug === "prices" || !storeSlugPattern.test(slug)) return null;
+  return slug;
+}
+
+export function resolveStoreLocation<T extends { id: string }>(
+  stores: readonly T[],
+  values: readonly string[],
+  hash: string,
+) {
+  const slug = storeSlugFromHash(hash);
+  if (slug) return resolveStoreSelection(stores, [slug]);
+  return resolveStoreSelection(stores, values);
+}
+
 export function storeSelectionHref(currentHref: string, id: string) {
   const url = new URL(currentHref);
   url.searchParams.set(storeQueryKey, id);
+  url.hash = `store-${id}`;
   return `${url.pathname}${url.search}${url.hash}`;
 }
 
