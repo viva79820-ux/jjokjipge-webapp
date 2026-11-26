@@ -8,6 +8,7 @@ import { displayChips } from "@/lib/counselors/rules";
 import { Chip } from "@/components/ui/chip";
 import { CounselorName } from "@/components/counselor/name";
 import { CounselorPhoto } from "@/components/counselor/photo";
+import { homeRecommendPhotoSizes } from "@/lib/images";
 import { RepresentativeBadge } from "@/components/counselor/representative-badge";
 
 const focus =
@@ -62,7 +63,7 @@ function RecommendCard({ counselor }: { counselor: Counselor }) {
       <CounselorPhoto
         src={counselor.imageUrl}
         alt=""
-        sizes="148px"
+        sizes={homeRecommendPhotoSizes}
         imageClassName="object-cover object-top"
         className="h-[168px] w-full"
       />
