@@ -9,10 +9,12 @@ import {
   jointStoreExteriors,
   localStoreExterior,
   naverMapSearchUrl,
+  resolveStoreLocation,
   resolveStoreSelection,
   storeParamList,
   storePhotoPlan,
   storeSelectionHref,
+  storeSlugFromHash,
 } from "../components/store/present.ts";
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
@@ -195,12 +197,39 @@ test("참고 가격 문구는 설정값에서 만들고 금액 차이를 유지�
     store: null,
     invalid: true,
   });
+  assert.equal(storeSlugFromHash("#store-prices"), null);
+  assert.equal(storeSlugFromHash("#store-a"), "a");
+  assert.equal(storeSlugFromHash("#store-not_a_slug"), null);
+  assert.equal(storeSlugFromHash("#other"), null);
+  assert.deepEqual(resolveStoreLocation(listed, [], "#store-a"), {
+    store: { id: "a" },
+    invalid: false,
+  });
+  assert.deepEqual(resolveStoreLocation(listed, [], "#store-missing"), {
+    store: null,
+    invalid: true,
+  });
+  assert.deepEqual(resolveStoreLocation(listed, ["b"], "#store-prices"), {
+    store: { id: "b" },
+    invalid: false,
+  });
+  assert.deepEqual(resolveStoreLocation(listed, ["b"], "#store-a"), {
+    store: { id: "a" },
+    invalid: false,
+  });
   assert.equal(
     storeSelectionHref("https://example.com/stores#store-prices", "a"),
-    "/stores?store=a#store-prices",
+    "/stores?store=a#store-a",
   );
   assert.equal(
     storeSelectionHref("https://example.com/stores?store=a", "b"),
-    "/stores?store=b",
+    "/stores?store=b#store-b",
+  );
+  assert.match(board, /scroll-mt-site-header/);
+  assert.match(board, /behavior: "smooth"/);
+  assert.match(read("../app/globals.css"), /--spacing-site-header:\s*108px/);
+  assert.match(
+    read("../components/site-header.tsx"),
+    /sticky top-0 z-30 bg-surface/,
   );
 });
