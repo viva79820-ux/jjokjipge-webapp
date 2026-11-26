@@ -18,6 +18,8 @@ export function PasswordField({
   describedBy,
   disabled,
   screen = false,
+  showIcon = true,
+  placeholder = "비밀번호",
 }: {
   id: string;
   name: string;
@@ -27,6 +29,8 @@ export function PasswordField({
   describedBy?: string;
   disabled?: boolean;
   screen?: boolean;
+  showIcon?: boolean;
+  placeholder?: string;
 }) {
   const [visible, setVisible] = useState(false);
   return (
@@ -35,7 +39,7 @@ export function PasswordField({
         {label}
       </label>
       <div className="relative">
-        {screen ? (
+        {screen && showIcon ? (
           <Lock
             aria-hidden="true"
             size={20}
@@ -51,12 +55,12 @@ export function PasswordField({
           spellCheck={false}
           required
           disabled={disabled}
-          placeholder={screen ? "비밀번호" : undefined}
+          placeholder={screen ? placeholder : undefined}
           aria-invalid={invalid}
           aria-describedby={describedBy}
           className={
             screen
-              ? `${screenFieldClass(invalid)} pr-18 pl-11`
+              ? `${screenFieldClass(invalid)} pr-18 ${showIcon ? "pl-11" : "pl-3.5"}`
               : `${fieldClass(invalid)} pr-20`
           }
         />

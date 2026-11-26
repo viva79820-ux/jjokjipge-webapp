@@ -89,6 +89,26 @@ products.push({
   created_at: "2026-11-20T01:00:00.000000+00:00",
   updated_at: "2026-11-20T01:00:00.000000+00:00",
 });
+const charmLoveId = "cccccccc-cccc-4ccc-8ccc-000000000001";
+for (const [id, name, order] of [
+  [charmLoveId, "천사부적 사랑·인연", 101],
+  ["cccccccc-cccc-4ccc-8ccc-000000000002", "천사부적 소원성취", 102],
+  ["cccccccc-cccc-4ccc-8ccc-000000000003", "천사부적 재물", 103],
+]) {
+  products.push({
+    id,
+    name,
+    description: `${name} 설명`,
+    price: 5000,
+    image_path: null,
+    image_alt: null,
+    is_published: true,
+    is_sold_out: false,
+    sort_order: order,
+    created_at: "2026-11-20T00:30:00.000000+00:00",
+    updated_at: "2026-11-20T00:30:00.000000+00:00",
+  });
+}
 let admin = true;
 let listFail = false;
 let customerEmpty = false;
@@ -128,11 +148,22 @@ function roleOf(req) {
   if (header === `Bearer ${token}`) return admin ? "admin" : "user";
   return "anon";
 }
+function like(field, pattern) {
+  const needle = String(pattern).replaceAll(/[*%]/g, "").toLowerCase();
+  return String(field ?? "")
+    .toLowerCase()
+    .includes(needle);
+}
 function matches(row, params) {
   for (const [key, value] of params) {
     if (["select", "order", "offset", "limit"].includes(key)) continue;
-    if (typeof value === "string" && value.startsWith("eq.")) {
+    if (typeof value !== "string") continue;
+    if (value.startsWith("eq.")) {
       if (String(row[key]) !== value.slice(3)) return false;
+    } else if (value.startsWith("ilike.")) {
+      if (!like(row[key], value.slice("ilike.".length))) return false;
+    } else if (value.startsWith("not.ilike.")) {
+      if (like(row[key], value.slice("not.ilike.".length))) return false;
     }
   }
   return true;
@@ -610,7 +641,28 @@ try {
   });
   await emulate({ width: 390, fine: false });
   await go("/shop");
-  await text("총 21건");
+  await text("상품 24개");
+  await text("천사부적 3종");
+  await text("사랑·인연 / 소원성취 / 재물");
+  await text("[배송·교환·환불 안내 준비 중]");
+  assert.equal(
+    await page.evaluate(
+      `[...document.querySelectorAll("a")].find((node) => node.checkVisibility() && node.textContent.includes("천사부적 3종")).getAttribute("href")`,
+    ),
+    "/shop?category=charm",
+  );
+  await clickLink("타로카드");
+  await text("상품 0개");
+  await text("등록된 상품이 없습니다.");
+  await absent(longName);
+  await clickLink("천사부적");
+  await text("상품 3개");
+  await text("천사부적 사랑·인연");
+  await text("천사부적 재물");
+  await absent(longName);
+  await absent("종류 선택");
+  await clickLink("전체");
+  await text("상품 24개");
   await text(longName);
   await text("품절");
   await text("18,000원");
@@ -640,6 +692,9 @@ try {
   await text("줄바꿈첫줄");
   await text("줄바꿈둘째줄");
   await text("장바구니에서 배송지를 입력하고 주문할 수 있습니다.");
+  await text("[배송·교환·환불 안내 준비 중]");
+  await absent("종류 선택");
+  await absent("바로 구매");
   await text("품절");
   await text("18,000원");
   await text("상품 사진을 불러오지 못했습니다.");
@@ -670,8 +725,14 @@ try {
   await go("/shop");
   await text("상품을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
   listFail = false;
+  await go(`/shop/${charmLoveId}`);
+  await text("천사부적");
+  await text("5,000원");
+  await text("[배송·교환·환불 안내 준비 중]");
+  await absent("종류 선택");
+  await absent("바로 구매");
   await go("/admin/shop-products");
-  await text("총 22건");
+  await text("총 25건");
   await text("테스트 비공개비밀");
   await text("비공개");
   const menuHref = await page.evaluate(
@@ -711,7 +772,7 @@ try {
   assert.equal(documentRequests.length, docsBeforeFilter);
   assert.equal(await here(), "/admin/shop-products?status=private");
   await applyStatus("public");
-  await text("총 21건");
+  await text("총 24건");
   await text(longName);
   await absent("테스트 비공개비밀");
   assert.equal(await here(), "/admin/shop-products?status=public");
@@ -720,7 +781,7 @@ try {
   await text("총 1건");
   assert.equal(await here(), "/admin/shop-products?status=private");
   await page.evaluate("history.forward()");
-  await text("총 21건");
+  await text("총 24건");
   assert.equal(await here(), "/admin/shop-products?status=public");
   await clickLink("상품 등록");
   await text("상품 등록");

@@ -6,6 +6,7 @@ export type Member = {
   id: string;
   email: string;
   name: string | null;
+  phone: string | null;
 };
 
 export type ConfirmedUser =
@@ -32,14 +33,23 @@ export async function getMember(): Promise<Member | null> {
   const supabase = await createClient();
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("name")
+    .select("name,phone")
     .eq("id", confirmed.id)
     .maybeSingle();
   if (profileError)
-    return { id: confirmed.id, email: confirmed.email, name: null };
+    return {
+      id: confirmed.id,
+      email: confirmed.email,
+      name: null,
+      phone: null,
+    };
   const name =
     typeof profile?.name === "string" && profile.name.trim()
       ? profile.name.trim()
       : null;
-  return { id: confirmed.id, email: confirmed.email, name };
+  const phone =
+    typeof profile?.phone === "string" && profile.phone.trim()
+      ? profile.phone.trim()
+      : null;
+  return { id: confirmed.id, email: confirmed.email, name, phone };
 }
