@@ -40,7 +40,7 @@ const eligibilityMessage: Record<
 export const reviewWritePath = "/mypage/reviews/new";
 
 export const noWritableReviewMessage =
-  "완료된 상담·주문이 있으면 후기를 남길 수 있어요.";
+  "상담이 완료되면 후기를 남길 수 있어요.";
 
 export function reviewWriteHref(loggedIn: boolean) {
   if (loggedIn) return reviewWritePath;

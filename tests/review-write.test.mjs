@@ -343,7 +343,7 @@ test("후기 쓰기 진입은 목록과 빈 마이페이지에서 찾을 수 있
   );
   assert.equal(
     rules.noWritableReviewMessage,
-    "완료된 상담·주문이 있으면 후기를 남길 수 있어요.",
+    "상담이 완료되면 후기를 남길 수 있어요.",
   );
   const publicPage = read("../components/reviews/public-page.tsx");
   const myReviews = read("../components/member-auth/my-reviews.tsx");
