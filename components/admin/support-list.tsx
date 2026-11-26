@@ -6,6 +6,8 @@ import { getFaqList, getInquiryList } from "@/lib/admin/support-data";
 import {
   categoryLabels,
   faqCategories,
+  inquiryAnswerMailFailedMessage,
+  inquiryAnswerSavedMessage,
   inquiryStatuses,
   visibilityLabels,
   parseSupportFilters,
@@ -44,9 +46,14 @@ export async function SupportList({
   const pages = Math.max(1, Math.ceil(result.count / 20));
   if (filters.page > pages) {
     const validPage = supportUrl(kind, filters, pages);
+    const notice = query.mailFailed
+      ? "mail_failed"
+      : query.saved
+        ? "saved"
+        : "";
     redirect(
-      query.saved
-        ? `${validPage}${validPage.includes("?") ? "&" : "?"}notice=saved`
+      notice
+        ? `${validPage}${validPage.includes("?") ? "&" : "?"}notice=${notice}`
         : validPage,
     );
   }
@@ -58,9 +65,13 @@ export async function SupportList({
       <h1 className="text-xl font-bold">
         {kind === "faqs" ? "FAQ 관리" : "문의 관리"}
       </h1>
-      {query.saved && (
-        <p role="status" tabIndex={-1} className="text-brand">
-          {kind === "faqs" ? "FAQ를 저장했습니다." : "답변을 저장했습니다."}
+      {(query.saved || query.mailFailed) && (
+        <p role="status" tabIndex={-1} className="text-brand wrap-anywhere">
+          {kind === "faqs"
+            ? "FAQ를 저장했습니다."
+            : query.mailFailed
+              ? inquiryAnswerMailFailedMessage
+              : inquiryAnswerSavedMessage}
         </p>
       )}
       {kind === "faqs" && (

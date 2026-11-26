@@ -1,6 +1,7 @@
 "use server";
 import "server-only";
 import { requireAdmin } from "./auth";
+import { notifyInquiryAnswered } from "@/lib/email/notify-inquiry";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import {
@@ -10,6 +11,8 @@ import {
   parseFaq,
   answerError,
   conflict,
+  inquiryAnswerMailFailedMessage,
+  inquiryAnswerSavedMessage,
 } from "./support-rules";
 import {
   faqColumns,
@@ -153,6 +156,7 @@ export async function saveInquiryAnswer(
       },
     };
   let saved: InquiryDetail;
+  let firstAnswer = false;
   try {
     const db = await createClient();
     const current = await db
@@ -171,6 +175,7 @@ export async function saveInquiryAnswer(
     )
       return { success: false, message: "변경된 내용이 없습니다." };
     if (!["pending", "answered"].includes(current.data.status)) return bad;
+    firstAnswer = current.data.status === "pending";
     const result = await db
       .from("inquiries")
       .update({
@@ -191,8 +196,21 @@ export async function saveInquiryAnswer(
   } catch {
     return failed;
   }
+  let message = inquiryAnswerSavedMessage;
+  if (firstAnswer) {
+    let outcome: "sent" | "failed" | "skipped" = "failed";
+    try {
+      outcome = await notifyInquiryAnswered({
+        id: saved.id,
+        email: saved.customer_email,
+      });
+    } catch {
+      outcome = "failed";
+    }
+    if (outcome === "failed") message = inquiryAnswerMailFailedMessage;
+  }
   revalidatePath("/admin/support/inquiries");
   revalidatePath(`/admin/support/inquiries/${id}`);
   revalidatePath("/admin");
-  return { success: true, message: "답변을 저장했습니다.", row: saved };
+  return { success: true, message, row: saved };
 }

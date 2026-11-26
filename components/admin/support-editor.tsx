@@ -15,6 +15,7 @@ import {
   faqCategories,
   categoryLabels,
   answerError,
+  inquiryAnswerMailFailedMessage,
   supportReturn,
   supportSavedUrl,
   type FaqInput,
@@ -175,7 +176,12 @@ export function SupportEditor(props: Props) {
             setFaq(blank);
             setNotice("");
           }
-          router.replace(supportSavedUrl(kind, returnTo));
+          const notice =
+            kind === "inquiries" &&
+            res.message === inquiryAnswerMailFailedMessage
+              ? "mail_failed"
+              : "saved";
+          router.replace(supportSavedUrl(kind, returnTo, notice));
         }
       } catch {
         setError("처리 결과를 확인하지 못했습니다. 최신 내용을 확인해 주세요.");

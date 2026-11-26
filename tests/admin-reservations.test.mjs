@@ -130,11 +130,14 @@ function actionHarness({
   stored = row,
   updateRows = [{ id }],
   error = null,
+  actionName = "cancel",
+  mailResult = "sent",
 } = {}) {
   let clientCalls = 0;
   const conditions = [],
     invalidations = [],
-    updates = [];
+    updates = [],
+    mailCalls = [];
   const query = {
     select() {
       return this;
@@ -166,11 +169,18 @@ function actionHarness({
         return { from: () => query };
       },
     },
+    "@/lib/email/notify-reservation": {
+      notifyReservationConfirmed: async (notice) => {
+        mailCalls.push(notice);
+        if (mailResult === "throw") throw new Error("mail down");
+        return mailResult;
+      },
+    },
     "./reservation-rules": rules,
   });
   const form = new FormData();
   form.set("id", id);
-  form.set("action", "cancel");
+  form.set("action", actionName);
   form.set("version", row.updated_at);
   form.set("reason", " 고객 요청 ");
   return {
@@ -179,6 +189,7 @@ function actionHarness({
     conditions,
     invalidations,
     updates,
+    mailCalls,
     clientCalls: () => clientCalls,
   };
 }
@@ -229,6 +240,50 @@ test("successful mutation writes only allowed fields and refreshes all views", a
     "/admin/reservations",
     `/admin/reservations/${id}`,
   ]);
+  assert.equal(h.mailCalls.length, 0);
+});
+test("confirming a reservation sends one mail and still succeeds when mail fails", async () => {
+  const starts = new Date(Date.now() + 3 * 86400000);
+  const stored = {
+    ...row,
+    starts_at: starts.toISOString(),
+    ends_at: new Date(starts.getTime() + 30 * 60 * 1000).toISOString(),
+    reservation_no: "R-20261201-0001",
+    product_name: "테스트 상담",
+    customer_email: "guest@example.invalid",
+    counselors: { name: "상담사 A" },
+  };
+  const sent = actionHarness({ stored, actionName: "confirm" });
+  const sentResult = await sent.run();
+  assert.equal(sentResult.success, true);
+  assert.equal(
+    sentResult.message,
+    "예약 상태를 변경했습니다. 확정 메일을 보냈습니다.",
+  );
+  assert.equal(sent.updates[0].status, "confirmed");
+  assert.equal(sent.mailCalls.length, 1);
+  assert.equal(sent.mailCalls[0].reservationNo, "R-20261201-0001");
+  assert.equal(sent.mailCalls[0].email, "guest@example.invalid");
+  const failed = actionHarness({
+    stored,
+    actionName: "confirm",
+    mailResult: "failed",
+  });
+  const failedResult = await failed.run();
+  assert.equal(failedResult.success, true);
+  assert.equal(
+    failedResult.message,
+    "예약 상태를 변경했습니다. 확정 메일은 보내지 못했습니다.",
+  );
+  assert.equal(failed.updates[0].status, "confirmed");
+  const thrown = actionHarness({
+    stored,
+    actionName: "confirm",
+    mailResult: "throw",
+  });
+  const thrownResult = await thrown.run();
+  assert.equal(thrownResult.success, true);
+  assert.match(thrownResult.message, /보내지 못했습니다/);
 });
 test("database errors are sanitized and missing reservations are distinct", async () => {
   assert.equal(

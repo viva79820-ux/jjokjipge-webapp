@@ -129,6 +129,7 @@ const fixtureEnv = {
   ...process.env,
   CI: "1",
   NEXT_TELEMETRY_DISABLED: "1",
+  RESEND_API_KEY: "",
   NEXT_PUBLIC_SUPABASE_URL: `http://127.0.0.1:${fixture.address().port}`,
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "fixture-public",
   SUPABASE_SECRET_KEY: "fixture-secret",
