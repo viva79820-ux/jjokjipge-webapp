@@ -58,7 +58,6 @@ const screens = [
       test: shopPath,
     },
   },
-  { id: "cart-alias", label: "장바구니 경로 /cart", path: "/cart" },
   { id: "cart", label: "장바구니", path: "/shop/cart" },
   { id: "contents", label: "콘텐츠", path: "/contents" },
   { id: "reviews", label: "후기", path: "/reviews" },
@@ -91,7 +90,7 @@ const issues = [];
 const results = [];
 const notes = [
   `시작 주소 ${startUrl} 의 최종 출처는 ${site} 이다.`,
-  "장바구니 화면 링크는 /shop/cart 이다. /cart 도 따로 연다.",
+  "장바구니 경로는 /shop/cart 이다.",
   "이용약관 /terms, 개인정보 동의 /privacy-consent, AI 사주 /ai-saju 는 코드의 경로를 그대로 연다.",
 ];
 const browser = await launchBrowser();
@@ -194,6 +193,11 @@ async function checkScreen(page, screen) {
       const loaded = await page.open(`${site}${screen.path}`);
       const reading = await page.evaluate(readPage);
       if (viewport.id === "touch") links = reading.links || [];
+      for (const notice of reading.intentional || []) {
+        notes.push(
+          `${screen.label} \`${screen.path}\` / ${viewport.label}: 의도한 안내 ${notice.name}: ${clip(notice.sample)}`,
+        );
+      }
       await page.screenshot(join(outDir, shot));
       const viewIssues = judge(screen, viewport, loaded, reading);
       for (const issue of viewIssues) issues.push(issue);
@@ -429,6 +433,7 @@ async function readPage() {
     images: [...new Set(images)],
     covered: coveredControl(main),
     placeholders: placeholderHits(visibleText),
+    intentional: intentionalNotices(visibleText),
     popupClosed,
     missingPage:
       /페이지를 찾을 수 없|This page could not be found|Application error/i.test(
@@ -524,22 +529,62 @@ async function readPage() {
     return null;
   }
 
+  function snippet(text, at, length) {
+    return text.slice(Math.max(0, at - 24), at + length + 24);
+  }
+
   function placeholderHits(text) {
     const rules = [
       { name: "TODO", pattern: /\bTODO\b/i },
       { name: "lorem", pattern: /lorem/i },
       { name: "asdf", pattern: /\basdf\b/i },
       { name: "010-0000-0000", pattern: /010-0000-0000/ },
-      { name: "확인 필요", pattern: /확인 필요/ },
     ];
     const hits = [];
     for (const rule of rules) {
       const match = text.match(rule.pattern);
       if (!match) continue;
-      const at = match.index || 0;
       hits.push({
         name: rule.name,
-        sample: text.slice(Math.max(0, at - 24), at + match[0].length + 24),
+        sample: snippet(text, match.index || 0, match[0].length),
+      });
+    }
+    const seen = new Set();
+    for (const match of text.matchAll(/\[[^\[\]\n]{0,80}\]/g)) {
+      const token = match[0];
+      if (!/확인 필요|준비 중/.test(token) || seen.has(token)) continue;
+      seen.add(token);
+      hits.push({
+        name: "대괄호 자리표시",
+        sample: snippet(text, match.index || 0, token.length),
+      });
+    }
+    let outside = text;
+    for (const token of seen) outside = outside.split(token).join(" ");
+    const bare = outside.match(/확인 필요/);
+    if (bare) {
+      hits.push({
+        name: "확인 필요",
+        sample: snippet(outside, bare.index || 0, bare[0].length),
+      });
+    }
+    return hits;
+  }
+
+  function intentionalNotices(text) {
+    const rules = [
+      { name: "예시 계좌", pattern: /예시\s*계좌/ },
+      { name: "예시 가격", pattern: /예시\s*가격/ },
+      { name: "예시은행", pattern: /예시은행/ },
+      { name: "예시 예금주", pattern: /\(예시\)/ },
+    ];
+    const hits = [];
+    for (const rule of rules) {
+      const match = text.match(rule.pattern);
+      if (!match) continue;
+      hits.push({
+        name: rule.name,
+        sample: snippet(text, match.index || 0, match[0].length),
       });
     }
     return hits;
