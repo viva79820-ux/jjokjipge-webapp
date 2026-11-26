@@ -3,15 +3,21 @@ import { ReviewStars } from "@/components/reviews/card";
 import { Button } from "@/components/ui/button";
 import { counselorHeading } from "@/lib/counselors/rules";
 import type { MyReview } from "@/lib/reviews/member-data";
-import { reviewVisibilityLabel } from "@/lib/reviews/member-rules";
+import {
+  noWritableReviewMessage,
+  reviewWritePath,
+  reviewVisibilityLabel,
+} from "@/lib/reviews/member-rules";
 import { formatReviewDate } from "@/lib/reviews/rules";
 
 export function MyReviews({
   reviews,
   unavailable = false,
+  writableCount = 0,
 }: {
   reviews: MyReview[];
   unavailable?: boolean;
+  writableCount?: number;
 }) {
   return (
     <section aria-labelledby="my-reviews-title" className="mt-7">
@@ -23,9 +29,17 @@ export function MyReviews({
           내 후기를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.
         </p>
       ) : reviews.length === 0 ? (
-        <p className="mt-3 rounded-card border border-border bg-surface p-3 text-body text-muted @3xl/app:p-4">
-          작성한 후기가 없어요.
-        </p>
+        <div className="mt-3 rounded-card border border-border bg-surface p-3 @3xl/app:p-4">
+          <p className="text-body text-muted">작성한 후기가 없어요.</p>
+          {writableCount === 0 ? (
+            <p className="mt-2 text-body text-muted">
+              {noWritableReviewMessage}
+            </p>
+          ) : null}
+          <div className="mt-3">
+            <Button href={reviewWritePath}>후기 쓰기</Button>
+          </div>
+        </div>
       ) : (
         <ol className="mt-3 space-y-3">
           {reviews.map((review) => {

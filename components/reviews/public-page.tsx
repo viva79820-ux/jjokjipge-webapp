@@ -2,7 +2,9 @@ import { ExternalLink } from "lucide-react";
 import { connection } from "next/server";
 import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { getMember } from "@/lib/member-auth/session";
 import { reviewList } from "@/lib/reviews/data";
+import { reviewWriteHref } from "@/lib/reviews/member-rules";
 import { naverReviewLinks } from "@/lib/reviews/naver-links";
 import {
   pageSize,
@@ -36,6 +38,7 @@ export async function PublicReviewPage({
   if (!result) throw Error("후기 목록을 불러오지 못했습니다.");
   const pages = Math.max(1, Math.ceil(result.count / pageSize));
   if (filters.page > pages) redirect(reviewListUrl(false, pages));
+  const writeHref = reviewWriteHref(Boolean(await getMember()));
 
   return (
     <div className="min-w-0 px-4 pt-6 @3xl/app:px-6 @3xl/app:pt-8">
@@ -79,10 +82,15 @@ export async function PublicReviewPage({
       </section>
 
       <section aria-labelledby="site-review-title" className="pb-6">
-        <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-          <h2 id="site-review-title" className="text-title font-bold">
-            운세통 후기
-          </h2>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <h2 id="site-review-title" className="text-title font-bold">
+              운세통 후기
+            </h2>
+            <Button href={writeHref} className="shrink-0">
+              후기 쓰기
+            </Button>
+          </div>
           <p className="text-caption text-muted">총 {result.count}건</p>
         </div>
         {result.data.length ? (
