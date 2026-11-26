@@ -5,6 +5,9 @@ export type SignupValues = {
   email: string;
   password: string;
   passwordConfirm: string;
+  ageConfirmed: boolean;
+  termsAgreed: boolean;
+  privacyAgreed: boolean;
 };
 
 export type SignupErrors = Partial<Record<keyof SignupValues, string>>;
@@ -47,15 +50,38 @@ export function readSignup(form: FormData) {
   const email = readText(form, "email");
   const password = readText(form, "password");
   const passwordConfirm = readText(form, "passwordConfirm");
+  const ageConfirmed = readAgreement(form, "ageConfirmed");
+  const termsAgreed = readAgreement(form, "termsAgreed");
+  const privacyAgreed = readAgreement(form, "privacyAgreed");
   if (
     name === null ||
     email === null ||
     password === null ||
-    passwordConfirm === null
+    passwordConfirm === null ||
+    ageConfirmed === null ||
+    termsAgreed === null ||
+    privacyAgreed === null
   ) {
     return { message: invalidInput };
   }
-  return { values: { name, email, password, passwordConfirm } };
+  return {
+    values: {
+      name,
+      email,
+      password,
+      passwordConfirm,
+      ageConfirmed,
+      termsAgreed,
+      privacyAgreed,
+    },
+  };
+}
+
+function readAgreement(form: FormData, key: string) {
+  const values = form.getAll(key);
+  if (values.length === 0) return false;
+  if (values.length !== 1 || values[0] !== "accepted") return null;
+  return true;
 }
 
 export function readLogin(form: FormData) {
@@ -123,6 +149,11 @@ export function validateSignup(values: SignupValues) {
   if (passwordError) errors.password = passwordError;
   else if (values.password !== values.passwordConfirm)
     errors.passwordConfirm = "비밀번호 확인이 일치하지 않아요.";
+  if (!values.ageConfirmed)
+    errors.ageConfirmed = "만 14세 이상인지 확인해 주세요.";
+  if (!values.termsAgreed) errors.termsAgreed = "이용약관에 동의해 주세요.";
+  if (!values.privacyAgreed)
+    errors.privacyAgreed = "개인정보 수집·이용에 동의해 주세요.";
   return errors;
 }
 

@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import Image from "next/image";
+import { appContentSizes } from "@/lib/images";
 export function NoticeImage({ src, alt }: { src: string; alt: string }) {
   const [failed, setFailed] = useState(false);
   return (
@@ -8,14 +9,15 @@ export function NoticeImage({ src, alt }: { src: string; alt: string }) {
       {failed ? (
         <p role="status">이미지를 불러오지 못했습니다.</p>
       ) : (
-        /* 유료 변환 없이 원본 비율 유지 */ <Image
-          unoptimized
+        <Image
           width={1200}
           height={1200}
+          sizes={appContentSizes}
           src={src}
           alt={alt}
           onError={() => setFailed(true)}
-          className="h-auto w-full rounded-card"
+          className="h-auto w-full rounded-card object-contain"
+          style={{ width: "100%", height: "auto" }}
           data-notice-detail-image
         />
       )}

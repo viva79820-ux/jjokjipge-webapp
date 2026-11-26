@@ -191,7 +191,7 @@ export async function browser(visible = false) {
       pages.find((item) => item.type === "page").webSocketDebuggerUrl,
     );
     const openTab = async (url) => {
-      const response = await fetch(`http://127.0.0.1:${port}/json/new?${url}`, {
+      const response = await fetch(`http://127.0.0.1:${port}/json/new`, {
         method: "PUT",
       });
       if (!response.ok) throw Error("new tab");
@@ -214,13 +214,17 @@ export async function browser(visible = false) {
           resolve(profile).startsWith(
             resolve(tmpdir()) + (process.platform === "win32" ? "\\" : "/"),
           )
-        )
-          rmSync(profile, {
-            recursive: true,
-            force: true,
-            maxRetries: 10,
-            retryDelay: 200,
-          });
+        ) {
+          // Chrome on Windows can keep the profile locked after it exits.
+          try {
+            rmSync(profile, {
+              recursive: true,
+              force: true,
+              maxRetries: 10,
+              retryDelay: 200,
+            });
+          } catch {}
+        }
       },
     };
   } catch (e) {

@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import { appContentSizes } from "@/lib/images";
 
 export function ProductPhoto({
   src,
   alt,
   missing,
-  sizes = "(max-width: 1024px) 100vw, 560px",
+  sizes = appContentSizes,
   variant = "square",
 }: {
   src: string | null;
@@ -65,7 +66,6 @@ export function ProductPhoto({
   return (
     <div className={frame} data-product-photo>
       <Image
-        unoptimized
         fill
         src={src}
         alt={alt}

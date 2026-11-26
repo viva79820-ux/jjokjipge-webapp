@@ -348,7 +348,7 @@ export function startAuthMock() {
     }
 
     if (url.pathname === "/rest/v1/inquiries") {
-      if (req.method !== "GET") {
+      if (req.method !== "GET" && req.method !== "HEAD") {
         writes += 1;
         return fail(res, 405, "no_write");
       }
@@ -357,6 +357,53 @@ export function startAuthMock() {
       const requested = url.searchParams.get("user_id")?.replace(/^eq\./, "");
       if (!user || requested !== user.id) return json(res, []);
       return json(res, user.inquiries ?? []);
+    }
+
+    if (url.pathname === "/rest/v1/orders") {
+      if (req.method !== "GET" && req.method !== "HEAD") {
+        writes += 1;
+        return fail(res, 405, "no_write");
+      }
+      if (apiKey !== publicKey) return fail(res, 401, "no_authorization");
+      const user = userFromRequest(req);
+      const requested = url.searchParams.get("user_id")?.replace(/^eq\./, "");
+      if (!user || requested !== user.id) return json(res, []);
+      return json(res, [
+        {
+          id: "44444444-4444-4444-8444-444444444441",
+          user_id: user.id,
+          order_no: "O-20261126-0001",
+          created_at: "2026-11-26T00:01:00.000Z",
+          status: "pending_payment",
+          total: 12000,
+          order_items: [
+            { line_no: 1, product_name: "테스트 카드", quantity: 1 },
+          ],
+        },
+      ]);
+    }
+
+    if (
+      req.method === "POST" &&
+      url.pathname === "/rest/v1/rpc/list_my_reviews"
+    ) {
+      if (apiKey !== publicKey) return fail(res, 401, "no_authorization");
+      if (!userFromRequest(req)) return fail(res, 401, "session_not_found");
+      return json(res, [
+        {
+          id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          reservation_id: "66666666-6666-4666-8666-666666666666",
+          counselor_id: "22222222-2222-4222-8222-222222222222",
+          counselor_name: "상담사 B",
+          rating: 4,
+          body: "상담 내용을 짧게 남긴 비공개 후기입니다.",
+          is_published: false,
+          publish_consent: true,
+          hidden_by_admin: false,
+          created_at: "2026-11-24T15:00:00.000Z",
+          updated_at: "2026-11-24T15:10:00.000Z",
+        },
+      ]);
     }
 
     if (
@@ -379,6 +426,16 @@ export function startAuthMock() {
       }
       requests.push({ kind: "withdraw", email: user.email });
       return json(res, null);
+    }
+
+    if (url.pathname === "/rest/v1/member_consents") {
+      if (req.method !== "POST" || apiKey !== secretKey) {
+        writes += 1;
+        return fail(res, 401, "no_authorization");
+      }
+      const body = await readBody(req);
+      requests.push({ kind: "member-consent", data: body });
+      return json(res, null, 201);
     }
 
     if (!url.pathname.startsWith("/auth/v1/")) {

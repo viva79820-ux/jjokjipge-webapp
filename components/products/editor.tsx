@@ -922,6 +922,7 @@ export function ProductEditor({
                 src={photoSrc}
                 alt={alt || "상품 사진"}
                 missing={!file && !path}
+                sizes="240px"
               />
             </div>
             {(file || path) && (

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -266,6 +267,12 @@ function harness(options = {}) {
     "@/lib/supabase/server": {
       createClient: async () => client,
     },
+    "./consents": {
+      async recordSignupConsent(id) {
+        calls.push(["recordSignupConsent", id]);
+        if (options.consentError) throw options.consentError;
+      },
+    },
     "server-only": {},
   });
   return {
@@ -295,6 +302,37 @@ test("signup validates input and sends only the name metadata", async () => {
       ),
     );
     assert.equal(missing.state.message, "입력한 내용을 확인해 주세요.");
+    assert.equal(
+      auth.calls.some((call) => call[0] === "signUp"),
+      false,
+    );
+
+    const unchecked = await settle(
+      auth.signUp(
+        {},
+        form([
+          ["name", "테스트회원"],
+          ["email", "member@example.invalid"],
+          ["password", password],
+          ["passwordConfirm", password],
+        ]),
+      ),
+    );
+    assert.match(unchecked.state.errors.ageConfirmed, /14세/);
+    assert.match(unchecked.state.errors.termsAgreed, /이용약관/);
+    assert.match(unchecked.state.errors.privacyAgreed, /개인정보/);
+    assert.equal(
+      auth.calls.some((call) => call[0] === "signUp"),
+      false,
+    );
+
+    const forgedAgreement = signupForm();
+    forgedAgreement.set("termsAgreed", "true");
+    const rejectedAgreement = await settle(auth.signUp({}, forgedAgreement));
+    assert.equal(
+      rejectedAgreement.state.message,
+      "입력한 내용을 확인해 주세요.",
+    );
     assert.equal(
       auth.calls.some((call) => call[0] === "signUp"),
       false,
@@ -349,6 +387,9 @@ test("signup validates input and sends only the name metadata", async () => {
           ["email", " Member@Test.Invalid "],
           ["password", spaced],
           ["passwordConfirm", spaced],
+          ["ageConfirmed", "accepted"],
+          ["termsAgreed", "accepted"],
+          ["privacyAgreed", "accepted"],
           ["role", "admin"],
           ["user_id", userId],
         ]),
@@ -359,6 +400,10 @@ test("signup validates input and sends only the name metadata", async () => {
     assert.equal(payload.email, "member@test.invalid");
     assert.equal(payload.password, spaced);
     assert.deepEqual(payload.options.data, { name: "테스트회원" });
+    assert.deepEqual(
+      auth.calls.find((call) => call[0] === "recordSignupConsent"),
+      ["recordSignupConsent", userId],
+    );
     assert.equal(
       payload.options.emailRedirectTo,
       "http://127.0.0.1:4333/auth/callback?next=%2Fmypage",
@@ -380,6 +425,10 @@ test("signup does not claim mail was sent for duplicates, limits, or failures", 
     const result = await settle(duplicate.signUp({}, signupForm()));
     assert.equal(result.redirect, "/auth/verify");
     assert.equal(result.state, undefined);
+    assert.equal(
+      duplicate.calls.some((call) => call[0] === "recordSignupConsent"),
+      false,
+    );
   } finally {
     duplicate.restore();
   }
@@ -405,6 +454,110 @@ test("signup does not claim mail was sent for duplicates, limits, or failures", 
   } finally {
     failed.restore();
   }
+
+  const consentFailed = harness({
+    consentError: new Error("consent unavailable"),
+  });
+  try {
+    const result = await settle(consentFailed.signUp({}, signupForm()));
+    assert.match(result.state.message, /일시적인 문제/);
+    assert.equal(result.redirect, undefined);
+    assert.deepEqual(
+      consentFailed.calls.find((call) => call[0] === "recordSignupConsent"),
+      ["recordSignupConsent", userId],
+    );
+  } finally {
+    consentFailed.restore();
+  }
+});
+
+test("signup consent recording fixes both versions and removes an inconsistent new account", async () => {
+  const calls = [];
+  let insertError = null;
+  let cleanupError = null;
+  const consent = load("../lib/member-auth/consents.ts", {
+    "server-only": {},
+    "@/lib/supabase/admin": {
+      createAdminClient() {
+        return {
+          from(table) {
+            calls.push(["from", table]);
+            return {
+              async insert(values) {
+                calls.push(["insert", values]);
+                return { error: insertError };
+              },
+            };
+          },
+          auth: {
+            admin: {
+              async deleteUser(id) {
+                calls.push(["deleteUser", id]);
+                return { error: cleanupError };
+              },
+            },
+          },
+        };
+      },
+    },
+  });
+
+  await consent.recordSignupConsent(userId);
+  assert.deepEqual(calls, [
+    ["from", "member_consents"],
+    [
+      "insert",
+      {
+        user_id: userId,
+        terms_version: "1.0",
+        privacy_version: "1.0",
+      },
+    ],
+  ]);
+
+  calls.length = 0;
+  insertError = new Error("insert failed");
+  await assert.rejects(
+    () => consent.recordSignupConsent(userId),
+    /insert failed/,
+  );
+  assert.deepEqual(calls.at(-1), ["deleteUser", userId]);
+
+  calls.length = 0;
+  cleanupError = new Error("cleanup failed");
+  await assert.rejects(
+    () => consent.recordSignupConsent(userId),
+    AggregateError,
+  );
+  assert.deepEqual(calls.at(-1), ["deleteUser", userId]);
+});
+
+test("legal documents keep the approved terms and match signup collection fields", () => {
+  const terms = readFileSync(
+    new URL("../content/legal/terms-of-service.md", import.meta.url),
+    "utf8",
+  );
+  const privacy = readFileSync(
+    new URL("../content/legal/privacy-consent-signup.md", import.meta.url),
+    "utf8",
+  );
+  assert.equal(
+    createHash("sha256").update(terms).digest("hex"),
+    "013008b36cf209325a726f29dccb9dd733976818465dc321577794e14c6b51d9",
+  );
+  assert.match(terms, /대표자 \[대표자명\]/);
+  assert.match(terms, /사업자등록번호 \[사업자등록번호\]/);
+  assert.match(privacy, /필수: 이메일, 비밀번호\(암호화하여 저장\), 이름/);
+  assert.equal(privacy.includes("휴대전화번호"), false);
+
+  const signup = readFileSync(
+    new URL("../components/member-auth/signup-form.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(signup, /href="\/terms"/);
+  assert.match(signup, /href="\/privacy-consent"/);
+  assert.match(signup, /가입하고 인증 메일 받기/);
+  assert.match(signup, /만 14세 이상/);
 });
 
 test("signup and password reset explain unsupported email delivery", async () => {
@@ -1431,6 +1584,9 @@ function signupForm() {
     ["email", "member@example.invalid"],
     ["password", password],
     ["passwordConfirm", password],
+    ["ageConfirmed", "accepted"],
+    ["termsAgreed", "accepted"],
+    ["privacyAgreed", "accepted"],
   ]);
 }
 function loginPairs() {

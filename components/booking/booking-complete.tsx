@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { BankTransferAccount } from "@/components/payments/bank-transfer-account";
 import { Button } from "@/components/ui/button";
 import { bookingConfig } from "@/lib/booking-config";
 import { reservationTimeLabel } from "@/lib/booking-time";
@@ -69,11 +70,8 @@ export function BookingComplete({
         </dl>
       </div>
       <div className="rounded-card bg-brand-soft p-3 @3xl/app:p-4">
-        <h3 className="font-bold">입금 안내 · 예시 계좌</h3>
-        <p className="mt-2 break-words">
-          {bookingConfig.bank.name} {bookingConfig.bank.account}
-        </p>
-        <p>예금주: {bookingConfig.bank.holder}</p>
+        <h3 className="font-bold">입금 안내</h3>
+        <BankTransferAccount />
         <p className="mt-2 font-bold">
           {reservation.price.toLocaleString("ko-KR")}원
         </p>

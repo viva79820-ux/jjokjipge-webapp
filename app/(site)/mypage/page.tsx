@@ -5,13 +5,17 @@ import { redirect } from "next/navigation";
 import { InquiryHistory } from "@/components/member-auth/inquiry-history";
 import { LogoutForm } from "@/components/member-auth/logout-form";
 import { ReloadRestoredPage } from "@/components/member-auth/navigation-reset";
+import { OrderHistory } from "@/components/member-auth/order-history";
 import { ProfileForm } from "@/components/member-auth/profile-form";
 import { ReservationHistory } from "@/components/member-auth/reservation-history";
+import { MyReviews } from "@/components/member-auth/my-reviews";
 import { linkClass, noteClass } from "@/components/member-auth/styles";
 import { Button } from "@/components/ui/button";
 import { getAdmin } from "@/lib/admin/auth";
 import { getMemberInquiries } from "@/lib/member-auth/inquiries";
+import { getMemberOrders } from "@/lib/member-auth/orders";
 import { getMemberReservations } from "@/lib/member-auth/reservations";
+import { listMyReviews } from "@/lib/reviews/member-data";
 import { getMember } from "@/lib/member-auth/session";
 import { siteConfig } from "@/lib/site-config";
 import type { Metadata } from "next";
@@ -43,9 +47,14 @@ async function MemberPage({
   await connection();
   const member = await getMember();
   if (!member) redirect("/login");
-  const [admin, reservations, inquiries] = await Promise.all([
+  const [admin, orders, reservations, reviews, inquiries] = await Promise.all([
     getAdmin(),
+    getMemberOrders(member.id),
     getMemberReservations(member.id),
+    listMyReviews().then(
+      (rows) => ({ rows, unavailable: false }),
+      () => ({ rows: [], unavailable: true }),
+    ),
     getMemberInquiries(member.id),
   ]);
   const notice = (await searchParams).notice;
@@ -58,11 +67,28 @@ async function MemberPage({
           비밀번호를 변경했어요.
         </p>
       )}
+      {notice === "review-saved" && (
+        <p role="status" className="mt-3 text-label font-semibold text-brand">
+          후기를 저장했어요.
+        </p>
+      )}
+      {notice === "review-deleted" && (
+        <p role="status" className="mt-3 text-label font-semibold text-brand">
+          후기를 삭제했어요.
+        </p>
+      )}
       <p className={`mt-3 ${noteClass}`}>
         회원 계정으로 예약한 내역만 보여요. 로그인 전에 남긴 비회원 예약은 예약
-        조회에서 확인해 주세요.
+        조회에서 확인해 주세요. 회원 계정으로 주문한 내역만 보여요. 로그인 전에
+        남긴 비회원 주문은 비회원 주문 조회에서 확인해 주세요.
       </p>
-      <dl className="mt-5 rounded-card border border-border bg-surface p-3 @3xl/app:p-4">
+      <dl className="mt-5 space-y-4 rounded-card border border-border bg-surface p-3 @3xl/app:p-4">
+        <div>
+          <dt className="text-caption text-muted">이름</dt>
+          <dd className="mt-1 text-subtitle font-bold wrap-anywhere">
+            {member.name ?? "등록된 이름이 없어요."}
+          </dd>
+        </div>
         <div>
           <dt className="text-caption text-muted">이메일</dt>
           <dd className="mt-1 text-subtitle font-bold break-all">
@@ -70,9 +96,21 @@ async function MemberPage({
           </dd>
         </div>
       </dl>
-      <ProfileForm name={member.name ?? ""} phone={member.phone ?? ""} />
-      <ReservationHistory reservations={reservations} />
+      <ReservationHistory
+        reservations={reservations}
+        reviewedReservationIds={
+          new Set(
+            reviews.rows
+              .map((review) => review.reservation_id)
+              .filter((id): id is string => Boolean(id)),
+          )
+        }
+        reviewsReady={!reviews.unavailable}
+      />
+      <MyReviews reviews={reviews.rows} unavailable={reviews.unavailable} />
+      <OrderHistory orders={orders} />
       <InquiryHistory inquiries={inquiries} />
+      <ProfileForm name={member.name ?? ""} phone={member.phone ?? ""} />
       {admin ? (
         <div className="mt-5">
           <Button href="/admin" variant="secondary" className="w-full">
@@ -86,6 +124,9 @@ async function MemberPage({
       <div className="mt-4 flex flex-col">
         <Link href="/booking/lookup" className={linkClass}>
           비회원 예약 조회
+        </Link>
+        <Link href="/shop/order/lookup" className={linkClass}>
+          비회원 주문 조회
         </Link>
         <Link href="/support/lookup" className={linkClass}>
           문의 조회

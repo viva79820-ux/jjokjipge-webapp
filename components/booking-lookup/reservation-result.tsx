@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import { bookingConfig } from "@/lib/booking-config";
+import { BankTransferAccount } from "@/components/payments/bank-transfer-account";
 import { counselorHeading } from "@/lib/counselors/rules";
 import {
   formatSchedule,
@@ -91,11 +91,7 @@ export function ReservationResult({ result }: { result: LookupResult }) {
           <p className="mt-2">입금이 확인되면 예약이 확정돼요.</p>
           {result.paymentMethod === "bank_transfer" && (
             <>
-              <p className="mt-3 font-bold">현재 시안의 예시 계좌</p>
-              <p className="mt-2 break-words">
-                {bookingConfig.bank.name} {bookingConfig.bank.account}
-              </p>
-              <p className="break-words">예금주: {bookingConfig.bank.holder}</p>
+              <BankTransferAccount />
               <p className="mt-2 font-bold">
                 {result.price.toLocaleString("ko-KR")}원
               </p>

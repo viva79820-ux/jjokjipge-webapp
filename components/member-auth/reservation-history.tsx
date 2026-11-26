@@ -1,12 +1,17 @@
 import { StatusBadge } from "@/components/booking-lookup/status-badge";
+import { Button } from "@/components/ui/button";
 import { counselorHeading } from "@/lib/counselors/rules";
 import type { MemberReservation } from "@/lib/member-auth/reservations";
 import { formatSchedule } from "@/lib/reservations/lookup/display";
 
 export function ReservationHistory({
   reservations,
+  reviewedReservationIds,
+  reviewsReady,
 }: {
   reservations: MemberReservation[];
+  reviewedReservationIds: ReadonlySet<string>;
+  reviewsReady: boolean;
 }) {
   return (
     <section aria-labelledby="member-reservations-title" className="mt-7">
@@ -30,9 +35,16 @@ export function ReservationHistory({
                 className="min-w-0 rounded-card border border-border bg-surface p-3 @3xl/app:p-4"
               >
                 <article>
-                  <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <StatusBadge status={reservation.status} />
-                    <span className="text-caption text-muted break-all">
+                    {reviewsReady &&
+                    reservation.status === "completed" &&
+                    !reviewedReservationIds.has(reservation.id) ? (
+                      <Button href={`/mypage/reviews/new/${reservation.id}`}>
+                        후기 쓰기
+                      </Button>
+                    ) : null}
+                    <span className="ml-auto text-caption text-muted break-all">
                       {reservation.reservation_no}
                     </span>
                   </div>
