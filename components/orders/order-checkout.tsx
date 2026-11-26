@@ -3,15 +3,26 @@
 import {
   useActionState,
   useEffect,
-  useRef,
+  useMemo,
   useState,
   useSyncExternalStore,
   type ReactNode,
 } from "react";
+import { unstable_isUnrecognizedActionError } from "next/navigation";
 import { PhoneInput } from "@/components/booking/phone-input";
 import { OrderComplete } from "@/components/orders/order-complete";
 import { Button } from "@/components/ui/button";
 import { createOrder } from "@/lib/orders/actions";
+import {
+  clearOrderDraft,
+  orderDraftServerSnapshot,
+  orderDraftSnapshot,
+  publishOrderDraft,
+  subscribeOrderDraft,
+  browserOrderDraftStorage,
+  type OrderDraft,
+} from "@/lib/orders/checkout-draft";
+import { staleOrderMessage, unrecognizedOrderState } from "@/lib/orders/rules";
 import { orderConfig } from "@/lib/order-config";
 import { loadCartProducts } from "@/lib/products/cart-actions";
 import {
@@ -30,6 +41,34 @@ import type { OrderField, OrderState } from "@/lib/orders/types";
 const initialState: OrderState = {};
 const inputClass =
   "min-h-11 w-full min-w-0 rounded-input border border-border bg-surface px-3 text-body focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
+
+async function submitOrder(
+  previous: OrderState,
+  formData: FormData,
+): Promise<OrderState> {
+  try {
+    return await createOrder(previous, formData);
+  } catch (error) {
+    const stale = unrecognizedOrderState(error);
+    if (stale) return stale;
+    if (unstable_isUnrecognizedActionError(error))
+      return { message: staleOrderMessage };
+    throw error;
+  }
+}
+
+function forgetCheckoutDraft() {
+  clearOrderDraft(browserOrderDraftStorage());
+}
+
+function assignRequestKey(node: HTMLInputElement | null) {
+  if (!node || node.value) return;
+  try {
+    node.value = crypto.randomUUID();
+  } catch {
+    node.value = "";
+  }
+}
 
 function Field({
   id,
@@ -135,23 +174,24 @@ export function OrderCheckout() {
     cartSnapshot,
     cartServerSnapshot,
   );
-  const lines = stored.state === "ready" ? stored.lines : [];
+  const lines = useMemo(
+    () => (stored.state === "ready" ? stored.lines : []),
+    [stored],
+  );
   const ids = lines.map((line) => line.id).join("\n");
   const [catalog, setCatalog] = useState<CartCatalog | null>(null);
   const [lookupFailed, setLookupFailed] = useState(false);
   const [retryToken, setRetryToken] = useState(0);
-  const [phone, setPhone] = useState("");
-  const requestKeyRef = useRef<HTMLInputElement>(null);
-  const [state, action, pending] = useActionState(createOrder, initialState);
+  const draft = useSyncExternalStore(
+    subscribeOrderDraft,
+    orderDraftSnapshot,
+    orderDraftServerSnapshot,
+  );
+  const [state, action, pending] = useActionState(submitOrder, initialState);
 
-  useEffect(() => {
-    try {
-      if (requestKeyRef.current)
-        requestKeyRef.current.value = crypto.randomUUID();
-    } catch {
-      if (requestKeyRef.current) requestKeyRef.current.value = "";
-    }
-  }, []);
+  function commitDraft(patch: Partial<OrderDraft>) {
+    publishOrderDraft({ ...draft, ...patch });
+  }
 
   useEffect(() => {
     if (!ids) return;
@@ -186,6 +226,7 @@ export function OrderCheckout() {
     if (!state.success) return;
     const storage = browserCartStorage();
     if (storage) writeCart(storage, []);
+    forgetCheckoutDraft();
   }, [state.success]);
 
   if (state.success) return <OrderComplete order={state.success} />;
@@ -196,7 +237,11 @@ export function OrderCheckout() {
     return (
       <div className="space-y-3">
         <p role="alert">장바구니를 불러오지 못했어요.</p>
-        <Button href="/shop/cart" variant="secondary">
+        <Button
+          href="/shop/cart"
+          variant="secondary"
+          onClick={forgetCheckoutDraft}
+        >
           장바구니로
         </Button>
       </div>
@@ -225,7 +270,11 @@ export function OrderCheckout() {
         >
           다시 확인
         </Button>
-        <Button href="/shop/cart" variant="secondary">
+        <Button
+          href="/shop/cart"
+          variant="secondary"
+          onClick={forgetCheckoutDraft}
+        >
           장바구니로
         </Button>
       </div>
@@ -246,10 +295,17 @@ export function OrderCheckout() {
           품절되었거나 판매가 중지된 상품이 있어요. 장바구니를 다시 확인해
           주세요.
         </p>
-        <Button href="/shop/cart">장바구니로</Button>
+        <Button href="/shop/cart" onClick={forgetCheckoutDraft}>
+          장바구니로
+        </Button>
       </div>
     );
 
+  const hideFieldErrors = state.message === staleOrderMessage;
+  function shownError(field: OrderField) {
+    if (hideFieldErrors) return undefined;
+    return errorFor(state, field);
+  }
   const items = JSON.stringify(
     lines.map((line) => ({ id: line.id, quantity: line.quantity })),
   );
@@ -265,18 +321,14 @@ export function OrderCheckout() {
       <OrderSummary lines={lines} catalog={catalog} />
 
       <form action={action} className="space-y-7" noValidate>
-        <input ref={requestKeyRef} type="hidden" name="requestKey" />
+        <input ref={assignRequestKey} type="hidden" name="requestKey" />
         <input type="hidden" name="items" value={items} />
 
         <section aria-labelledby="order-contact-title" className="space-y-3">
           <h2 id="order-contact-title" className="text-title font-bold">
             주문자 정보
           </h2>
-          <Field
-            id="order-name"
-            label="주문자 이름"
-            error={errorFor(state, "name")}
-          >
+          <Field id="order-name" label="주문자 이름" error={shownError("name")}>
             <input
               id="order-name"
               name="name"
@@ -284,37 +336,35 @@ export function OrderCheckout() {
               autoComplete="name"
               maxLength={30}
               required
-              aria-invalid={errorFor(state, "name") ? true : undefined}
+              aria-invalid={shownError("name") ? true : undefined}
               aria-describedby={
-                errorFor(state, "name") ? "order-name-error" : undefined
+                shownError("name") ? "order-name-error" : undefined
               }
+              value={draft.name}
+              onChange={(event) => commitDraft({ name: event.target.value })}
               className={inputClass}
             />
           </Field>
           <Field
             id="order-phone"
             label="휴대폰 번호"
-            error={errorFor(state, "phone")}
+            error={shownError("phone")}
           >
             <PhoneInput
               id="order-phone"
               name="phone"
               autoComplete="tel"
               required
-              value={phone}
-              onValueChange={setPhone}
-              aria-invalid={errorFor(state, "phone") ? true : undefined}
+              value={draft.phone}
+              onValueChange={(phone) => commitDraft({ phone })}
+              aria-invalid={shownError("phone") ? true : undefined}
               aria-describedby={
-                errorFor(state, "phone") ? "order-phone-error" : undefined
+                shownError("phone") ? "order-phone-error" : undefined
               }
               className={inputClass}
             />
           </Field>
-          <Field
-            id="order-email"
-            label="이메일"
-            error={errorFor(state, "email")}
-          >
+          <Field id="order-email" label="이메일" error={shownError("email")}>
             <input
               id="order-email"
               name="email"
@@ -322,10 +372,12 @@ export function OrderCheckout() {
               autoComplete="email"
               maxLength={254}
               required
-              aria-invalid={errorFor(state, "email") ? true : undefined}
+              aria-invalid={shownError("email") ? true : undefined}
               aria-describedby={
-                errorFor(state, "email") ? "order-email-error" : undefined
+                shownError("email") ? "order-email-error" : undefined
               }
+              value={draft.email}
+              onChange={(event) => commitDraft({ email: event.target.value })}
               className={inputClass}
             />
           </Field>
@@ -338,7 +390,7 @@ export function OrderCheckout() {
           <Field
             id="order-postal-code"
             label="우편번호"
-            error={errorFor(state, "postalCode")}
+            error={shownError("postalCode")}
           >
             <input
               id="order-postal-code"
@@ -348,11 +400,13 @@ export function OrderCheckout() {
               autoComplete="postal-code"
               maxLength={5}
               required
-              aria-invalid={errorFor(state, "postalCode") ? true : undefined}
+              aria-invalid={shownError("postalCode") ? true : undefined}
               aria-describedby={
-                errorFor(state, "postalCode")
-                  ? "order-postal-code-error"
-                  : undefined
+                shownError("postalCode") ? "order-postal-code-error" : undefined
+              }
+              value={draft.postalCode}
+              onChange={(event) =>
+                commitDraft({ postalCode: event.target.value })
               }
               className={inputClass}
             />
@@ -360,7 +414,7 @@ export function OrderCheckout() {
           <Field
             id="order-address-line1"
             label="기본 주소"
-            error={errorFor(state, "addressLine1")}
+            error={shownError("addressLine1")}
           >
             <input
               id="order-address-line1"
@@ -369,11 +423,15 @@ export function OrderCheckout() {
               autoComplete="address-line1"
               maxLength={200}
               required
-              aria-invalid={errorFor(state, "addressLine1") ? true : undefined}
+              aria-invalid={shownError("addressLine1") ? true : undefined}
               aria-describedby={
-                errorFor(state, "addressLine1")
+                shownError("addressLine1")
                   ? "order-address-line1-error"
                   : undefined
+              }
+              value={draft.addressLine1}
+              onChange={(event) =>
+                commitDraft({ addressLine1: event.target.value })
               }
               className={inputClass}
             />
@@ -381,7 +439,7 @@ export function OrderCheckout() {
           <Field
             id="order-address-line2"
             label="상세 주소(선택)"
-            error={errorFor(state, "addressLine2")}
+            error={shownError("addressLine2")}
           >
             <input
               id="order-address-line2"
@@ -389,11 +447,15 @@ export function OrderCheckout() {
               type="text"
               autoComplete="address-line2"
               maxLength={200}
-              aria-invalid={errorFor(state, "addressLine2") ? true : undefined}
+              aria-invalid={shownError("addressLine2") ? true : undefined}
               aria-describedby={
-                errorFor(state, "addressLine2")
+                shownError("addressLine2")
                   ? "order-address-line2-error"
                   : undefined
+              }
+              value={draft.addressLine2}
+              onChange={(event) =>
+                commitDraft({ addressLine2: event.target.value })
               }
               className={inputClass}
             />
@@ -419,27 +481,25 @@ export function OrderCheckout() {
               name="privacyConsent"
               className="mt-1 size-5 accent-brand"
               aria-describedby={
-                errorFor(state, "privacyConsent")
-                  ? "order-privacy-error"
-                  : undefined
+                shownError("privacyConsent") ? "order-privacy-error" : undefined
               }
             />
             <span>
               주문 처리와 배송을 위한 개인정보 수집·이용에 동의합니다.
             </span>
           </label>
-          {errorFor(state, "privacyConsent") ? (
+          {shownError("privacyConsent") ? (
             <p
               id="order-privacy-error"
               role="alert"
               className="text-caption text-error"
             >
-              {errorFor(state, "privacyConsent")}
+              {shownError("privacyConsent")}
             </p>
           ) : null}
         </div>
 
-        {state.errors?.items ? (
+        {!hideFieldErrors && state.errors?.items ? (
           <p role="alert" className="text-caption text-error">
             {state.errors.items}
           </p>
@@ -454,7 +514,11 @@ export function OrderCheckout() {
           <Button type="submit" disabled={pending}>
             {pending ? "주문 접수 중..." : "무통장입금으로 주문하기"}
           </Button>
-          <Button href="/shop/cart" variant="secondary">
+          <Button
+            href="/shop/cart"
+            variant="secondary"
+            onClick={forgetCheckoutDraft}
+          >
             장바구니로 돌아가기
           </Button>
         </div>

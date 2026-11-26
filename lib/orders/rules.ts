@@ -2,6 +2,24 @@ import { orderConfig } from "@/lib/order-config";
 import { formatPhone, isValidEmail } from "@/lib/reservations/rules";
 import type { OrderField, OrderLineInput, OrderState } from "./types";
 
+export const staleOrderMessage =
+  "주문서가 갱신됐어요. 새로고침 후 다시 주문해 주세요.";
+export const orderInputMessage = "입력한 주문 정보를 확인해 주세요.";
+
+export function unrecognizedOrderState(error: unknown): OrderState | null {
+  if (!error || typeof error !== "object") return null;
+  const name = "name" in error ? error.name : undefined;
+  const message = "message" in error ? error.message : undefined;
+  if (
+    name === "UnrecognizedActionError" ||
+    (typeof message === "string" &&
+      (message.includes("Failed to find Server Action") ||
+        message.includes("was not found on the server")))
+  )
+    return { message: staleOrderMessage };
+  return null;
+}
+
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const controlPattern = /[\u0000-\u001F\u007F-\u009F\u2028\u2029]/;
@@ -95,8 +113,12 @@ export function parseOrderForm(input: unknown) {
   const errors: NonNullable<OrderState["errors"]> = {};
   if (!(input instanceof FormData)) {
     errors.items = "주문 내용을 다시 확인해 주세요.";
-    return { errors, values: null };
+    return { errors, values: null, stale: false };
   }
+
+  const requestKey = scalar(input, "requestKey")?.toLowerCase() ?? "";
+  if (!uuidPattern.test(requestKey))
+    return { errors: {}, values: null, stale: true };
 
   const name = cleanSingleLine(
     scalar(input, "name"),
@@ -146,9 +168,6 @@ export function parseOrderForm(input: unknown) {
     else addressLine2 = cleaned || null;
   }
 
-  const requestKey = scalar(input, "requestKey")?.toLowerCase() ?? "";
-  if (!uuidPattern.test(requestKey))
-    errors.items = "주문서를 새로고침한 뒤 다시 시도해 주세요.";
   const lines = parseLines(scalar(input, "items"), errors);
 
   if (scalar(input, "privacyConsent") !== "on")
@@ -157,6 +176,7 @@ export function parseOrderForm(input: unknown) {
 
   return {
     errors,
+    stale: false,
     values: Object.keys(errors).length
       ? null
       : {
