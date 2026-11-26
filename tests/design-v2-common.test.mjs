@@ -94,6 +94,26 @@ test("상단 탭은 지정 순서로 두고 넓으면 너비를 채우며 AI 사
   assert.equal(form.includes("<form"), false);
 });
 
+test("키보드 포커스는 보이고 고정 막대 밖에 멈춘다", () => {
+  const css = read("app/globals.css");
+  const frame = read("lib/app-frame.ts");
+  const styles = read("components/member-auth/styles.ts");
+  assert.match(css, /scroll-padding-top:\s*var\(--spacing-site-header\)/);
+  assert.match(
+    frame,
+    /4\.5rem\+1\.25rem\+1\.25rem\+env\(safe-area-inset-bottom\)/,
+  );
+  assert.match(
+    css,
+    /scroll-padding-bottom:\s*calc\(\s*4\.5rem \+ 1\.25rem \+ 1\.25rem \+ env\(safe-area-inset-bottom\)\s*\)/,
+  );
+  assert.match(styles, /keyboard:focus-visible:outline-solid/);
+  assert.match(css, /@custom-variant keyboard/);
+  assert.match(read("components/keyboard-focus.tsx"), /event\.key !== "Tab"/);
+  assert.match(read("app/layout.tsx"), /<KeyboardFocus \/>/);
+  assert.equal(styles.includes("focus:outline"), false);
+});
+
 test("하단 탭 동작과 PC 560px 틀은 유지된다", () => {
   const bottom = read("components/bottom-tabs.tsx");
   for (const label of ["홈", "카테고리", "전화하기", "예약조회", "로그인"]) {

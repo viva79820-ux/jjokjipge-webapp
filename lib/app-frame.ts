@@ -10,5 +10,6 @@ export const appFixedBarClass = `fixed bottom-0 left-1/2 z-20 -translate-x-1/2 $
 // Bottom tab is 4.5rem. The center phone control rises 1.25rem above it
 // (-mt-5). The next 1.25rem keeps the last content off that control.
 // Safe-area is added for devices with a home indicator.
+// html scroll-padding-bottom in app/globals.css uses this same inset.
 export const appMainClass =
   "pb-[calc(4.5rem+1.25rem+1.25rem+env(safe-area-inset-bottom))]";
