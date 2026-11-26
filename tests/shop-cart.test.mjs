@@ -505,7 +505,7 @@ test("장바구니 조회는 공개 상품을 한 번에 다시 읽고 실패해
   assert.match(body, /\.eq\("is_published", true\)/);
 });
 
-test("화면은 담기 합계와 세 가지 안내를 나누고 결제 버튼을 만들지 않는다", () => {
+test("화면은 담기 합계와 세 가지 안내를 나누고 주문서로 연결한다", () => {
   const pages = readFileSync(
     new URL("components/products/pages.tsx", root),
     "utf8",
@@ -546,7 +546,8 @@ test("화면은 담기 합계와 세 가지 안내를 나누고 결제 버튼을
   assert.match(view, /삭제/);
   assert.match(view, />\s*합계/);
   assert.equal(view.includes(".description"), false);
-  assert.equal(view.includes("구매하기"), false);
+  assert.match(view, /href="\/shop\/order"/);
+  assert.match(view, /주문서 작성/);
   assert.equal(view.includes("결제하기"), false);
   assert.equal(add.includes("구매하기"), false);
   assert.equal(add.includes("결제하기"), false);
@@ -554,6 +555,6 @@ test("화면은 담기 합계와 세 가지 안내를 나누고 결제 버튼을
   assert.equal(page.includes("requireAdmin"), false);
   assert.match(
     readFileSync(new URL("lib/products/cart.ts", root), "utf8"),
-    /주문과 결제는 준비 중입니다/,
+    /장바구니에서 배송지를 입력하고 주문할 수 있습니다/,
   );
 });

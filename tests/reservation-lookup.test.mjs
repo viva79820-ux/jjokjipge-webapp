@@ -542,7 +542,7 @@ test("lookup files stay inside the reservation module and do not cache personal 
     action,
     /SUPABASE_SECRET_KEY|createPublicClient|consult_products/,
   );
-  assert.match(result, /bookingConfig/);
+  assert.match(result, /BankTransferAccount/);
   assert.doesNotMatch(result, /000-0000-0000|예시은행|자동 취소|메일을 보냈/);
   for (const text of [
     "예약 정보 입력",

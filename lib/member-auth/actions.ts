@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { redirect, unstable_rethrow } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { readConfirmSubmission } from "./confirm";
+import { recordSignupConsent } from "./consents";
 import { callbackUrl, resolveTrustedOrigin, safeNext } from "./redirect";
 import { authFailure, logAuthFailure, messages } from "./errors";
 import { getConfirmedUser } from "./session";
@@ -72,6 +73,9 @@ export async function signUp(
       return { message: messages.unavailable };
     }
     if (!data.user) return { message: messages.unavailable };
+    if (data.user.identities?.length !== 0) {
+      await recordSignupConsent(data.user.id);
+    }
   } catch (error) {
     unstable_rethrow(error);
     logAuthFailure("member signup failed", error);

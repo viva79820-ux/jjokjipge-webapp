@@ -17,7 +17,7 @@ export const cartMessages = {
   unavailable: "현재 구매할 수 없는 상품입니다.",
   excluded: "품절이거나 현재 구매할 수 없는 상품은 합계에 포함하지 않습니다.",
   loading: "장바구니를 확인하고 있습니다.",
-  checkout: "주문과 결제는 준비 중입니다.",
+  checkout: "장바구니에서 배송지를 입력하고 주문할 수 있습니다.",
   soldOutNote: "품절 상품은 합계에 포함되지 않습니다.",
   soldOutAdd: "품절 상품은 장바구니에 담을 수 없습니다.",
   held: "담긴 상품",

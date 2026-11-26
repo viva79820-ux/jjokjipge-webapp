@@ -4,11 +4,13 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LogoutForm } from "@/components/member-auth/logout-form";
 import { ReloadRestoredPage } from "@/components/member-auth/navigation-reset";
+import { OrderHistory } from "@/components/member-auth/order-history";
 import { ReservationHistory } from "@/components/member-auth/reservation-history";
 import { MyReviews } from "@/components/member-auth/my-reviews";
 import { linkClass, noteClass } from "@/components/member-auth/styles";
 import { Button } from "@/components/ui/button";
 import { getAdmin } from "@/lib/admin/auth";
+import { getMemberOrders } from "@/lib/member-auth/orders";
 import { getMemberReservations } from "@/lib/member-auth/reservations";
 import { listMyReviews } from "@/lib/reviews/member-data";
 import { getMember } from "@/lib/member-auth/session";
@@ -42,8 +44,9 @@ async function MemberPage({
   await connection();
   const member = await getMember();
   if (!member) redirect("/login");
-  const [admin, reservations, reviews] = await Promise.all([
+  const [admin, orders, reservations, reviews] = await Promise.all([
     getAdmin(),
+    getMemberOrders(member.id),
     getMemberReservations(member.id),
     listMyReviews().then(
       (rows) => ({ rows, unavailable: false }),
@@ -72,7 +75,8 @@ async function MemberPage({
       )}
       <p className={`mt-3 ${noteClass}`}>
         회원 계정으로 예약한 내역만 보여요. 로그인 전에 남긴 비회원 예약은 예약
-        조회에서 확인해 주세요.
+        조회에서 확인해 주세요. 회원 계정으로 주문한 내역만 보여요. 로그인 전에
+        남긴 비회원 주문은 비회원 주문 조회에서 확인해 주세요.
       </p>
       <dl className="mt-5 space-y-4 rounded-card border border-border bg-surface p-3 @3xl/app:p-4">
         <div>
@@ -100,6 +104,7 @@ async function MemberPage({
         reviewsReady={!reviews.unavailable}
       />
       <MyReviews reviews={reviews.rows} unavailable={reviews.unavailable} />
+      <OrderHistory orders={orders} />
       {admin ? (
         <div className="mt-5">
           <Button href="/admin" variant="secondary" className="w-full">
@@ -113,6 +118,9 @@ async function MemberPage({
       <div className="mt-4 flex flex-col">
         <Link href="/booking/lookup" className={linkClass}>
           비회원 예약 조회
+        </Link>
+        <Link href="/shop/order/lookup" className={linkClass}>
+          비회원 주문 조회
         </Link>
         <Link href="/support/lookup" className={linkClass}>
           문의 조회

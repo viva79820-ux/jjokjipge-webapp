@@ -329,7 +329,14 @@ export function CartView() {
               {formatWon(ready.total)}
             </span>
           </p>
-          <p className="text-body text-muted">{cartMessages.checkout}</p>
+          {ready.rows.length > 0 &&
+          ready.rows.every((row) => row.kind === "available") ? (
+            <Button href="/shop/order">주문서 작성</Button>
+          ) : (
+            <p className="text-body text-muted">
+              구매할 수 없는 상품을 정리한 뒤 주문해 주세요.
+            </p>
+          )}
         </div>
       )}
     </section>
