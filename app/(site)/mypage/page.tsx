@@ -4,9 +4,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LogoutForm } from "@/components/member-auth/logout-form";
 import { ReloadRestoredPage } from "@/components/member-auth/navigation-reset";
+import { OrderHistory } from "@/components/member-auth/order-history";
 import { linkClass, noteClass } from "@/components/member-auth/styles";
 import { Button } from "@/components/ui/button";
 import { getAdmin } from "@/lib/admin/auth";
+import { getMemberOrders } from "@/lib/member-auth/orders";
 import { getMember } from "@/lib/member-auth/session";
 import { siteConfig } from "@/lib/site-config";
 import type { Metadata } from "next";
@@ -38,7 +40,10 @@ async function MemberPage({
   await connection();
   const member = await getMember();
   if (!member) redirect("/login");
-  const admin = await getAdmin();
+  const [admin, orders] = await Promise.all([
+    getAdmin(),
+    getMemberOrders(member.id),
+  ]);
   const notice = (await searchParams).notice;
   return (
     <section key={member.id} className="mx-auto w-full max-w-md min-w-0">
@@ -50,8 +55,9 @@ async function MemberPage({
         </p>
       )}
       <p className={`mt-3 ${noteClass}`}>
-        예약, 주문, 문의, 후기 목록은 아직 이 화면에 연결되어 있지 않아요.
-        비회원으로 남긴 예약은 여기서 회원 계정에 연결하지 않아요.
+        회원 계정으로 주문한 내역만 보여요. 로그인 전에 남긴 비회원 주문은
+        비회원 주문 조회에서 확인해 주세요. 예약, 문의, 후기 목록은 아직 이
+        화면에 연결되어 있지 않아요.
       </p>
       <dl className="mt-5 space-y-4 rounded-card border border-border bg-surface p-3 @3xl/app:p-4">
         <div>
@@ -67,6 +73,7 @@ async function MemberPage({
           </dd>
         </div>
       </dl>
+      <OrderHistory orders={orders} />
       {admin ? (
         <div className="mt-5">
           <Button href="/admin" variant="secondary" className="w-full">

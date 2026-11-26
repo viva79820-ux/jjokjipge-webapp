@@ -88,9 +88,14 @@ export function OrderComplete({ order }: { order: OrderSuccess }) {
 
       <p className="text-caption text-muted">
         주문번호와 주문할 때 입력한 이메일로 배송 상태를 확인할 수 있어요.
+        로그인한 계정으로 주문했다면 마이페이지의 주문·배송 내역에서도 볼 수
+        있어요.
       </p>
       <div className="flex flex-wrap gap-2">
         <Button href="/shop/order/lookup">주문 조회</Button>
+        <Button href="/mypage" variant="secondary">
+          마이페이지
+        </Button>
         <Button href="/shop" variant="secondary">
           상품 목록으로
         </Button>
