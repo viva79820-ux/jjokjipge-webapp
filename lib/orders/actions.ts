@@ -3,8 +3,13 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { orderConfig } from "@/lib/order-config";
-import { isOrderNumber, parseOrderForm } from "./rules";
-import type { OrderState, OrderStatus } from "./types";
+import {
+  isOrderNumber,
+  orderInputMessage,
+  parseOrderForm,
+  staleOrderMessage,
+} from "./rules";
+import type { OrderField, OrderState, OrderStatus } from "./types";
 
 const failureMessage = "주문을 접수하지 못했어요. 잠시 후 다시 시도해 주세요.";
 const statuses = new Set<OrderStatus>([
@@ -30,6 +35,20 @@ function storedAmount(value: unknown, minimum: number, maximum: number) {
   return Number.isSafeInteger(amount) && amount >= minimum && amount <= maximum
     ? amount
     : null;
+}
+
+const inputFields: OrderField[] = [
+  "name",
+  "phone",
+  "email",
+  "postalCode",
+  "addressLine1",
+  "addressLine2",
+  "privacyConsent",
+];
+
+function hasOrderInputError(errors: OrderState["errors"]) {
+  return inputFields.some((field) => Boolean(errors?.[field]));
 }
 
 function resultRow(value: unknown) {
@@ -75,11 +94,11 @@ export async function createOrder(
   formData: FormData,
 ): Promise<OrderState> {
   const parsed = parseOrderForm(formData);
+  if (parsed.stale) return { message: staleOrderMessage };
   if (!parsed.values)
-    return {
-      errors: parsed.errors,
-      message: "입력한 주문 정보를 확인해 주세요.",
-    };
+    return hasOrderInputError(parsed.errors)
+      ? { errors: parsed.errors, message: orderInputMessage }
+      : { errors: parsed.errors };
 
   try {
     const auth = await createClient();

@@ -285,3 +285,189 @@ test("고객 직접 조회 정책과 가짜 계좌·화면의 가격 전송이 �
   );
   assert.match(checkout, /name="items"/);
 });
+
+function memoryStorage(seed = []) {
+  const data = new Map(seed);
+  return {
+    getItem(key) {
+      return data.has(key) ? data.get(key) : null;
+    },
+    setItem(key, value) {
+      data.set(key, String(value));
+    },
+    removeItem(key) {
+      data.delete(key);
+    },
+  };
+}
+
+const checkoutDraft = load("lib/orders/checkout-draft.ts");
+const savedDraft = {
+  name: "테스트주문자",
+  phone: "010-1234-5678",
+  email: "buyer@example.invalid",
+  postalCode: "41911",
+  addressLine1: "대구광역시 중구 테스트로 1",
+  addressLine2: "테스트 101호",
+};
+
+function assertOrderMessagesExclusive(state) {
+  const text = JSON.stringify(state);
+  const stale = text.includes(rules.staleOrderMessage);
+  const input = text.includes(rules.orderInputMessage);
+  assert.equal(stale && input, false);
+  assert.equal(
+    text.includes("주문서를 새로고침한 뒤 다시 시도해 주세요."),
+    false,
+  );
+}
+
+test("오래된 주문서와 입력 오류는 서로 다른 문구만 보여 준다", async () => {
+  const staleTool = harness();
+  const stale = await staleTool.createOrder(
+    {},
+    validForm({ requestKey: "old-page", name: "" }),
+  );
+  assert.deepEqual(stale, { message: rules.staleOrderMessage });
+  assert.equal(stale.errors, undefined);
+  assertOrderMessagesExclusive(stale);
+  assert.equal(staleTool.calls.length, 0);
+
+  const inputTool = harness();
+  const input = await inputTool.createOrder({}, validForm({ name: " " }));
+  assert.equal(input.message, rules.orderInputMessage);
+  assert.match(input.errors.name, /주문자 이름/);
+  assert.equal(input.errors.items, undefined);
+  assertOrderMessagesExclusive(input);
+  assert.equal(inputTool.calls.length, 0);
+
+  const itemsTool = harness();
+  const items = await itemsTool.createOrder({}, validForm({ items: "[]" }));
+  assert.equal(items.message, undefined);
+  assert.match(items.errors.items, /장바구니/);
+  assertOrderMessagesExclusive(items);
+  assert.equal(itemsTool.calls.length, 0);
+
+  const unrecognized = new Error(
+    'Server Action "old" was not found on the server.',
+  );
+  unrecognized.name = "UnrecognizedActionError";
+  assert.deepEqual(rules.unrecognizedOrderState(unrecognized), {
+    message: rules.staleOrderMessage,
+  });
+  assert.deepEqual(
+    rules.unrecognizedOrderState(
+      new Error('Failed to find Server Action "old".'),
+    ),
+    { message: rules.staleOrderMessage },
+  );
+  assert.equal(rules.unrecognizedOrderState(new Error("network")), null);
+
+  const checkout = readFileSync(
+    new URL("components/orders/order-checkout.tsx", root),
+    "utf8",
+  );
+  assert.match(checkout, /unrecognizedOrderState/);
+  assert.match(checkout, /unstable_isUnrecognizedActionError/);
+  assert.match(checkout, /state\.message === staleOrderMessage/);
+  assert.doesNotMatch(checkout, /주문서를 새로고침한 뒤 다시 시도해 주세요/);
+});
+
+test("주문서 임시 입력은 저장·복원하고 성공·장바구니·탭 종료 때 지운다", () => {
+  const storage = memoryStorage();
+  assert.equal(checkoutDraft.writeOrderDraft(storage, savedDraft), true);
+  const raw = storage.getItem(checkoutDraft.orderDraftStorageKey);
+  assert.equal(raw.includes("privacyConsent"), false);
+  assert.deepEqual(JSON.parse(raw), savedDraft);
+  assert.deepEqual(checkoutDraft.readOrderDraft(storage), savedDraft);
+
+  const withConsent = memoryStorage([
+    [
+      checkoutDraft.orderDraftStorageKey,
+      JSON.stringify({ ...savedDraft, privacyConsent: "on" }),
+    ],
+  ]);
+  assert.deepEqual(checkoutDraft.readOrderDraft(withConsent), savedDraft);
+  assert.equal(
+    Object.hasOwn(checkoutDraft.readOrderDraft(withConsent), "privacyConsent"),
+    false,
+  );
+
+  checkoutDraft.writeOrderDraft(storage, {
+    ...savedDraft,
+    privacyConsent: "on",
+  });
+  assert.equal(
+    storage
+      .getItem(checkoutDraft.orderDraftStorageKey)
+      .includes("privacyConsent"),
+    false,
+  );
+
+  checkoutDraft.clearOrderDraft(storage);
+  assert.equal(storage.getItem(checkoutDraft.orderDraftStorageKey), null);
+  assert.equal(checkoutDraft.readOrderDraft(storage), null);
+  assert.equal(
+    checkoutDraft.readOrderDraft(
+      memoryStorage([[checkoutDraft.orderDraftStorageKey, "{"]]),
+    ),
+    null,
+  );
+
+  const draftSource = readFileSync(
+    new URL("lib/orders/checkout-draft.ts", root),
+    "utf8",
+  );
+  const checkout = readFileSync(
+    new URL("components/orders/order-checkout.tsx", root),
+    "utf8",
+  );
+  assert.match(draftSource, /window\.sessionStorage/);
+  assert.doesNotMatch(draftSource, /localStorage|pagehide|beforeunload/);
+  assert.doesNotMatch(draftSource, /privacyConsent/);
+  assert.match(checkout, /forgetCheckoutDraft/);
+  assert.match(checkout, /publishOrderDraft/);
+  assert.match(checkout, /orderDraftSnapshot/);
+  assert.equal(checkout.match(/forgetCheckoutDraft/g).length >= 6, true);
+});
+
+test("같은 탭 스냅샷은 저장한 입력을 유지하고 지우면 빈다", () => {
+  const data = new Map();
+  const previous = globalThis.window;
+  globalThis.window = {
+    sessionStorage: {
+      getItem(key) {
+        return data.has(key) ? data.get(key) : null;
+      },
+      setItem(key, value) {
+        data.set(key, String(value));
+      },
+      removeItem(key) {
+        data.delete(key);
+      },
+    },
+    dispatchEvent() {
+      return true;
+    },
+  };
+  try {
+    checkoutDraft.publishOrderDraft(savedDraft);
+    const first = checkoutDraft.orderDraftSnapshot();
+    assert.equal(checkoutDraft.orderDraftSnapshot(), first);
+    assert.deepEqual(first, savedDraft);
+    assert.equal(
+      data.get(checkoutDraft.orderDraftStorageKey).includes("privacyConsent"),
+      false,
+    );
+    checkoutDraft.clearOrderDraft(checkoutDraft.browserOrderDraftStorage());
+    assert.equal(
+      checkoutDraft.orderDraftSnapshot(),
+      checkoutDraft.emptyOrderDraft,
+    );
+    assert.equal(data.has(checkoutDraft.orderDraftStorageKey), false);
+  } finally {
+    checkoutDraft.clearOrderDraft(null);
+    if (previous === undefined) delete globalThis.window;
+    else globalThis.window = previous;
+  }
+});
