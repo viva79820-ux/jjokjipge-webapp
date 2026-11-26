@@ -16,7 +16,7 @@ export function StorePriceTable() {
     <section
       id="store-prices"
       aria-labelledby="store-prices-title"
-      className="scroll-mt-6 rounded-card border border-border bg-surface p-4"
+      className="scroll-mt-site-header rounded-card border border-border bg-surface p-4"
     >
       <div className="flex items-baseline justify-between gap-3">
         <h2 id="store-prices-title" className="text-title font-bold">

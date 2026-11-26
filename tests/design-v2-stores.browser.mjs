@@ -402,6 +402,7 @@ try {
       await evaluate(`new URL(location.href).searchParams.get("store")`),
       slug,
     );
+    assert.equal(await evaluate(`location.hash`), `#store-${slug}`);
     assert.equal(
       await evaluate(`document.body.innerText.includes("먼저 나오는 매장")`),
       true,
@@ -451,7 +452,7 @@ try {
   );
   assert.equal(
     await evaluate(`(() => {
-      const buttons = [...document.querySelectorAll("[aria-expanded]")];
+      const buttons = [...document.querySelectorAll("[data-store-select]")];
       return buttons.length > 0 && buttons.every((node) => node.getAttribute("aria-expanded") === "false" && node.getAttribute("aria-controls") === "store-detail" && node.querySelector("a") === null && node.closest("a") === null);
     })()`),
     true,
@@ -864,9 +865,11 @@ try {
     () =>
       evaluate(`(() => {
         const section = document.querySelector("#store-prices");
-        if (!section) return false;
+        const header = document.querySelector("[data-site-header]");
+        if (!section || !header) return false;
         const top = section.getBoundingClientRect().top;
-        return top < 120 && top > -40;
+        const bottom = header.getBoundingClientRect().bottom;
+        return top < 120 && top >= bottom - 1;
       })()`),
     "price anchor position",
   );
@@ -874,6 +877,7 @@ try {
     const section = document.querySelector("#store-prices");
     return {
       top: Math.round(section.getBoundingClientRect().top),
+      header: Math.round(document.querySelector("[data-site-header]").getBoundingClientRect().bottom),
       naming: !!section.querySelector('[data-price-key="naming"]'),
       guide: section.innerText.includes("매장을 선택하면 사진과 참고 가격을 볼 수 있어요"),
       ids: document.querySelectorAll("#store-prices").length,
@@ -884,7 +888,10 @@ try {
   assert.equal(anchor.guide, true);
   assert.equal(anchor.ids, 1);
   assert.equal(anchor.selected, true);
-  assert.ok(anchor.top < 120 && anchor.top > -40, JSON.stringify(anchor));
+  assert.ok(
+    anchor.top < 120 && anchor.top >= anchor.header - 1,
+    JSON.stringify(anchor),
+  );
   const anchorCalls = dataCalls();
   await evaluate(
     `document.querySelector('#store-prices [data-store-select="store-local"]').click()`,
@@ -900,9 +907,21 @@ try {
   assert.equal(dataCalls(), anchorCalls);
   assert.equal(
     await evaluate(
-      `location.hash === "#store-prices" && new URL(location.href).searchParams.get("store") === "store-local"`,
+      `location.hash === "#store-store-local" && new URL(location.href).searchParams.get("store") === "store-local"`,
     ),
     true,
+  );
+  await until(
+    () =>
+      evaluate(`(() => {
+        const target = document.getElementById("store-store-local");
+        const header = document.querySelector("[data-site-header]");
+        if (!target || !header) return false;
+        const top = target.getBoundingClientRect().top;
+        const bottom = header.getBoundingClientRect().bottom;
+        return top >= bottom - 1 && top <= bottom + 8 && !!target.querySelector("[data-store-gallery]") && !!target.querySelector('[data-price-key="naming"]');
+      })()`),
+    "selected store scroll",
   );
   await shot("anchor-390.png", true);
 
@@ -934,6 +953,20 @@ try {
         `new URL(location.href).searchParams.get("store") === "store-third" && document.querySelector("[data-selected-store]")?.getAttribute("data-selected-store") === "store-third"`,
       ),
     "forward",
+  );
+
+  await go("/stores#store-store-local");
+  await until(
+    () =>
+      evaluate(`(() => {
+        const target = document.getElementById("store-store-local");
+        const header = document.querySelector("[data-site-header]");
+        if (!target || !header) return false;
+        const top = target.getBoundingClientRect().top;
+        const bottom = header.getBoundingClientRect().bottom;
+        return location.hash === "#store-store-local" && !new URL(location.href).searchParams.get("store") && target.querySelector("[data-selected-store]")?.getAttribute("data-selected-store") === "store-local" && !!target.querySelector("[data-store-gallery]") && !!target.querySelector('[data-price-key="naming"]') && top >= bottom - 1 && top <= bottom + 8;
+      })()`),
+    "direct store hash",
   );
 
   const describeVisit = `(() => {
@@ -1113,9 +1146,11 @@ try {
     () =>
       evaluate(`(() => {
         const section = document.querySelector("#store-prices");
-        if (!section) return false;
+        const header = document.querySelector("[data-site-header]");
+        if (!section || !header) return false;
         const top = section.getBoundingClientRect().top;
-        return top < 160 && top > -80 && !!section.querySelector('[data-price-key="naming"]');
+        const bottom = header.getBoundingClientRect().bottom;
+        return top < 160 && top >= bottom - 1 && !!section.querySelector('[data-price-key="naming"]');
       })()`),
     "direct price anchor",
   );
@@ -1123,12 +1158,16 @@ try {
     const section = document.querySelector("#store-prices");
     return {
       top: Math.round(section.getBoundingClientRect().top),
+      header: Math.round(
+        document.querySelector("[data-site-header]").getBoundingClientRect()
+          .bottom,
+      ),
       naming: !!section.querySelector('[data-price-key="naming"]'),
     };
   })()`);
   assert.equal(directAnchor.naming, true);
   assert.ok(
-    directAnchor.top < 160 && directAnchor.top > -80,
+    directAnchor.top < 160 && directAnchor.top >= directAnchor.header - 1,
     JSON.stringify(directAnchor),
   );
   await shot("selected-390.png", true);
@@ -1234,6 +1273,18 @@ try {
     })()`);
     await evaluate(`window.scrollTo(0, document.documentElement.scrollHeight)`);
     await delay(100);
+    const stuck = await evaluate(`(() => {
+      const header = document.querySelector("[data-site-header]");
+      const nav = document.querySelector('nav[aria-label="주요 메뉴"]');
+      if (!header || !nav) return null;
+      return {
+        top: Math.round(header.getBoundingClientRect().top),
+        navTop: Math.round(nav.getBoundingClientRect().top),
+        position: getComputedStyle(header).position,
+        tabScroll: nav.scrollWidth > nav.clientWidth + 1,
+        pageScroll: document.documentElement.scrollWidth > innerWidth + 1,
+      };
+    })()`);
     const covered = await evaluate(`(() => {
       const cta = document.querySelector("[data-consult-cta]");
       const bar = document.querySelector("[data-app-bar]");
@@ -1242,7 +1293,16 @@ try {
     await evaluate("window.scrollTo(0, 0)");
     await shot(name, true);
     if (name === "phone-390.png") await shot("390-compare.png", true);
-    results.push({ name, ...measured, covered });
+    results.push({ name, ...measured, covered, stuck });
+    assert.equal(stuck?.position, "sticky", name);
+    assert.equal(stuck?.top, 0, name);
+    assert.ok(
+      stuck && stuck.navTop >= 56 && stuck.navTop <= 64,
+      JSON.stringify(stuck),
+    );
+    assert.equal(stuck?.pageScroll, false, name);
+    if (!fine && width < 768) assert.equal(stuck?.tabScroll, true, name);
+    else assert.equal(stuck?.tabScroll, false, name);
     assert.equal(measured.fine, fine, name);
     assert.equal(measured.overflow, false, name);
     assert.equal(measured.title, "26px", name);

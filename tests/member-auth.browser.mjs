@@ -263,6 +263,25 @@ try {
     );
     if (applied !== true) throw new Error(`입력하지 못했습니다: ${name}`);
   }
+  async function replace(name, value, expected = value) {
+    const selector = JSON.stringify(`[name="${name}"]`);
+    await until(
+      async () => evaluate(`Boolean(document.querySelector(${selector}))`),
+      name,
+    );
+    await evaluate(`(() => {
+      const field = document.querySelector(${selector});
+      field.focus();
+      field.select();
+    })()`);
+    await cdp("Input.insertText", { text: value });
+    await until(
+      async () =>
+        (await evaluate(`document.querySelector(${selector}).value`)) ===
+        expected,
+      `${name} 수정`,
+    );
+  }
   async function shot(name) {
     const image = await cdp("Page.captureScreenshot", { format: "png" });
     writeFileSync(join(shotDir, name), Buffer.from(image.data, "base64"));
@@ -404,6 +423,42 @@ try {
     }
     await emulate(390, false);
   }
+  async function assertScrollEnd(name, selector) {
+    for (const [width, fine] of [
+      [360, false],
+      [390, false],
+      [1280, true],
+    ]) {
+      await emulate(width, fine);
+      await evaluate("scrollTo(0, document.documentElement.scrollHeight)");
+      await delay(250);
+      const metrics = await evaluate(`(() => {
+        const target = document.querySelector(${JSON.stringify(selector)});
+        const bar = document.querySelector("[data-app-bar]");
+        const phone = bar?.querySelector("#bottom-phone-call span");
+        if (!target || !bar || !phone) return null;
+        const targetBox = target.getBoundingClientRect();
+        const barBox = bar.getBoundingClientRect();
+        const phoneBox = phone.getBoundingClientRect();
+        return {
+          gapBar: Math.round(barBox.top - targetBox.bottom),
+          gapPhone: Math.round(phoneBox.top - targetBox.bottom),
+          scrollY: Math.round(scrollY),
+          maxScroll: Math.round(
+            document.documentElement.scrollHeight -
+              document.documentElement.clientHeight,
+          ),
+        };
+      })()`);
+      assert.ok(metrics, `${name} ${width} 스크롤 끝 요소`);
+      assert.equal(metrics.scrollY, metrics.maxScroll, `${name} ${width} 끝`);
+      assert.ok(metrics.gapBar >= 20, `${name} ${width} 하단 탭 간격`);
+      assert.ok(metrics.gapPhone >= 20, `${name} ${width} 전화 버튼 간격`);
+      await shot(`${name}-${width}-end.png`);
+    }
+    await emulate(390, false);
+    await evaluate("scrollTo(0, 0)");
+  }
   const loggedOutLabels = ["홈", "카테고리", "전화하기", "예약조회", "로그인"];
   const loggedInLabels = ["홈", "카테고리", "전화하기", "예약조회", "MY"];
   async function confirm(email, name, next = "/mypage") {
@@ -460,7 +515,7 @@ try {
   );
   await click("button", "숨김");
   await click("a", "회원가입");
-  await waitText("가입하기");
+  await waitText("쪽집게천사 회원가입");
   await evaluate("history.back()");
   await waitText("비밀번호 재설정");
   assert.equal(
@@ -497,13 +552,63 @@ try {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ delay: 1200 }),
   });
+  await goto("/terms");
+  await waitText("쪽집게천사 운세통 이용약관");
+  assert.ok((await textOf()).includes("대표자 [대표자명]"));
+  await assertWidths("terms", {
+    tabs: true,
+    labels: loggedOutLabels,
+    account: "/login",
+  });
+  await assertScrollEnd("terms", "article");
+  await goto("/privacy-consent");
+  await waitText("개인정보 수집·이용 동의 (회원가입)");
+  assert.equal((await textOf()).includes("휴대전화번호"), false);
+  await assertWidths("privacy-consent", {
+    tabs: true,
+    labels: loggedOutLabels,
+    account: "/login",
+  });
+  await assertScrollEnd("privacy-consent", "article");
   await goto("/signup");
+  await waitText("가입하고 인증 메일 받기");
+  await assertWidths("signup", {
+    tabs: true,
+    labels: loggedOutLabels,
+    account: "/login",
+  });
+  await assertScrollEnd("signup", "form");
   await shot("signup-390.png");
+  assert.equal(
+    await evaluate("document.querySelector('button[type=submit]').disabled"),
+    true,
+  );
+  assert.equal(
+    await evaluate(
+      `[...document.querySelectorAll('a')].find((node) => node.textContent.trim() === '보기' && node.getAttribute('href') === '/terms')?.getAttribute('target')`,
+    ),
+    "_blank",
+  );
+  await evaluate("document.querySelector('input[type=checkbox]').click()");
+  assert.equal(
+    await evaluate(
+      `[...document.querySelectorAll('input[type=checkbox][name]')].every((node) => node.checked)`,
+    ),
+    true,
+  );
+  await evaluate("document.querySelector('input[type=checkbox]').click()");
   await fill("name", nameA);
   await fill("email", emailA);
   await fill("password", password);
   await fill("passwordConfirm", password);
-  await click("button", "가입하기");
+  for (const name of ["ageConfirmed", "termsAgreed", "privacyAgreed"]) {
+    await evaluate(`document.querySelector('[name=${name}]').click()`);
+  }
+  assert.equal(
+    await evaluate("document.querySelector('button[type=submit]').disabled"),
+    false,
+  );
+  await click("button", "가입하고 인증 메일 받기");
   await waitText("가입 요청 중");
   assert.equal(
     await evaluate("document.querySelector('button[type=submit]').disabled"),
@@ -527,6 +632,14 @@ try {
   assert.match(await evaluate("location.pathname"), /^\/mypage$/);
   assert.match(await textOf(), /MY/);
   assert.equal((await textOf()).includes(password), false);
+  await waitText("예약·상담 내역");
+  await waitText("회원 예약 상담");
+  const mypageText = await textOf();
+  assert.match(mypageText, /예약 확정/);
+  assert.match(mypageText, /상담 완료/);
+  assert.match(mypageText, /상담사 A 선생님/);
+  assert.match(mypageText, /회원 예약 상담/);
+  assert.match(mypageText, /2026년 11월 25일/);
 
   await assertWidths("mypage", {
     tabs: true,
@@ -538,6 +651,49 @@ try {
   const memberDetail = await textOf();
   assert.equal(memberDetail.includes(nameA), false);
   await assertWidths("consult-member", { tabs: false });
+
+  await goto("/consult/a/book?product=11111111-1111-4111-8111-111111111111");
+  await waitText("전화상담 예약");
+  assert.deepEqual(
+    await evaluate(`(() => {
+      const value = (name) =>
+        document.querySelector(\`[name="\${name}"]\`)?.value ?? null;
+      return {
+        name: value("name"),
+        phone: value("phone"),
+        email: value("email"),
+      };
+    })()`),
+    {
+      name: nameA,
+      phone: "010-1234-5678",
+      email: emailA,
+    },
+  );
+  await replace("name", nameB);
+  await replace("phone", "01099998888", "010-9999-8888");
+  await replace("email", emailB);
+  assert.deepEqual(
+    await evaluate(`(() => {
+      const value = (name) =>
+        document.querySelector(\`[name="\${name}"]\`)?.value ?? null;
+      return {
+        name: value("name"),
+        phone: value("phone"),
+        email: value("email"),
+      };
+    })()`),
+    {
+      name: nameB,
+      phone: "010-9999-8888",
+      email: emailB,
+    },
+  );
+  await assertWidths("member-booking", {
+    tabs: true,
+    labels: loggedInLabels,
+    account: "/mypage",
+  });
 
   const used = await (await fetch(`${mock.url}/__test/latest`)).json();
   await goto(
@@ -603,7 +759,8 @@ try {
   await fill("email", emailB);
   await fill("password", password);
   await fill("passwordConfirm", password);
-  await click("button", "가입하기");
+  await evaluate("document.querySelector('input[type=checkbox]').click()");
+  await click("button", "가입하고 인증 메일 받기");
   await waitText("이메일 인증 안내");
   await confirm(emailB, nameB);
   const switched = await textOf();
@@ -820,6 +977,21 @@ try {
       .every(
         (item) =>
           item.data && Object.keys(item.data).every((key) => key === "name"),
+      ),
+  );
+  assert.equal(
+    report.requests.filter((item) => item.kind === "member-consent").length,
+    2,
+  );
+  assert.ok(
+    report.requests
+      .filter((item) => item.kind === "member-consent")
+      .every(
+        (item) =>
+          item.data?.terms_version === "1.0" &&
+          item.data?.privacy_version === "1.0" &&
+          typeof item.data?.user_id === "string" &&
+          !("agreed_at" in item.data),
       ),
   );
   assert.equal(logs.includes(password), false);

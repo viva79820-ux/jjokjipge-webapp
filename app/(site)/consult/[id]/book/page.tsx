@@ -6,7 +6,9 @@ import { notFound } from "next/navigation";
 import { ChevronLeft, Store } from "lucide-react";
 import { getCounselor } from "@/lib/data/counselors";
 import { counselorHeading } from "@/lib/counselors/rules";
+import { getMember } from "@/lib/member-auth/session";
 import { getAvailabilityCalendar } from "@/lib/reservations/availability";
+import { formatPhone } from "@/lib/reservations/rules";
 import { BookingForm } from "@/components/booking/booking-form";
 import { Badge } from "@/components/ui/badge";
 
@@ -70,8 +72,9 @@ async function BookingContent({ params, searchParams }: Props) {
         </Link>
       </div>
     );
-  const calendars = Object.fromEntries(
-    await Promise.all(
+  const [member, calendarEntries] = await Promise.all([
+    getMember(),
+    Promise.all(
       counselor.products.map(
         async (item) =>
           [
@@ -80,7 +83,8 @@ async function BookingContent({ params, searchParams }: Props) {
           ] as const,
       ),
     ),
-  );
+  ]);
+  const calendars = Object.fromEntries(calendarEntries);
   const calendar = calendars[product.id];
   const selected =
     calendar.find(
@@ -127,6 +131,15 @@ async function BookingContent({ params, searchParams }: Props) {
         calendars={calendars}
         initialProductId={product.id}
         initialDate={selected.date}
+        initialContact={
+          member
+            ? {
+                name: member.name ?? "",
+                phone: formatPhone(member.phone ?? ""),
+                email: member.email,
+              }
+            : undefined
+        }
       />
     </div>
   );

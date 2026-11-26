@@ -7,6 +7,7 @@ import { DragRow } from "@/components/ui/drag-row";
 const menus = [
   ["대시보드", "/admin"],
   ["예약 관리", "/admin/reservations"],
+  ["후기", "/admin/reviews"],
   ["고객센터", "/admin/support"],
   ["공지사항", "/admin/notices"],
   ["클래스", "/admin/classes"],

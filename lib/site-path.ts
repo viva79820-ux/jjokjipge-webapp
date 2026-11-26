@@ -39,5 +39,9 @@ export function hidesMemberAuthSiteHeader(pathname: string | null) {
   const path = pathname.split("?")[0]?.split("#")[0] ?? "";
   const normalized =
     path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
-  return normalized === "/login" || normalized === "/forgot-password";
+  return (
+    normalized === "/login" ||
+    normalized === "/signup" ||
+    normalized === "/forgot-password"
+  );
 }
