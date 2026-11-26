@@ -294,6 +294,16 @@ export function startAuthMock() {
       ]);
     }
 
+    if (url.pathname === "/rest/v1/member_consents") {
+      if (req.method !== "POST" || apiKey !== secretKey) {
+        writes += 1;
+        return fail(res, 401, "no_authorization");
+      }
+      const body = await readBody(req);
+      requests.push({ kind: "member-consent", data: body });
+      return json(res, null, 201);
+    }
+
     if (!url.pathname.startsWith("/auth/v1/")) {
       unexpected.push(`${req.method} ${url.pathname}`);
       return fail(res, 404, "not_found");

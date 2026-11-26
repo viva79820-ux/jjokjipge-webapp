@@ -2,6 +2,8 @@ import "server-only";
 import { requireAdmin } from "@/lib/admin/auth";
 import { createPublicClient } from "@/lib/supabase/public";
 import { createClient } from "@/lib/supabase/server";
+import { loadExternalContents } from "./feed-load";
+import { mergePublicContents } from "./feeds";
 import {
   columns,
   contentRecord,
@@ -52,43 +54,42 @@ export async function publicContentList(
   )
     throw Error("목록 조건이 올바르지 않습니다.");
   const db = createPublicClient();
-  let query = db
-    .from("contents")
-    .select(publicColumns, { count: "exact" })
-    .eq("is_published", true);
-  if (channel) query = query.eq("channel", channel);
-  const { data, error, count } = await query
-    .order("sort_order", { ascending: true })
-    .order("posted_on", { ascending: false, nullsFirst: false })
-    .order("id", { ascending: false })
-    .range((page - 1) * pageSize, page * pageSize - 1);
-  if (outOfRange(error, page)) {
-    let total = db
+  const stored: Parameters<typeof presentPublic>[0][] = [];
+  for (let from = 0; from < 5000; from += 1000) {
+    const { data, error } = await db
       .from("contents")
-      .select("id", { head: true, count: "exact" })
-      .eq("is_published", true);
-    if (channel) total = total.eq("channel", channel);
-    const result = await total;
-    if (!result.error && result.count !== null)
-      return {
-        error: false,
-        rows: [],
-        count: result.count,
-        catalogTotal: result.count,
-      };
+      .select(publicColumns)
+      .eq("is_published", true)
+      .order("posted_on", { ascending: false, nullsFirst: false })
+      .order("id", { ascending: false })
+      .range(from, from + 999);
+    if (error || !data) return { error: true };
+    stored.push(...data);
+    if (data.length < 1000) break;
   }
-  if (error || !data || count === null) return { error: true };
-  const rows = data
+  const admin = stored
     .map((row) => presentPublic(row))
     .filter((row): row is PublicCard => row !== null);
-  if (count > 0 || !channel)
-    return { error: false, rows, count, catalogTotal: count };
-  const catalog = await db
-    .from("contents")
-    .select("id", { head: true, count: "exact" })
-    .eq("is_published", true);
-  if (catalog.error || catalog.count === null) return { error: true };
-  return { error: false, rows, count, catalogTotal: catalog.count };
+  let external: Awaited<ReturnType<typeof loadExternalContents>> = {
+    blog: [],
+    youtube: [],
+  };
+  try {
+    external = await loadExternalContents();
+  } catch {
+    external = { blog: [], youtube: [] };
+  }
+  const merged = mergePublicContents(admin, external);
+  const filtered = channel
+    ? merged.filter((row) => row.channel === channel)
+    : merged;
+  const start = (page - 1) * pageSize;
+  return {
+    error: false,
+    rows: filtered.slice(start, start + pageSize),
+    count: filtered.length,
+    catalogTotal: merged.length,
+  };
 }
 
 export async function adminContentList(

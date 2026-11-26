@@ -73,13 +73,45 @@ export type ProductFilters = {
   page: number;
   status: string;
   result: string;
+  category: ShopCategory;
 };
+
+// 상품 표에 분류 칸이 없다. 고객 필터와 추천 띠는 공개 상품명으로만 가른다.
+export const shopCategoryFilters = [
+  { value: "", label: "전체" },
+  { value: "charm", label: "천사부적" },
+  { value: "tarot", label: "타로카드" },
+  { value: "oracle", label: "오라클카드" },
+] as const;
+
+export type ShopCategory = (typeof shopCategoryFilters)[number]["value"];
+
+export function shopCategoryOf(name: string): ShopCategory {
+  if (name.includes("천사부적")) return "charm";
+  if (name.includes("오라클")) return "oracle";
+  if (name.includes("타로")) return "tarot";
+  return "";
+}
+
+export function shopCategoryLabel(name: string) {
+  const category = shopCategoryOf(name);
+  if (!category) return "";
+  return (
+    shopCategoryFilters.find((item) => item.value === category)?.label ?? ""
+  );
+}
+
+export function charmKindLabel(name: string) {
+  if (!name.includes("천사부적")) return name;
+  const kind = name.replace("천사부적", "").trim();
+  return kind || name;
+}
 
 export function productFilters(
   query: ProductQuery,
   admin = false,
 ): ProductFilters | null {
-  const allowed = admin ? ["page", "status", "result"] : ["page"];
+  const allowed = admin ? ["page", "status", "result"] : ["page", "category"];
   if (
     Object.keys(query).some(
       (key) => !allowed.includes(key) || typeof query[key] !== "string",
@@ -89,17 +121,20 @@ export function productFilters(
   const page = query.page || "1";
   const status = admin ? query.status || "" : "";
   const result = admin ? query.result || "" : "";
+  const category = admin ? "" : query.category || "";
   if (
     typeof page !== "string" ||
     !/^[1-9]\d{0,6}$/.test(page) ||
     !["", "public", "private"].includes(String(status)) ||
-    !["", "saved", "deleted"].includes(String(result))
+    !["", "saved", "deleted"].includes(String(result)) ||
+    !shopCategoryFilters.some((item) => item.value === category)
   )
     return null;
   return {
     page: Number(page),
     status: String(status),
     result: String(result),
+    category: category as ShopCategory,
   };
 }
 
@@ -108,11 +143,13 @@ export function productListUrl(
   page = 1,
   status = "",
   result = "",
+  category = "",
 ) {
   const params = new URLSearchParams();
   if (page > 1) params.set("page", String(page));
   if (admin && status) params.set("status", status);
   if (admin && result) params.set("result", result);
+  if (!admin && category) params.set("category", category);
   const base = admin ? "/admin/shop-products" : "/shop";
   return `${base}${params.size ? `?${params}` : ""}`;
 }
