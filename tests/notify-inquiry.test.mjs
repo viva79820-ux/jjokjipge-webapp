@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { inquiryAnsweredContent } from "../lib/email/inquiry-answered-message.ts";
 import { isValidEmail } from "../lib/reservations/rules.ts";
 import { siteConfig } from "../lib/site-config.ts";
 import { productionOrigin } from "../lib/site-origin.ts";
@@ -12,6 +12,48 @@ const require = createRequire(import.meta.url);
 const ts = require("typescript");
 const fixtureKey = "fixture-resend-key";
 const lookupUrl = "https://angelsaju.com/support/lookup";
+
+function loadSource(specifier) {
+  const cache = new Map();
+  function resolveFile(name, parent) {
+    const raw = name.startsWith("@/")
+      ? new URL(`../${name.slice(2)}`, import.meta.url)
+      : new URL(name, parent);
+    const path = fileURLToPath(raw);
+    const found = [path, `${path}.ts`, `${path}.tsx`].find((item) =>
+      existsSync(item),
+    );
+    if (!found) throw new Error(`Missing module: ${name}`);
+    return found;
+  }
+  function instantiate(filename) {
+    if (cache.has(filename)) return cache.get(filename).exports;
+    const compiled = ts.transpileModule(readFileSync(filename, "utf8"), {
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS,
+        target: ts.ScriptTarget.ES2022,
+      },
+    }).outputText;
+    const commonjs = { exports: {} };
+    cache.set(filename, commonjs);
+    const parent = new URL(`file:///${filename.replaceAll("\\", "/")}`);
+    new Function("require", "exports", "module", compiled)(
+      (name) => {
+        if (name.startsWith(".") || name.startsWith("@/"))
+          return instantiate(resolveFile(name, parent));
+        throw new Error(`Unexpected dependency: ${name}`);
+      },
+      commonjs.exports,
+      commonjs,
+    );
+    return commonjs.exports;
+  }
+  return instantiate(resolveFile(specifier, import.meta.url));
+}
+
+const { inquiryAnsweredContent } = loadSource(
+  "../lib/email/inquiry-answered-message.ts",
+);
 
 function loadModule(file, adapters) {
   const source = readFileSync(new URL(file, import.meta.url), "utf8");
@@ -101,6 +143,32 @@ test("inquiry answer mail is Korean html and text with only the lookup link and 
   );
   assert.match(content.html, /0507-1498-0232/);
   assert.equal(content.text.includes("<html"), false);
+  assert.match(
+    content.html,
+    /https:\/\/angelsaju\.com\/images\/brand\/logo-angel-mark\.png/,
+  );
+  assert.match(content.html, /width="42"/);
+  assert.match(content.html, /height="32"/);
+  assert.match(content.html, /alt=""/);
+  assert.match(content.html, /max-width:540px/);
+  assert.match(content.html, /background:#FFFFFF/);
+  assert.match(content.html, /border:1px solid #E7E1EC/);
+  assert.match(content.html, /border-radius:16px/);
+  assert.match(content.html, /padding:24px/);
+  assert.match(content.html, /font-size:26px;line-height:34px/);
+  assert.match(content.html, /color:#6B6175/);
+  assert.match(content.html, /border-radius:24px/);
+  assert.match(content.html, /padding:12px 26px/);
+  assert.match(content.html, /color:#FFFFFF/);
+  assert.match(content.html, /font-size:13px;line-height:20px/);
+  assert.match(content.html, /Apple SD Gothic Neo/);
+  assert.match(content.html, />문의 조회</);
+  assert.match(
+    content.html,
+    /본인이 요청하지 않았다면 이 메일을 무시해 주세요/,
+  );
+  assert.equal(content.html.includes("<style"), false);
+  assert.equal(content.text.includes("본인이 요청하지 않았다면"), false);
   for (const secret of [
     "비밀 답변",
     "비밀 문의 본문",
