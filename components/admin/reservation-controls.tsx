@@ -100,7 +100,7 @@ export function ReservationControls({
           ref={noticeRef}
           tabIndex={-1}
           role="status"
-          className="font-semibold text-brand"
+          className="break-words font-semibold text-brand"
         >
           {notice}
         </p>
