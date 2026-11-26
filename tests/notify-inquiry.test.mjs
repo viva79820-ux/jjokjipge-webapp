@@ -96,6 +96,14 @@ function loadNotify() {
     "./deliver-once": deliverOnce,
     "./inquiry-answered-message": { inquiryAnsweredContent },
     "./send-resend": sendResend,
+    "@/lib/notify-link/token": {
+      createNotifyToken() {
+        return null;
+      },
+      notifyLookupHref(origin) {
+        return new URL("/support/lookup", origin).href;
+      },
+    },
   });
 }
 
