@@ -49,6 +49,21 @@ test("saved navigation keeps only approved filters and fixed notice codes", () =
     rules.supportSavedUrl("inquiries", "//external.invalid"),
     "/admin/support/inquiries?status=answered&notice=saved",
   );
+  assert.equal(
+    rules.supportSavedUrl(
+      "inquiries",
+      "/admin/support/inquiries?status=pending&page=2",
+      "mail_failed",
+    ),
+    "/admin/support/inquiries?status=answered&notice=mail_failed",
+  );
+  const mailFailed = rules.supportListQuery({
+    status: "answered",
+    notice: "mail_failed",
+  });
+  assert.equal(mailFailed.valid, true);
+  assert.equal(mailFailed.mailFailed, true);
+  assert.equal(mailFailed.saved, false);
   for (const notice of ["arbitrary", ["saved", "saved"]])
     assert.equal(rules.supportListQuery({ notice }).valid, false);
   const parsed = rules.supportListQuery({ category: "shop", notice: "saved" });
@@ -99,9 +114,11 @@ function harness({
   error = null,
   readError = null,
   responses = [],
+  mailResult = "sent",
 } = {}) {
   const calls = [],
-    invalidations = [];
+    invalidations = [],
+    mailCalls = [];
   let clients = 0;
   const db = {
     from(table) {
@@ -146,8 +163,22 @@ function harness({
     ...adapters,
     "./support-data": data,
     "next/cache": { revalidatePath: (p) => invalidations.push(p) },
+    "@/lib/email/notify-inquiry": {
+      notifyInquiryAnswered: async (notice) => {
+        mailCalls.push(notice);
+        if (mailResult === "throw") throw new Error("mail down");
+        return mailResult;
+      },
+    },
   });
-  return { ...data, ...actions, calls, invalidations, clients: () => clients };
+  return {
+    ...data,
+    ...actions,
+    calls,
+    invalidations,
+    mailCalls,
+    clients: () => clients,
+  };
 }
 test("all customer support reads and actions stop for non-admin before DB", async () => {
   const h = harness({ admin: null });
@@ -308,12 +339,58 @@ test("answer writes only allowed fields with verified author/server time; no-op 
     current: { ...inquiry, status: "answered", answer: "기존" },
   });
   assert.equal((await edit.saveInquiryAnswer(form())).success, true);
+  assert.equal(edit.mailCalls.length, 0);
   for (const value of ["", " ", "가".repeat(5001)]) {
     const invalid = harness();
     assert.ok(
       (await invalid.saveInquiryAnswer(form({ answer: value }))).errors.answer,
     );
     assert.equal(invalid.clients(), 0);
+  }
+});
+test("the first inquiry answer sends mail, and a later edit does not", async () => {
+  const saved = {
+    ...inquiry,
+    id,
+    status: "answered",
+    answer: "새 답변\n두 줄",
+    customer_email: "Guest@Example.invalid",
+    customer_name: "테스트",
+    customer_phone: "010-1111-2222",
+    content: "비밀 문의 본문",
+  };
+  const sent = harness({ current: inquiry, result: [saved] });
+  const sentResult = await sent.saveInquiryAnswer(form());
+  assert.equal(sentResult.success, true);
+  assert.equal(sentResult.message, rules.inquiryAnswerSavedMessage);
+  assert.equal(sent.mailCalls.length, 1);
+  assert.deepEqual(Object.keys(sent.mailCalls[0]).sort(), ["email", "id"]);
+  assert.equal(sent.mailCalls[0].id, id);
+  assert.equal(sent.mailCalls[0].email, "Guest@Example.invalid");
+  assert.equal(JSON.stringify(sent.mailCalls[0]).includes("비밀"), false);
+  const edited = harness({
+    current: { ...saved, answer: "기존 답변" },
+    result: [{ ...saved, answer: "새 답변\n두 줄" }],
+  });
+  const editedResult = await edited.saveInquiryAnswer(form());
+  assert.equal(editedResult.success, true);
+  assert.equal(editedResult.message, rules.inquiryAnswerSavedMessage);
+  assert.equal(edited.mailCalls.length, 0);
+  for (const mailResult of ["failed", "throw"]) {
+    const failed = harness({
+      current: inquiry,
+      result: [saved],
+      mailResult,
+    });
+    const failedResult = await failed.saveInquiryAnswer(form());
+    assert.equal(failedResult.success, true);
+    assert.equal(failedResult.message, rules.inquiryAnswerMailFailedMessage);
+    assert.equal(failedResult.row.answer, saved.answer);
+    assert.deepEqual(failed.invalidations, [
+      "/admin/support/inquiries",
+      `/admin/support/inquiries/${id}`,
+      "/admin",
+    ]);
   }
 });
 test("lists use DB filters, stable sort, 20-row ranges and minimal inquiry columns", async () => {

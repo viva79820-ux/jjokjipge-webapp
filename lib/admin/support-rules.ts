@@ -19,6 +19,9 @@ export const conflict = {
   faqs: "다른 작업으로 FAQ가 변경됐습니다. 최신 내용을 확인해 주세요.",
   inquiries: "다른 작업으로 문의가 변경됐습니다. 최신 내용을 확인해 주세요.",
 };
+export const inquiryAnswerSavedMessage = "답변을 저장했습니다.";
+export const inquiryAnswerMailFailedMessage =
+  "답변을 저장했습니다. 알림 메일은 보내지 못했습니다.";
 export type Filters = { category: string; status: string; page: number };
 export function parseSupportFilters(
   kind: Kind,
@@ -86,7 +89,11 @@ export function supportReturn(kind: Kind, value: unknown) {
     return base;
   }
 }
-export function supportSavedUrl(kind: Kind, returnTo: unknown) {
+export function supportSavedUrl(
+  kind: Kind,
+  returnTo: unknown,
+  notice: "saved" | "mail_failed" = "saved",
+) {
   const url = new URL(
     supportReturn(kind, returnTo),
     "https://internal.invalid",
@@ -95,15 +102,18 @@ export function supportSavedUrl(kind: Kind, returnTo: unknown) {
     url.searchParams.set("status", "answered");
     url.searchParams.delete("page");
   }
-  url.searchParams.set("notice", "saved");
+  url.searchParams.set("notice", notice);
   return url.pathname + "?" + url.searchParams;
 }
 export function supportListQuery(search: Search) {
   const { notice, ...filters } = search;
+  const saved = notice === "saved";
+  const mailFailed = notice === "mail_failed";
   return {
     filters,
-    saved: notice === "saved",
-    valid: notice === undefined || notice === "saved",
+    saved,
+    mailFailed,
+    valid: notice === undefined || saved || mailFailed,
   };
 }
 export function scalar(form: FormData, key: string) {
