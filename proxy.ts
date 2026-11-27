@@ -12,7 +12,7 @@ export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-  if (!url || !key) return response;
+  if (!url || !key) return withNotifyLinkHeaders(response, request);
   const supabase = createServerClient(url, key, {
     cookies: {
       getAll() {
@@ -47,6 +47,19 @@ export async function proxy(request: NextRequest) {
   }
   if (path === "/auth/confirm") {
     response.headers.set("Referrer-Policy", "no-referrer");
+  }
+  return withNotifyLinkHeaders(response, request);
+}
+
+function withNotifyLinkHeaders(response: NextResponse, request: NextRequest) {
+  const path = request.nextUrl.pathname;
+  if (
+    (path === "/support/lookup" || path === "/booking/lookup") &&
+    request.nextUrl.searchParams.has("t")
+  ) {
+    response.headers.set("Referrer-Policy", "no-referrer");
+    response.headers.set("X-Robots-Tag", "noindex, nofollow");
+    response.headers.set("Cache-Control", "private, no-store");
   }
   return response;
 }

@@ -5,6 +5,7 @@ import { resolveTrustedOrigin } from "@/lib/member-auth/redirect";
 import { isValidEmail } from "@/lib/reservations/rules";
 import { siteConfig } from "@/lib/site-config";
 import { productionOrigin } from "@/lib/site-origin";
+import { createNotifyToken, notifyLookupHref } from "@/lib/notify-link/token";
 import { createMemoryDeliveryStore, deliverOnce } from "./deliver-once";
 import { inquiryAnsweredContent } from "./inquiry-answered-message";
 import { sendResendMail } from "./send-resend";
@@ -37,8 +38,9 @@ export async function notifyInquiryAnswered(
     const email = notice.email.trim().toLowerCase();
     if (!notice.id || !isValidEmail(email)) return "failed";
     const origin = await siteOrigin();
+    const token = createNotifyToken({ kind: "inquiry", id: notice.id });
     const content = inquiryAnsweredContent({
-      lookupUrl: new URL("/support/lookup", origin).href,
+      lookupUrl: notifyLookupHref(origin, "inquiry", token),
       phone: siteConfig.phone,
     });
     return await deliverOnce(notice.id, deliveries, async () => {

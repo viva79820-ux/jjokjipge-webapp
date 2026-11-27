@@ -67,7 +67,7 @@ function FieldError({ field, message }: { field: string; message?: string }) {
 function focusField(form: RefObject<HTMLFormElement | null>, field: string) {
   form.current?.querySelector<HTMLElement>(`[name="${field}"]`)?.focus();
 }
-export function ReservationLookup() {
+export function ReservationLookup({ linkNotice }: { linkNotice?: string }) {
   const [values, setValues] = useState(initialValues);
   const [errors, setErrors] = useState<LookupErrors>({});
   const [message, setMessage] = useState("");
@@ -84,8 +84,15 @@ export function ReservationLookup() {
   const busy = submitting || pending;
   const contact = representativeContact(siteConfig.phone);
   useEffect(() => {
-    if (!window.location.search) return;
-    router.replace(pathname);
+    const query = window.location.search;
+    if (!query) return;
+    const kept = query
+      .slice(1)
+      .split("&")
+      .filter((part) => part === "t" || part.startsWith("t="));
+    const next = kept.length ? `?${kept.join("&")}` : "";
+    if (next === query) return;
+    router.replace(next ? `${pathname}${next}` : pathname);
   }, [pathname, router]);
   useEffect(() => {
     if (busy || !focusRequested.current) return;
@@ -150,6 +157,11 @@ export function ReservationLookup() {
         <p className="mt-1 text-body text-muted">
           예약번호와 예약할 때 입력한 이메일로 조회해요.
         </p>
+        {linkNotice ? (
+          <p role="alert" className="mt-4 text-body font-semibold text-error">
+            {linkNotice}
+          </p>
+        ) : null}
       </header>
       <form
         ref={formRef}

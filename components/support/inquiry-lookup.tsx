@@ -23,7 +23,7 @@ import { FieldError, focusField, inputClass } from "./form-fields";
 import { InquiryResult } from "./inquiry-result";
 
 const initialValues: LookupValues = { inquiryNo: "", email: "" };
-export function InquiryLookup() {
+export function InquiryLookup({ linkNotice }: { linkNotice?: string }) {
   const [values, setValues] = useState(initialValues);
   const [errors, setErrors] = useState<LookupErrors>({});
   const [message, setMessage] = useState("");
@@ -94,6 +94,11 @@ export function InquiryLookup() {
         문의번호와 작성한 이메일을 입력해 주세요. 로그인한 경우에도 두 값이 모두
         필요합니다.
       </p>
+      {linkNotice ? (
+        <p role="alert" className="mb-4 text-body font-semibold text-error">
+          {linkNotice}
+        </p>
+      ) : null}
       <form
         ref={formRef}
         onSubmit={submit}

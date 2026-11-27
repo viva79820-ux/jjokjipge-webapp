@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,14 +8,52 @@ import {
   createMemoryDeliveryStore,
   deliverOnce,
 } from "../lib/email/deliver-once.ts";
-import {
-  readCounselorName,
-  reservationConfirmedContent,
-} from "../lib/email/reservation-confirmed-message.ts";
 import { siteConfig } from "../lib/site-config.ts";
 
 const require = createRequire(import.meta.url);
 const ts = require("typescript");
+
+function loadSource(specifier) {
+  const cache = new Map();
+  function resolveFile(name, parent) {
+    const raw = name.startsWith("@/")
+      ? new URL(`../${name.slice(2)}`, import.meta.url)
+      : new URL(name, parent);
+    const path = fileURLToPath(raw);
+    const found = [path, `${path}.ts`, `${path}.tsx`].find((item) =>
+      existsSync(item),
+    );
+    if (!found) throw new Error(`Missing module: ${name}`);
+    return found;
+  }
+  function instantiate(filename) {
+    if (cache.has(filename)) return cache.get(filename).exports;
+    const compiled = ts.transpileModule(readFileSync(filename, "utf8"), {
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS,
+        target: ts.ScriptTarget.ES2022,
+      },
+    }).outputText;
+    const commonjs = { exports: {} };
+    cache.set(filename, commonjs);
+    const parent = new URL(`file:///${filename.replaceAll("\\", "/")}`);
+    new Function("require", "exports", "module", compiled)(
+      (name) => {
+        if (name.startsWith(".") || name.startsWith("@/"))
+          return instantiate(resolveFile(name, parent));
+        throw new Error(`Unexpected dependency: ${name}`);
+      },
+      commonjs.exports,
+      commonjs,
+    );
+    return commonjs.exports;
+  }
+  return instantiate(resolveFile(specifier, import.meta.url));
+}
+
+const { readCounselorName, reservationConfirmedContent } = loadSource(
+  "../lib/email/reservation-confirmed-message.ts",
+);
 
 function loadModule(file, adapters) {
   const source = readFileSync(new URL(file, import.meta.url), "utf8");
@@ -191,6 +229,37 @@ test("confirmation mail is Korean html and text without markup from the product 
   assert.match(content.text, /사주 <30분>/);
   assert.equal(content.html.includes("<html"), true);
   assert.equal(content.text.includes("<html"), false);
+  assert.match(
+    content.html,
+    /https:\/\/angelsaju\.com\/images\/brand\/logo-angel-mark\.png/,
+  );
+  assert.match(content.html, /width="42"/);
+  assert.match(content.html, /height="32"/);
+  assert.match(content.html, /alt=""/);
+  assert.match(content.html, /max-width:540px/);
+  assert.match(content.html, /background:#F7F3FA/);
+  assert.match(content.html, /border:1px solid #E7E1EC/);
+  assert.match(content.html, /border-radius:16px/);
+  assert.match(content.html, /padding:24px/);
+  assert.match(content.html, /font-size:26px;line-height:34px/);
+  assert.match(content.html, /font-size:15px;line-height:24px/);
+  assert.match(content.html, /#6B6175/);
+  assert.match(content.html, /border-radius:24px/);
+  assert.match(content.html, /padding:12px 26px/);
+  assert.match(content.html, /font-size:13px;line-height:20px/);
+  assert.match(content.html, /Apple SD Gothic Neo/);
+  assert.match(content.html, /<h1/);
+  assert.match(
+    content.html,
+    /href="https:\/\/angelsaju\.com\/booking\/lookup"/,
+  );
+  assert.match(content.html, />예약 조회</);
+  assert.match(
+    content.html,
+    /본인이 요청하지 않았다면 이 메일을 무시해 주세요/,
+  );
+  assert.equal(content.html.includes("<style"), false);
+  assert.equal(content.text.includes("본인이 요청하지 않았다면"), false);
   assert.equal(readCounselorName(null), "상담사 정보 없음");
   assert.equal(readCounselorName([{ name: "상담사 B" }]), "상담사 B");
   assert.throws(() =>

@@ -5,6 +5,7 @@ import { resolveTrustedOrigin } from "@/lib/member-auth/redirect";
 import { isValidEmail } from "@/lib/reservations/rules";
 import { siteConfig } from "@/lib/site-config";
 import { productionOrigin } from "@/lib/site-origin";
+import { createNotifyToken, notifyLookupHref } from "@/lib/notify-link/token";
 import { createMemoryDeliveryStore, deliverOnce } from "./deliver-once";
 import {
   readCounselorName,
@@ -77,12 +78,13 @@ export async function notifyReservationConfirmed(
     )
       return "failed";
     const origin = await siteOrigin();
+    const token = createNotifyToken({ kind: "reservation", id: notice.id });
     const content = reservationConfirmedContent({
       reservationNo,
       counselorName: readCounselorName(notice.counselors),
       productName,
       when,
-      lookupUrl: new URL("/booking/lookup", origin).href,
+      lookupUrl: notifyLookupHref(origin, "reservation", token),
       phone: siteConfig.phone,
     });
     return await deliverOnce(
