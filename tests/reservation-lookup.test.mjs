@@ -27,6 +27,7 @@ const validation = loadModule("../lib/reservations/lookup/validation.ts", {
   "../rules": rules,
 });
 const display = loadModule("../lib/reservations/lookup/display.ts");
+const publicResult = loadModule("../lib/reservations/lookup/public-result.ts");
 const columns =
   "reservation_no,status,product_name,minutes,price,starts_at,ends_at,payment_method,cancel_reason,counselors(name)";
 const email = "test@example.invalid";
@@ -145,6 +146,7 @@ function harness({
         };
       },
     },
+    "./public-result": publicResult,
   });
   return {
     ...actions,
@@ -591,7 +593,11 @@ test("lookup files stay inside the reservation module and do not cache personal 
   assert.doesNotMatch(form, /href=\{`tel:\$\{siteConfig\.phone\}`\}/);
   assert.doesNotMatch(form, /010-0000-0000/);
   assert.doesNotMatch(
-    `${form}\n${result}\n${page}`,
+    `${form}\n${result}`,
     /localStorage|sessionStorage|document\.cookie|searchParams|dangerouslySetInnerHTML/,
+  );
+  assert.doesNotMatch(
+    page,
+    /localStorage|sessionStorage|document\.cookie|dangerouslySetInnerHTML|reservationNo|customer_email/,
   );
 });

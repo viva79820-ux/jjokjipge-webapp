@@ -14,12 +14,55 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHmac } from "node:crypto";
+import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
-import {
-  readCounselorName,
-  reservationConfirmedContent,
-} from "../lib/email/reservation-confirmed-message.ts";
 import { siteConfig } from "../lib/site-config.ts";
+
+const require = createRequire(import.meta.url);
+const ts = require("typescript");
+
+function loadSource(specifier) {
+  const cache = new Map();
+  function resolveFile(name, parent) {
+    const raw = name.startsWith("@/")
+      ? new URL(`../${name.slice(2)}`, import.meta.url)
+      : new URL(name, parent);
+    const path = fileURLToPath(raw);
+    const found = [path, `${path}.ts`, `${path}.tsx`].find((item) =>
+      existsSync(item),
+    );
+    if (!found) throw new Error(`Missing module: ${name}`);
+    return found;
+  }
+  function instantiate(filename) {
+    if (cache.has(filename)) return cache.get(filename).exports;
+    const compiled = ts.transpileModule(readFileSync(filename, "utf8"), {
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS,
+        target: ts.ScriptTarget.ES2022,
+      },
+    }).outputText;
+    const commonjs = { exports: {} };
+    cache.set(filename, commonjs);
+    const parent = new URL(`file:///${filename.replaceAll("\\", "/")}`);
+    new Function("require", "exports", "module", compiled)(
+      (name) => {
+        if (name.startsWith(".") || name.startsWith("@/"))
+          return instantiate(resolveFile(name, parent));
+        throw new Error(`Unexpected dependency: ${name}`);
+      },
+      commonjs.exports,
+      commonjs,
+    );
+    return commonjs.exports;
+  }
+  return instantiate(resolveFile(specifier, import.meta.url));
+}
+
+const { readCounselorName, reservationConfirmedContent } = loadSource(
+  "../lib/email/reservation-confirmed-message.ts",
+);
 
 const id = "11111111-1111-4111-8111-111111111111";
 const starts = new Date(Date.now() + 5 * 86400000);
