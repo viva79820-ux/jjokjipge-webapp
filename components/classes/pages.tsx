@@ -11,6 +11,7 @@ import { ClassDetailFrame } from "@/components/classes/detail-frame";
 import { ClassDetailHeader } from "@/components/classes/detail-header";
 import { ClassEditor } from "@/components/classes/editor";
 import { ClassInquiryBar } from "@/components/classes/inquiry-bar";
+import { ClassPoster } from "@/components/classes/poster";
 import { PublicClassCard } from "@/components/classes/public-card";
 import {
   adminClassDetail,
@@ -30,6 +31,11 @@ import {
   type ClassQuery,
 } from "@/lib/classes/rules";
 import { deliveryLabel } from "@/lib/classes/content";
+import {
+  listPublicLectures,
+  type PublicLectureSummary,
+} from "@/lib/lectures/public";
+import { fieldLabel as lectureFieldLabel } from "@/lib/lectures/rules";
 
 export async function ClassListPage({
   searchParams,
@@ -54,6 +60,8 @@ export async function ClassListPage({
     ? await adminClassList(filters.page, filters.status)
     : await publicClassList(filters.page, filters.field);
   if (!result) return <AdminAccessDenied />;
+  const lectureRows = admin ? [] : await listPublicLectures(filters.field);
+  const visibleLectures = filters.page === 1 ? lectureRows : [];
   const pages = Math.max(1, Math.ceil(result.count / pageSize));
   if (filters.page > pages)
     redirect(classListUrl(admin, pages, filters.status, "", filters.field));
@@ -64,7 +72,7 @@ export async function ClassListPage({
         <p className="text-body text-muted">
           {admin
             ? "강의를 등록하고 공개 여부를 관리합니다."
-            : "사주·타로 수강 과정입니다. 카드의 온라인·오프라인 표시로 수업 형태를 확인합니다."}
+            : "사주·타로 수강 과정과 공개 강의입니다. 카드의 온라인·오프라인 표시로 수업 형태를 확인합니다."}
         </p>
       </div>
       {admin && filters.result === "deleted" && (
@@ -105,10 +113,16 @@ export async function ClassListPage({
         </div>
       )}
       <p className="text-caption text-muted">
-        {admin ? `총 ${result.count}건` : `과정 ${result.count}개`}
+        {admin
+          ? `총 ${result.count}건`
+          : `과정 ${result.count + lectureRows.length}개`}
       </p>
-      {!result.data.length && <p role="status">등록된 클래스가 없습니다.</p>}
+      {!result.data.length && !lectureRows.length && (
+        <p role="status">등록된 클래스가 없습니다.</p>
+      )}
       <div className="space-y-3">
+        {!admin &&
+          visibleLectures.map((row) => <LectureCard key={row.id} row={row} />)}
         {!admin &&
           result.data.map((row) =>
             "is_online" in row && !("is_published" in row) ? (
@@ -185,6 +199,37 @@ export async function ClassListPage({
         )}
       </nav>
     </div>
+  );
+}
+
+function LectureCard({ row }: { row: PublicLectureSummary }) {
+  return (
+    <article className="overflow-hidden rounded-card border border-border bg-surface">
+      <Link
+        href={`/class/lectures/${row.id}`}
+        className="block min-w-0 cursor-pointer text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+      >
+        <ClassPoster
+          src={row.thumbnailUrl}
+          alt={`${row.title} 썸네일`}
+          fit="cover"
+        />
+        <div className="space-y-2 p-3 @3xl/app:p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex min-h-6 items-center rounded-full bg-brand px-2 text-fine font-bold text-on-brand">
+              {lectureFieldLabel(row.field)}
+            </span>
+            <span className="text-caption text-muted">{row.teacherName}</span>
+          </div>
+          <h2 className="text-subtitle font-extrabold wrap-anywhere">
+            {row.title}
+          </h2>
+          <p className="text-caption text-muted">
+            차시 {row.lessonCount}개 · 조회 {row.viewCount}
+          </p>
+        </div>
+      </Link>
+    </article>
   );
 }
 
