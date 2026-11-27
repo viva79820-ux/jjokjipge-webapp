@@ -15,9 +15,10 @@ const rollbackFile = "../supabase/tests/lecture_lessons_rollback_check.sql";
 const stepOneFile = "supabase/migrations/20261125120000_lectures_schema.sql";
 
 test("1단계 강의 마이그레이션은 그대로다", () => {
+  // 1단계 브랜치는 운영 main에 합쳐진 뒤 없다. 원본은 origin/main과 같아야 한다.
   assert.equal(
     read(`../${stepOneFile}`),
-    execFileSync("git", ["show", `origin/feat/lectures-step1:${stepOneFile}`], {
+    execFileSync("git", ["show", `origin/main:${stepOneFile}`], {
       encoding: "utf8",
     }).replaceAll("\r\n", "\n"),
   );
@@ -98,6 +99,38 @@ test("롤백 원본과 네 역할 검사가 고정되어 있다", () => {
   assert.doesNotMatch(rollback, /\bcommit\s*;/i);
   assert.doesNotMatch(
     preflight,
-    /\b(?:insert\s+into|update|delete\s+from)\s+(?:auth\.users|public\.profiles)\b/i,
+    /\b(?:update|delete\s+from)\s+public\.profiles\b/i,
   );
+  assert.doesNotMatch(preflight, /delete\s+from\s+storage\.objects/i);
+  assert.doesNotMatch(preflight, /선생님이 아닌 기존 일반 회원/);
+});
+
+test("사전 검사는 임시 회원으로 격리하고 Storage 잔존을 확인한다", () => {
+  const preflight = read(preflightFile);
+  const rollback = read(rollbackFile);
+
+  assert.match(
+    preflight,
+    /1단계 스키마\(teachers, lectures, lecture_upload_consents\)는 이미 운영에 적용되어 있다/,
+  );
+  assert.match(
+    rollback,
+    /1단계 스키마\(teachers, lectures, lecture_upload_consents\)는 이미 운영에 적용되어 있다/,
+  );
+  assert.match(preflight, /insert into auth\.users \(id, email\)/);
+  assert.match(preflight, /lecture-lessons-teacher-a@example\.invalid/);
+  assert.match(preflight, /lecture-lessons-teacher-b@example\.invalid/);
+  assert.match(preflight, /lecture-lessons-member@example\.invalid/);
+  assert.match(preflight, /dddddddd-dddd-4ddd-8ddd-ddddddddddd4/);
+  assert.match(preflight, /eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee5/);
+  assert.match(preflight, /ffffffff-ffff-4fff-8fff-fffffffffff6/);
+  assert.match(
+    preflight,
+    /임시 사용자·profile·Storage 객체를 원본 보존 검사 전에 제거/,
+  );
+  assert.match(preflight, /storage\.allow_delete_query/);
+  assert.match(rollback, /lecture-lessons-teacher-a@example\.invalid/);
+  assert.match(rollback, /임시 사용자·profile·Storage 객체 잔존/);
+  assert.match(rollback, /<> 0/);
+  assert.match(rollback, /임시 사용자·profile·Storage 객체 잔존 0/);
 });

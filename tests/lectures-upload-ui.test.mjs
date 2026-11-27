@@ -431,3 +431,21 @@ test("화면은 차시 액션, 이탈 경고, 10초 새로고침을 연결한다
   assert.equal(result.status, "processing");
   assert.equal(result.encodeProgress, 40);
 });
+
+test("영상 저장소가 준비되지 않으면 차시 올리기 버튼만 막는다", () => {
+  const manager = read("components/lectures/lesson-manager.tsx");
+  const page = read("app/(site)/mypage/lectures/[id]/page.tsx");
+  const editor = read("components/lectures/editor.tsx");
+  const pending = manager
+    .split("!videoStorageReady ?")[1]
+    .split(": canUpload ?")[0];
+  assert.equal(pending.includes("lectureVideoStoragePendingMessage"), true);
+  assert.equal(pending.includes("disabled"), true);
+  assert.equal(pending.includes("차시 올리기"), true);
+  assert.equal(page.includes("lectureVideoStorageJudgment() === null"), true);
+  assert.equal(page.includes("<LectureEditor"), true);
+  assert.equal(editor.includes("saveLecture"), true);
+  assert.equal(editor.includes("lectureVideoStorageJudgment"), false);
+  assert.equal(manager.includes("이어서 올리기"), true);
+  assert.equal(manager.includes("disabled={busy || !videoStorageReady}"), true);
+});

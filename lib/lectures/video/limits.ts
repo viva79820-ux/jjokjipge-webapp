@@ -6,6 +6,9 @@ export const lectureVideoMimeTypes = ["video/mp4", "video/quicktime"] as const;
 
 export type LectureVideoMimeType = (typeof lectureVideoMimeTypes)[number];
 
+export const lectureVideoStoragePendingMessage =
+  "영상 저장소 연결 전이에요. 연결되면 차시를 올릴 수 있어요.";
+
 export function lectureVideoProviderName(
   value: string | undefined,
 ): "mock" | "bunny" {

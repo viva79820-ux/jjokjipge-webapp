@@ -12,6 +12,7 @@ import {
   readMyLecture,
 } from "@/lib/lectures/data";
 import { publicThumbnailUrl, uuid } from "@/lib/lectures/rules";
+import { lectureVideoStorageJudgment } from "@/lib/lectures/video";
 import { getMember } from "@/lib/member-auth/session";
 import { siteConfig } from "@/lib/site-config";
 import type { Metadata } from "next";
@@ -70,6 +71,7 @@ async function EditLecture({ params }: { params: Promise<{ id: string }> }) {
         lectureId={loaded.row.id}
         userId={member.id}
         canUpload={consented}
+        videoStorageReady={lectureVideoStorageJudgment() === null}
       />
     </section>
   );
@@ -79,10 +81,12 @@ async function LessonSection({
   lectureId,
   userId,
   canUpload,
+  videoStorageReady,
 }: {
   lectureId: string;
   userId: string;
   canUpload: boolean;
+  videoStorageReady: boolean;
 }) {
   const lessonLoad = await listLessonRecords(userId);
   if (lessonLoad.error || !lessonLoad.rows) {
@@ -96,6 +100,7 @@ async function LessonSection({
     <LessonManager
       lectureId={lectureId}
       canUpload={canUpload}
+      videoStorageReady={videoStorageReady}
       lessons={lessonsForLecture(lessonLoad.rows, lectureId)}
     />
   );
