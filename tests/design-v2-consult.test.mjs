@@ -67,6 +67,24 @@ test("전화상담 분야 주소는 전체·타로·사주만 선택으로 읽�
   );
 });
 
+test("손님에게 보이는 결제 안내는 무통장입금만 말한다", () => {
+  const steps = readFileSync(
+    new URL("../components/counselor/consult-steps.tsx", import.meta.url),
+    "utf8",
+  );
+  const booking = readFileSync(
+    new URL("../components/booking/booking-form.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(steps, /무통장입금/);
+  assert.equal(steps.includes("카드결제"), false);
+  assert.equal(steps.includes("카드 결제"), false);
+  assert.equal(steps.includes("입금 또는 카드결제"), false);
+  assert.match(booking, /무통장입금/);
+  assert.equal(booking.includes("카드결제"), false);
+  assert.equal(booking.includes("카드 결제"), false);
+});
+
 test("목록 가격은 조회된 상품 중 최저가의 이름과 금액만 쓴다", () => {
   const products = [
     { name: "기본 상담", price: 30000 },
