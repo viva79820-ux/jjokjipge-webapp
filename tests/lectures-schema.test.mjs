@@ -96,6 +96,11 @@ test("세 역할의 권한 검사와 롤백 원본이 고정되어 있다", () =
   assert.match(preflight, /다른 선생님 강의 수정 0행/);
   assert.match(preflight, /비로그인 공개 강의 조회 차단/);
   assert.match(preflight, /권한 회수 후 강의 작성 차단/);
+  assert.match(preflight, /set local storage\.allow_delete_query = 'true'/);
+  assert.match(preflight, /set local storage\.allow_delete_query = 'false'/);
+  assert.match(preflight, /선생님은 자기 썸네일을 삭제할 수 있다/);
+  assert.match(preflight, /다른 선생님 썸네일 삭제 거부/);
+  assert.match(preflight, /rollback to savepoint lecture_thumbnail;/);
   assert.match(preflight, /실제 로그인·Auth 세션 검증 아님/);
   assert.match(preflight, /LECTURES_PREFLIGHT_OK/);
   assert.match(preflight, /detail = baseline::text/);

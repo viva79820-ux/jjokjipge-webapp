@@ -4,6 +4,8 @@
 -- 관리자는 기존 관리자 profile을 쓴다. 선생님 A·B와 일반 회원 C는 같은 트랜잭션의 임시 auth.users다.
 -- 임시 계정은 고정 UUID와 example.invalid 메일이며, profile은 가입 트리거가 만들면 그대로 쓰고 없으면 role=user로 넣는다.
 -- 원본 보존 검사 전에 임시 사용자·profile을 지우고, 성공 예외로 트랜잭션 전체를 롤백한다.
+-- 썸네일 직접 삭제는 storage.allow_delete_query를 그 검사에서만 켜서 본인 허용과 타인 거부를 확인한다.
+-- 그 행은 savepoint로 되돌린다. 원본 보존 직전의 storage.objects 정리 삭제는 하지 않는다.
 -- 실제 계정·profile·기존 업무 행은 바꾸지 않는다.
 rollback;
 begin;
@@ -1115,6 +1117,7 @@ select pg_temp.lectures_assert(
   ),
   '선생님은 자기 강의를 수정하고 다시 공개할 수 있다'
 );
+savepoint lecture_thumbnail;
 insert into storage.objects (bucket_id, name)
 values (
   'public-images',
@@ -1146,11 +1149,55 @@ select pg_temp.lectures_expected_error(
   '42501',
   '강의 폴더 밖 업로드 차단'
 );
+reset role;
+set local storage.allow_delete_query = 'true';
+set local role authenticated;
 delete from storage.objects
 where bucket_id = 'public-images'
   and name = 'lectures/' || (select id::text from lecture_actors where kind = 'teacher_a')
     || '/123e4567-e89b-42d3-a456-426614174000.webp';
+select pg_temp.lectures_assert(
+  (
+    select count(*) = 0
+    from storage.objects
+    where bucket_id = 'public-images'
+      and name = 'lectures/' || (select id::text from lecture_actors where kind = 'teacher_a')
+        || '/123e4567-e89b-42d3-a456-426614174000.webp'
+  ),
+  '선생님은 자기 썸네일을 삭제할 수 있다'
+);
 reset role;
+insert into storage.objects (bucket_id, name)
+values (
+  'public-images',
+  'lectures/' || (select id::text from lecture_actors where kind = 'teacher_b')
+    || '/123e4567-e89b-42d3-a456-426614174002.webp'
+);
+set local role authenticated;
+select pg_temp.lectures_no_rows(
+  format(
+    'delete from storage.objects where bucket_id = %L and name = %L',
+    'public-images',
+    'lectures/' || (select id::text from lecture_actors where kind = 'teacher_b')
+      || '/123e4567-e89b-42d3-a456-426614174002.webp'
+  ),
+  '다른 선생님 썸네일 삭제 거부'
+);
+reset role;
+select pg_temp.lectures_assert(
+  (
+    select count(*) = 1
+    from storage.objects
+    where bucket_id = 'public-images'
+      and name = 'lectures/' || (select id::text from lecture_actors where kind = 'teacher_b')
+        || '/123e4567-e89b-42d3-a456-426614174002.webp'
+  ),
+  '다른 선생님 썸네일은 삭제되지 않는다'
+);
+set local storage.allow_delete_query = 'false';
+rollback to savepoint lecture_thumbnail;
+reset role;
+set local storage.allow_delete_query = 'false';
 select set_config('request.jwt.claim.sub', '', true);
 select set_config('request.jwt.claims', '{}', true);
 
