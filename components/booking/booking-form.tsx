@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { DragRow } from "@/components/ui/drag-row";
 import { SectionTitle } from "@/components/ui/section-title";
 import { createReservation } from "@/lib/reservations/actions";
+import { honeypotField, openedAtField } from "@/lib/reservations/abuse-guard";
 import type { BookingState } from "@/lib/reservations/types";
 import type { Counselor } from "@/lib/data/counselors";
 import { bookingConfig } from "@/lib/booking-config";
@@ -80,6 +81,12 @@ export function BookingForm({
     refundConsent: false,
     privacyConsent: false,
   });
+  const openedAt = useRef("");
+  const openedAtInput = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    openedAt.current = String(Date.now());
+    if (openedAtInput.current) openedAtInput.current.value = openedAt.current;
+  }, []);
   useEffect(() => {
     const url = new URL(window.location.href);
     url.searchParams.set("product", product.id);
@@ -123,6 +130,13 @@ export function BookingForm({
       checkField("depositor", next);
   }
   function validateBeforeSubmit(event: FormEvent<HTMLFormElement>) {
+    const opened = event.currentTarget.elements.namedItem(openedAtField);
+    if (
+      opened instanceof HTMLInputElement &&
+      opened.value === "" &&
+      openedAt.current
+    )
+      opened.value = openedAt.current;
     const nextErrors: NonNullable<BookingState["errors"]> = validateContact({
       ...contact,
       depositor: sameDepositor ? "" : contact.depositor,
@@ -214,6 +228,28 @@ export function BookingForm({
         <input type="hidden" name="productId" value={product.id} />
         <input type="hidden" name="startsAt" value={startsAt} />
         <input type="hidden" name="paymentMethod" value="bank_transfer" />
+        <input
+          ref={openedAtInput}
+          type="hidden"
+          name={openedAtField}
+          defaultValue=""
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none fixed top-0 left-0 -z-10 h-0 w-0 overflow-hidden opacity-0"
+        >
+          <label htmlFor="reservation-company-website">
+            웹사이트
+            <input
+              id="reservation-company-website"
+              name={honeypotField}
+              type="text"
+              tabIndex={-1}
+              autoComplete="off"
+              defaultValue=""
+            />
+          </label>
+        </div>
         <fieldset disabled={pending}>
           <legend className="mb-3 text-lg font-bold">시간 선택</legend>
           <div className="grid grid-cols-4 gap-2 @3xl/app:grid-cols-6">
@@ -331,16 +367,10 @@ export function BookingForm({
         </fieldset>
         <fieldset disabled={pending}>
           <legend className="mb-3 text-lg font-bold">결제 방법</legend>
-          <div className="grid gap-2 @3xl/app:grid-cols-2">
-            <label className="flex min-h-11 items-center gap-2 rounded-card border border-brand bg-surface p-3">
-              <input type="radio" checked readOnly name="paymentChoice" />
-              무통장입금
-            </label>
-            <label className="flex min-h-11 items-center gap-2 rounded-card border border-border bg-surface-muted p-3 text-muted">
-              <input type="radio" disabled name="paymentChoice" />
-              카드결제 <Badge>준비 중</Badge>
-            </label>
-          </div>
+          <label className="flex min-h-11 items-center gap-2 rounded-card border border-brand bg-surface p-3">
+            <input type="radio" checked readOnly name="paymentChoice" />
+            무통장입금
+          </label>
           {errorFor("paymentMethod")}
           <label className="mt-3 flex min-h-11 items-center gap-2 font-medium">
             <input

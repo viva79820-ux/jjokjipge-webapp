@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import Link from "next/link";
 import { login } from "@/lib/member-auth/actions";
 import type { FieldState } from "@/lib/member-auth/actions";
@@ -33,6 +39,21 @@ export function LoginForm({ next }: { next: string }) {
       ? state.errors
       : localErrors;
 
+  // 액션이 끝나면 브라우저 폼이 초기화된다. 응답에 담긴 이메일만 되돌리고
+  // 비밀번호는 비운 뒤, 그 칸으로 커서를 옮긴다.
+  useLayoutEffect(() => {
+    const form = formRef.current;
+    if (!form) return;
+    const failed =
+      Boolean(state.message) || Object.values(state.errors ?? {}).some(Boolean);
+    if (!failed && state.email === undefined) return;
+    const email = form.querySelector<HTMLInputElement>('[name="email"]');
+    if (email && state.email !== undefined) email.value = state.email;
+    if (!failed) return;
+    const password = form.querySelector<HTMLInputElement>('[name="password"]');
+    if (password) password.value = "";
+  }, [formRef, state]);
+
   useEffect(() => {
     const errorName = Object.entries(errors).find(
       ([, message]) => message,
@@ -43,7 +64,9 @@ export function LoginForm({ next }: { next: string }) {
         ?.focus();
       return;
     }
-    if (state.message) feedbackRef.current?.focus();
+    if (state.message) {
+      formRef.current?.querySelector<HTMLElement>('[name="password"]')?.focus();
+    }
   }, [errors, formRef, state.message]);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -84,6 +107,7 @@ export function LoginForm({ next }: { next: string }) {
             invalid={Boolean(errors.email)}
             describedBy={errors.email ? "email-error" : undefined}
             disabled={pending}
+            defaultValue={state.email}
           />
           {errors.email && (
             <p

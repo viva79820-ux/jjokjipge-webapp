@@ -1,8 +1,5 @@
 import { receiveBunnyWebhook } from "@/lib/lectures/lesson-ops";
 
-export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
-
 export async function POST(request: Request) {
   const rawBody = await request.text();
   return receiveBunnyWebhook({

@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { BankTransferAccount } from "@/components/payments/bank-transfer-account";
 import { counselorHeading } from "@/lib/counselors/rules";
+import { cancellationStatusLabel } from "@/lib/reservations/deposit-expiry";
 import {
   formatSchedule,
   paymentLabels,
@@ -31,7 +32,10 @@ export function ReservationResult({ result }: { result: LookupResult }) {
           <div>
             <dt className="mb-1 text-caption text-muted">예약 상태</dt>
             <dd>
-              <StatusBadge status={result.status} />
+              <StatusBadge
+                status={result.status}
+                cancelReason={result.cancelReason}
+              />
             </dd>
           </div>
           <div className="min-w-0">
@@ -79,7 +83,11 @@ export function ReservationResult({ result }: { result: LookupResult }) {
             <div className="min-w-0">
               <dt className="text-caption text-muted">취소 사유</dt>
               <dd className="whitespace-pre-wrap wrap-anywhere">
-                {result.cancelReason}
+                {cancellationStatusLabel(
+                  result.status,
+                  result.cancelReason,
+                  result.cancelReason,
+                )}
               </dd>
             </div>
           )}

@@ -7,5 +7,7 @@ export const bookingConfig = {
   maxDaysAhead: 14,
   minLeadMinutes: 120,
   depositHours: 24,
+  maxPendingPerContact: 2,
+  minSubmitSeconds: 3,
   bank: bankTransferConfig,
 } as const;

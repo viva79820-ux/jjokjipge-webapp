@@ -2,8 +2,17 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { bookingConfig } from "@/lib/booking-config";
 import { calculateSlots, koreanDate } from "@/lib/booking-time";
+import {
+  isHoneypotTripped,
+  isSubmitTooFast,
+  pendingLimitMessage,
+  pendingWindowStart,
+  samePendingContact,
+} from "./abuse-guard";
 import { getAvailableSlots, getBookingProduct } from "./availability";
+import { releaseExpiredDepositHolds } from "./expire-reservations";
 import { validateReservation } from "./validation";
 import type { BookingState } from "./types";
 import { duplicateMessage } from "./rules";
@@ -17,6 +26,9 @@ export async function createReservation(
 ): Promise<BookingState> {
   if (!(formData instanceof FormData))
     return { message: "입력한 내용을 확인해 주세요." };
+  const now = Date.now();
+  if (isHoneypotTripped(formData) || isSubmitTooFast(formData, now))
+    return { message: failureMessage };
   const { errors, values } = validateReservation(formData);
   if (Object.keys(errors).length)
     return { errors, message: "입력한 내용을 확인해 주세요." };
@@ -52,36 +64,63 @@ export async function createReservation(
     const { data: claims, error: authError } = await auth.auth.getClaims();
     if (authError && authError.name !== "AuthSessionMissingError")
       throw authError;
+    const db = createAdminClient();
+    const pending = await db
+      .from("reservations")
+      .select("customer_phone,customer_email")
+      .eq("status", "pending_payment")
+      .gte("created_at", pendingWindowStart(now));
+    if (pending.error) throw pending.error;
+    const pendingCount = (pending.data ?? []).filter((row) =>
+      samePendingContact(row, values.phone, values.email),
+    ).length;
+    if (pendingCount >= bookingConfig.maxPendingPerContact)
+      return { message: pendingLimitMessage() };
     const endsAt = new Date(
       Date.parse(start) + context.product.minutes * 60000,
     ).toISOString();
-    const { data, error } = await createAdminClient()
-      .from("reservations")
-      .insert({
-        user_id: claims?.claims?.sub || null,
-        counselor_id: context.counselor.id,
-        product_id: context.product.id,
-        product_name: context.product.name,
-        minutes: context.product.minutes,
-        price: context.product.price,
-        starts_at: start,
-        ends_at: endsAt,
-        customer_name: values.name,
-        customer_phone: values.phone,
-        customer_email: values.email,
-        payment_method: "bank_transfer",
-        depositor_name: values.depositor,
-      })
-      .select("reservation_no,product_name,starts_at,ends_at,price")
-      .single();
-    if (error) {
-      if (error.code === "23P01")
+    const payload = {
+      user_id: claims?.claims?.sub || null,
+      counselor_id: context.counselor.id,
+      product_id: context.product.id,
+      product_name: context.product.name,
+      minutes: context.product.minutes,
+      price: context.product.price,
+      starts_at: start,
+      ends_at: endsAt,
+      customer_name: values.name,
+      customer_phone: values.phone,
+      customer_email: values.email,
+      payment_method: "bank_transfer",
+      depositor_name: values.depositor,
+    };
+    const save = () =>
+      db
+        .from("reservations")
+        .insert(payload)
+        .select("reservation_no,product_name,starts_at,ends_at,price")
+        .single();
+    let saved = await save();
+    // The exclusion constraint still counts unpaid rows until they are cancelled.
+    if (saved.error?.code === "23P01") {
+      await releaseExpiredDepositHolds(db, {
+        counselorId: context.counselor.id,
+        startsAt: start,
+        endsAt,
+        now,
+      });
+      saved = await save();
+    }
+    if (saved.error) {
+      if (saved.error.code === "23P01")
         return {
           errors: { startsAt: duplicateMessage },
           message: duplicateMessage,
         };
-      throw error;
+      throw saved.error;
     }
+    const data = saved.data;
+    if (!data) throw new Error("Reservation insert returned no row");
     return {
       success: {
         reservationNo: data.reservation_no,

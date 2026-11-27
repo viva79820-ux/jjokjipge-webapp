@@ -5,6 +5,8 @@ export type LoginValues = Record<LoginField, string>;
 export type LoginState = {
   errors?: Partial<Record<LoginField, string>>;
   message?: string;
+  // 실패 뒤 이메일 칸을 다시 채울 값. 비밀번호는 넣지 않는다.
+  email?: string;
 };
 
 export function validateLogin(values: LoginValues) {

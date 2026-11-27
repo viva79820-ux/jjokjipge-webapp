@@ -7,12 +7,14 @@ export function EmailField({
   describedBy,
   disabled,
   autoComplete,
+  defaultValue,
 }: {
   id: string;
   invalid: boolean;
   describedBy?: string;
   disabled?: boolean;
   autoComplete: "username" | "email";
+  defaultValue?: string;
 }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -34,6 +36,7 @@ export function EmailField({
           spellCheck={false}
           required
           disabled={disabled}
+          defaultValue={defaultValue}
           placeholder="example@email.com"
           aria-invalid={invalid}
           aria-describedby={describedBy}

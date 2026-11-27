@@ -30,7 +30,7 @@ export function CounselorPhoto({
         src={src}
         alt={alt}
         sizes={sizes}
-        quality={85}
+        quality={90}
         className={imageClassName}
         data-counselor-photo
         onError={() => setFailedSrc(src)}

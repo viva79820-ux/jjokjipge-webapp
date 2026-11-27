@@ -18,10 +18,11 @@ export type ReservationSummary = {
   status: ReservationStatus;
   product_name: string;
   price: number;
+  cancel_reason: string | null;
   counselors: { name: string } | null;
 };
 export const summaryColumns =
-  "id,reservation_no,starts_at,customer_name,status,product_name,price,counselors(name)";
+  "id,reservation_no,starts_at,customer_name,status,product_name,price,cancel_reason,counselors(name)";
 const reservationSorts = {
   created_desc: { column: "created_at", ascending: false },
   starts_desc: { column: "starts_at", ascending: false },

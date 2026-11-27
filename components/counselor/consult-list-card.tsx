@@ -31,7 +31,7 @@ export function ConsultListCard({ counselor }: { counselor: Counselor }) {
             alt={`${heading} 사진`}
             sizes={consultListPhotoSizes}
             imageClassName="object-cover object-[center_18%]"
-            className="size-21 rounded-xl"
+            className="size-28 rounded-xl"
           />
         </Link>
         <div className="flex min-w-0 flex-1 flex-col gap-1.25">

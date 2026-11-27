@@ -2,6 +2,7 @@
 -- 성공 예외 DETAIL의 JSON을 아래 null 대신 $baseline$...$baseline$::jsonb로 붙여 넣는다.
 -- 저장소 원본의 baseline은 null로 유지하고 실행 결과 JSON을 커밋하지 않는다.
 -- 첫 ROLLBACK은 사전 검사의 의도된 예외로 중단된 트랜잭션을 종료한다.
+-- 사전 검사의 임시 사용자(고정 UUID, example.invalid)와 profile이 auth.users·profiles에 남아 있으면 실패한다.
 rollback;
 
 -- BEGIN EXACT SNAPSHOT
@@ -160,7 +161,36 @@ begin
     end if;
   end loop;
 
-  raise notice 'LECTURES_ROLLBACK_OK: 신규 강의 객체·검사 행 없음. 기존 profile·클래스·콘텐츠·인증·Storage 원본 일치.';
+  if exists (
+    select 1
+    from auth.users
+    where id in (
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'::uuid,
+      'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2'::uuid,
+      'cccccccc-cccc-4ccc-8ccc-ccccccccccc3'::uuid
+    )
+    or email in (
+      'lectures-teacher-a@example.invalid',
+      'lectures-teacher-b@example.invalid',
+      'lectures-member-c@example.invalid'
+    )
+  )
+  or exists (
+    select 1
+    from public.profiles
+    where id in (
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'::uuid,
+      'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2'::uuid,
+      'cccccccc-cccc-4ccc-8ccc-ccccccccccc3'::uuid
+    )
+  )
+  then
+    raise exception using
+      errcode = 'P0001',
+      message = 'LECTURES_ROLLBACK_FAILED: 임시 사용자·profile 잔존';
+  end if;
+
+  raise notice 'LECTURES_ROLLBACK_OK: 신규 강의 객체·검사 행·임시 사용자 없음. 기존 profile·클래스·콘텐츠·인증·Storage 원본 일치.';
 end;
 $rollback_check$;
 

@@ -3,6 +3,7 @@
 import {
   useActionState,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type FormEvent,
@@ -13,7 +14,13 @@ import { signUp, type FieldState } from "@/lib/member-auth/actions";
 import { readSignup, validateSignup } from "@/lib/member-auth/validation";
 import { useFormResetRef } from "./navigation-reset";
 import { PasswordField } from "./password-field";
-import { alertClass, screenFieldClass, screenLabelClass } from "./styles";
+import {
+  alertClass,
+  linkClass,
+  screenFieldClass,
+  screenLabelClass,
+  statusClass,
+} from "./styles";
 
 type AgreementName = "ageConfirmed" | "termsAgreed" | "privacyAgreed";
 
@@ -30,6 +37,7 @@ export function SignupForm() {
   const [formRef, formResetRef] = useFormResetRef();
   const feedbackRef = useRef<HTMLParagraphElement>(null);
   const [agreements, setAgreements] = useState(initialAgreements);
+  const agreementsRef = useRef(initialAgreements);
   const [localErrors, setLocalErrors] = useState<
     Record<string, string | undefined>
   >({});
@@ -44,6 +52,44 @@ export function SignupForm() {
   const allAgreed = Object.values(agreements).every(Boolean);
   const agreementError =
     errors.ageConfirmed || errors.termsAgreed || errors.privacyAgreed;
+
+  useLayoutEffect(() => {
+    agreementsRef.current = agreements;
+  }, [agreements]);
+
+  // 액션이 끝나면 폼이 초기화된다. 이름·이메일·동의는 되돌리고
+  // 비밀번호와 비밀번호 확인만 비운다.
+  useLayoutEffect(() => {
+    const form = formRef.current;
+    if (!form) return;
+    const failed =
+      Boolean(state.message) || Object.values(state.errors ?? {}).some(Boolean);
+    if (!failed) return;
+    const name = form.querySelector<HTMLInputElement>('[name="name"]');
+    const email = form.querySelector<HTMLInputElement>('[name="email"]');
+    if (name && state.name !== undefined) name.value = state.name;
+    if (email && state.email !== undefined) email.value = state.email;
+    for (const field of ["password", "passwordConfirm"]) {
+      const input = form.querySelector<HTMLInputElement>(`[name="${field}"]`);
+      if (input) input.value = "";
+    }
+    const current = agreementsRef.current;
+    for (const field of [
+      "ageConfirmed",
+      "termsAgreed",
+      "privacyAgreed",
+    ] as const) {
+      const input = form.querySelector<HTMLInputElement>(`[name="${field}"]`);
+      if (input) input.checked = current[field];
+    }
+    const selectAll = form.querySelector<HTMLInputElement>(
+      'section input[type="checkbox"]:not([name])',
+    );
+    if (selectAll) {
+      selectAll.checked =
+        current.ageConfirmed && current.termsAgreed && current.privacyAgreed;
+    }
+  }, [formRef, state]);
 
   useEffect(() => {
     const errorName = Object.entries(errors).find(
@@ -115,6 +161,7 @@ export function SignupForm() {
           required
           maxLength={30}
           disabled={pending}
+          defaultValue={state.name}
           placeholder="홍길동"
           aria-invalid={Boolean(errors.name)}
           aria-describedby={errors.name ? "name-error" : undefined}
@@ -139,6 +186,7 @@ export function SignupForm() {
           spellCheck={false}
           required
           disabled={pending}
+          defaultValue={state.email}
           placeholder="example@email.com"
           aria-invalid={Boolean(errors.email)}
           aria-describedby={
@@ -262,9 +310,26 @@ export function SignupForm() {
       </section>
 
       {state.message && (
-        <p ref={feedbackRef} tabIndex={-1} role="alert" className={alertClass}>
-          {state.message}
-        </p>
+        <div className="flex flex-col gap-1">
+          <p
+            ref={feedbackRef}
+            tabIndex={-1}
+            role={state.status === "resent" ? "status" : "alert"}
+            className={state.status === "resent" ? statusClass : alertClass}
+          >
+            {state.message}
+          </p>
+          {state.status === "duplicate" && (
+            <div className="flex flex-col">
+              <Link href="/login" className={linkClass}>
+                로그인
+              </Link>
+              <Link href="/forgot-password" className={linkClass}>
+                비밀번호 찾기
+              </Link>
+            </div>
+          )}
+        </div>
       )}
       <Button
         type="submit"

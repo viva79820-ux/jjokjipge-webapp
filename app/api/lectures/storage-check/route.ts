@@ -1,8 +1,5 @@
 import { cronAuthorized, runStorageCheck } from "@/lib/lectures/lesson-ops";
 
-export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
-
 export async function GET(request: Request) {
   if (
     !cronAuthorized(

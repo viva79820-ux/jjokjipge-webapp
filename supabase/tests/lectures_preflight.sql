@@ -1,15 +1,18 @@
 -- teachers, lectures, lecture_upload_consents가 아직 없는 DB에서 전체 실행한다.
 -- 마지막 SQLSTATE P0001과 LECTURES_PREFLIGHT_OK 예외만 성공이다.
 -- 성공 예외 DETAIL의 baseline JSON을 별도로 보관한 뒤 롤백 확인 SQL에 입력한다.
--- 실제 계정·profile·기존 업무 행은 바꾸지 않으며 성공 예외로 전체 롤백한다.
--- 선생님 두 명은 기존 role=user profile을 그대로 쓰고, 일반 회원은 세 번째 profile 또는 프로필 없는 인증 역할이다.
+-- 관리자는 기존 관리자 profile을 쓴다. 선생님 A·B와 일반 회원 C는 같은 트랜잭션의 임시 auth.users다.
+-- 임시 계정은 고정 UUID와 example.invalid 메일이며, profile은 가입 트리거가 만들면 그대로 쓰고 없으면 role=user로 넣는다.
+-- 원본 보존 검사 전에 임시 사용자·profile을 지우고, 성공 예외로 트랜잭션 전체를 롤백한다.
+-- 썸네일 직접 삭제는 storage.allow_delete_query를 그 검사에서만 켜서 본인 허용과 타인 거부를 확인한다.
+-- 그 행은 savepoint로 되돌린다. 원본 보존 직전의 storage.objects 정리 삭제는 하지 않는다.
+-- 실제 계정·profile·기존 업무 행은 바꾸지 않는다.
 rollback;
 begin;
 
 do $prerequisite$
 declare
   missing text[] := '{}';
-  user_count integer;
 begin
   if to_regclass('public.teachers') is not null
     or to_regclass('public.lectures') is not null
@@ -64,13 +67,6 @@ begin
     raise exception using
       errcode = 'P0001',
       message = 'LECTURES_PREFLIGHT_PREREQUISITE_FAILED: 기존 관리자 profile 필요';
-  end if;
-
-  select count(*) into user_count from public.profiles where role = 'user';
-  if user_count < 2 then
-    raise exception using
-      errcode = 'P0001',
-      message = 'LECTURES_PREFLIGHT_PREREQUISITE_FAILED: 선생님 격리 검사에 기존 일반 회원 profile 2명 필요';
   end if;
 
   if not (
@@ -661,28 +657,76 @@ where role = 'admin'
 order by id
 limit 1;
 insert into lecture_actors (kind, id)
-select 'teacher_a', id
-from public.profiles
-where role = 'user'
-order by id
-limit 1;
-insert into lecture_actors (kind, id)
-select 'teacher_b', id
-from public.profiles
-where role = 'user'
-  and id <> (select id from lecture_actors where kind = 'teacher_a')
-order by id
-limit 1;
-insert into lecture_actors (kind, id)
-select 'member', id
-from public.profiles
-where role = 'user'
-  and id not in (select id from lecture_actors)
-order by id
-limit 1;
-insert into lecture_actors (kind, id)
-select 'member', '00000000-0000-4000-8000-000000000091'::uuid
-where not exists (select 1 from lecture_actors where kind = 'member');
+values
+  ('teacher_a', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'),
+  ('teacher_b', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2'),
+  ('member', 'cccccccc-cccc-4ccc-8ccc-ccccccccccc3');
+
+do $temp_users$
+begin
+  if (select count(*) from lecture_actors) <> 4
+    or exists (
+      select 1
+      from auth.users
+      where id in (
+        'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'::uuid,
+        'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2'::uuid,
+        'cccccccc-cccc-4ccc-8ccc-ccccccccccc3'::uuid
+      )
+      or email in (
+        'lectures-teacher-a@example.invalid',
+        'lectures-teacher-b@example.invalid',
+        'lectures-member-c@example.invalid'
+      )
+    )
+    or exists (
+      select 1
+      from public.profiles
+      where id in (
+        'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'::uuid,
+        'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2'::uuid,
+        'cccccccc-cccc-4ccc-8ccc-ccccccccccc3'::uuid
+      )
+    )
+  then
+    raise exception using
+      errcode = 'P0001',
+      message = 'LECTURES_PREFLIGHT_PREREQUISITE_FAILED: 임시 검사 계정을 만들 수 없습니다';
+  end if;
+end;
+$temp_users$;
+
+insert into auth.users (id, email)
+values
+  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', 'lectures-teacher-a@example.invalid'),
+  ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2', 'lectures-teacher-b@example.invalid'),
+  ('cccccccc-cccc-4ccc-8ccc-ccccccccccc3', 'lectures-member-c@example.invalid');
+
+insert into public.profiles (id, role)
+select actor.id, 'user'
+from lecture_actors as actor
+where actor.kind in ('teacher_a', 'teacher_b', 'member')
+  and not exists (
+    select 1
+    from public.profiles as profile
+    where profile.id = actor.id
+  );
+
+do $temp_profiles$
+begin
+  if (
+    select count(*)
+    from public.profiles as profile
+    join lecture_actors as actor on actor.id = profile.id
+    where actor.kind in ('teacher_a', 'teacher_b', 'member')
+      and profile.role = 'user'
+  ) <> 3 then
+    raise exception using
+      errcode = 'P0001',
+      message = 'LECTURES_PREFLIGHT_PREREQUISITE_FAILED: 임시 일반 회원 profile 3명 필요';
+  end if;
+end;
+$temp_profiles$;
 
 create temporary table lecture_member_mode (mode text primary key);
 insert into lecture_member_mode (mode)
@@ -1073,6 +1117,7 @@ select pg_temp.lectures_assert(
   ),
   '선생님은 자기 강의를 수정하고 다시 공개할 수 있다'
 );
+savepoint lecture_thumbnail;
 insert into storage.objects (bucket_id, name)
 values (
   'public-images',
@@ -1104,11 +1149,55 @@ select pg_temp.lectures_expected_error(
   '42501',
   '강의 폴더 밖 업로드 차단'
 );
+reset role;
+set local storage.allow_delete_query = 'true';
+set local role authenticated;
 delete from storage.objects
 where bucket_id = 'public-images'
   and name = 'lectures/' || (select id::text from lecture_actors where kind = 'teacher_a')
     || '/123e4567-e89b-42d3-a456-426614174000.webp';
+select pg_temp.lectures_assert(
+  (
+    select count(*) = 0
+    from storage.objects
+    where bucket_id = 'public-images'
+      and name = 'lectures/' || (select id::text from lecture_actors where kind = 'teacher_a')
+        || '/123e4567-e89b-42d3-a456-426614174000.webp'
+  ),
+  '선생님은 자기 썸네일을 삭제할 수 있다'
+);
 reset role;
+insert into storage.objects (bucket_id, name)
+values (
+  'public-images',
+  'lectures/' || (select id::text from lecture_actors where kind = 'teacher_b')
+    || '/123e4567-e89b-42d3-a456-426614174002.webp'
+);
+set local role authenticated;
+select pg_temp.lectures_no_rows(
+  format(
+    'delete from storage.objects where bucket_id = %L and name = %L',
+    'public-images',
+    'lectures/' || (select id::text from lecture_actors where kind = 'teacher_b')
+      || '/123e4567-e89b-42d3-a456-426614174002.webp'
+  ),
+  '다른 선생님 썸네일 삭제 거부'
+);
+reset role;
+select pg_temp.lectures_assert(
+  (
+    select count(*) = 1
+    from storage.objects
+    where bucket_id = 'public-images'
+      and name = 'lectures/' || (select id::text from lecture_actors where kind = 'teacher_b')
+        || '/123e4567-e89b-42d3-a456-426614174002.webp'
+  ),
+  '다른 선생님 썸네일은 삭제되지 않는다'
+);
+set local storage.allow_delete_query = 'false';
+rollback to savepoint lecture_thumbnail;
+reset role;
+set local storage.allow_delete_query = 'false';
 select set_config('request.jwt.claim.sub', '', true);
 select set_config('request.jwt.claims', '{}', true);
 
@@ -1187,6 +1276,44 @@ select pg_temp.lectures_assert(
       and not attisdropped
   ),
   '기존 classes 테이블은 그대로'
+);
+delete from public.lectures
+where teacher_id in (
+  select id
+  from lecture_actors
+  where kind in ('teacher_a', 'teacher_b', 'member')
+);
+delete from auth.users
+where id in (
+  select id
+  from lecture_actors
+  where kind in ('teacher_a', 'teacher_b', 'member')
+);
+select pg_temp.lectures_assert(
+  not exists (
+    select 1
+    from auth.users
+    where id in (
+      select id
+      from lecture_actors
+      where kind in ('teacher_a', 'teacher_b', 'member')
+    )
+    or email in (
+      'lectures-teacher-a@example.invalid',
+      'lectures-teacher-b@example.invalid',
+      'lectures-member-c@example.invalid'
+    )
+  )
+  and not exists (
+    select 1
+    from public.profiles
+    where id in (
+      select id
+      from lecture_actors
+      where kind in ('teacher_a', 'teacher_b', 'member')
+    )
+  ),
+  '임시 사용자와 profile을 원본 보존 검사 전에 제거'
 );
 select pg_temp.lectures_assert(
   pg_temp.lectures_snapshot() = (
