@@ -13,7 +13,13 @@ import { signUp, type FieldState } from "@/lib/member-auth/actions";
 import { readSignup, validateSignup } from "@/lib/member-auth/validation";
 import { useFormResetRef } from "./navigation-reset";
 import { PasswordField } from "./password-field";
-import { alertClass, screenFieldClass, screenLabelClass } from "./styles";
+import {
+  alertClass,
+  linkClass,
+  screenFieldClass,
+  screenLabelClass,
+  statusClass,
+} from "./styles";
 
 type AgreementName = "ageConfirmed" | "termsAgreed" | "privacyAgreed";
 
@@ -262,9 +268,26 @@ export function SignupForm() {
       </section>
 
       {state.message && (
-        <p ref={feedbackRef} tabIndex={-1} role="alert" className={alertClass}>
-          {state.message}
-        </p>
+        <div className="flex flex-col gap-1">
+          <p
+            ref={feedbackRef}
+            tabIndex={-1}
+            role={state.status === "resent" ? "status" : "alert"}
+            className={state.status === "resent" ? statusClass : alertClass}
+          >
+            {state.message}
+          </p>
+          {state.status === "duplicate" && (
+            <div className="flex flex-col">
+              <Link href="/login" className={linkClass}>
+                로그인
+              </Link>
+              <Link href="/forgot-password" className={linkClass}>
+                비밀번호 찾기
+              </Link>
+            </div>
+          )}
+        </div>
       )}
       <Button
         type="submit"

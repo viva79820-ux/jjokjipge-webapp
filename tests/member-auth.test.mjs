@@ -120,6 +120,7 @@ function harness(options = {}) {
               identities: options.emptyIdentities
                 ? []
                 : [{ provider: "email" }],
+              ...options.signupUser,
             },
             session: options.signupSession ? { access_token: "session" } : null,
           },
@@ -423,8 +424,12 @@ test("signup does not claim mail was sent for duplicates, limits, or failures", 
   const duplicate = harness({ emptyIdentities: true });
   try {
     const result = await settle(duplicate.signUp({}, signupForm()));
-    assert.equal(result.redirect, "/auth/verify");
-    assert.equal(result.state, undefined);
+    assert.equal(result.redirect, undefined);
+    assert.equal(
+      result.state.message,
+      "이미 가입된 이메일이에요. 로그인하거나 비밀번호 찾기를 이용해 주세요.",
+    );
+    assert.equal(result.state.status, "duplicate");
     assert.equal(
       duplicate.calls.some((call) => call[0] === "recordSignupConsent"),
       false,
@@ -469,6 +474,100 @@ test("signup does not claim mail was sent for duplicates, limits, or failures", 
   } finally {
     consentFailed.restore();
   }
+});
+
+test("signup tells a confirmed duplicate from an unconfirmed resend", async () => {
+  const { classifySignupUser, confirmationResendGapMs } = load(
+    "../lib/member-auth/signup-user.ts",
+    {},
+  );
+  const { messages } = load("../lib/member-auth/errors.ts", {});
+  const createdAt = "2026-11-13T00:00:00.000Z";
+  const createdMs = Date.parse(createdAt);
+  const identity = [{ provider: "email" }];
+  assert.equal(
+    classifySignupUser({
+      identities: [],
+      created_at: createdAt,
+      confirmation_sent_at: createdAt,
+    }),
+    "duplicate",
+  );
+  assert.equal(
+    classifySignupUser({
+      identities: [],
+      created_at: createdAt,
+      confirmation_sent_at: new Date(
+        createdMs + confirmationResendGapMs * 2,
+      ).toISOString(),
+    }),
+    "duplicate",
+  );
+  assert.equal(
+    classifySignupUser({
+      identities: identity,
+      created_at: createdAt,
+      confirmation_sent_at: new Date(
+        createdMs + confirmationResendGapMs - 1,
+      ).toISOString(),
+    }),
+    "created",
+  );
+  assert.equal(
+    classifySignupUser({ identities: identity, created_at: createdAt }),
+    "created",
+  );
+  assert.equal(classifySignupUser({ identities: identity }), "created");
+  assert.equal(
+    classifySignupUser({
+      identities: identity,
+      created_at: createdAt,
+      confirmation_sent_at: new Date(
+        createdMs + confirmationResendGapMs,
+      ).toISOString(),
+    }),
+    "resent",
+  );
+  assert.equal(
+    messages.duplicateEmail,
+    "이미 가입된 이메일이에요. 로그인하거나 비밀번호 찾기를 이용해 주세요.",
+  );
+  assert.equal(
+    messages.confirmationResent,
+    "인증 메일을 다시 보냈어요. 메일함을 확인해 주세요.",
+  );
+
+  const resent = harness({
+    signupUser: {
+      identities: identity,
+      created_at: createdAt,
+      confirmation_sent_at: new Date(
+        createdMs + confirmationResendGapMs,
+      ).toISOString(),
+    },
+  });
+  try {
+    const result = await settle(resent.signUp({}, signupForm()));
+    assert.equal(result.redirect, undefined);
+    assert.equal(result.state.message, messages.confirmationResent);
+    assert.equal(result.state.status, "resent");
+    assert.equal(
+      resent.calls.some((call) => call[0] === "recordSignupConsent"),
+      false,
+    );
+  } finally {
+    resent.restore();
+  }
+
+  const signup = readFileSync(
+    new URL("../components/member-auth/signup-form.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(signup, /status === "duplicate"/);
+  assert.match(signup, /href="\/login"/);
+  assert.match(signup, /href="\/forgot-password"/);
+  assert.match(signup, /비밀번호 찾기/);
+  assert.match(signup, /status === "resent" \? "status" : "alert"/);
 });
 
 test("signup consent recording fixes both versions and removes an inconsistent new account", async () => {

@@ -367,16 +367,10 @@ export function BookingForm({
         </fieldset>
         <fieldset disabled={pending}>
           <legend className="mb-3 text-lg font-bold">결제 방법</legend>
-          <div className="grid gap-2 @3xl/app:grid-cols-2">
-            <label className="flex min-h-11 items-center gap-2 rounded-card border border-brand bg-surface p-3">
-              <input type="radio" checked readOnly name="paymentChoice" />
-              무통장입금
-            </label>
-            <label className="flex min-h-11 items-center gap-2 rounded-card border border-border bg-surface-muted p-3 text-muted">
-              <input type="radio" disabled name="paymentChoice" />
-              카드결제 <Badge>준비 중</Badge>
-            </label>
-          </div>
+          <label className="flex min-h-11 items-center gap-2 rounded-card border border-brand bg-surface p-3">
+            <input type="radio" checked readOnly name="paymentChoice" />
+            무통장입금
+          </label>
           {errorFor("paymentMethod")}
           <label className="mt-3 flex min-h-11 items-center gap-2 font-medium">
             <input

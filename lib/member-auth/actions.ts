@@ -8,6 +8,7 @@ import { readConfirmSubmission } from "./confirm";
 import { recordSignupConsent } from "./consents";
 import { callbackUrl, resolveTrustedOrigin, safeNext } from "./redirect";
 import { authFailure, logAuthFailure, messages } from "./errors";
+import { classifySignupUser } from "./signup-user";
 import { getConfirmedUser } from "./session";
 import {
   normalizeEmail,
@@ -24,7 +25,7 @@ import {
 export type FieldState = {
   errors?: Record<string, string | undefined>;
   message?: string;
-  status?: "accepted";
+  status?: "accepted" | "duplicate" | "resent";
 };
 
 function signupData(name: string): { name: string } {
@@ -73,6 +74,13 @@ export async function signUp(
       return { message: messages.unavailable };
     }
     if (!data.user) return { message: messages.unavailable };
+    const signupKind = classifySignupUser(data.user);
+    if (signupKind === "duplicate") {
+      return { message: messages.duplicateEmail, status: "duplicate" };
+    }
+    if (signupKind === "resent") {
+      return { message: messages.confirmationResent, status: "resent" };
+    }
     if (data.user.identities?.length !== 0) {
       await recordSignupConsent(data.user.id);
     }
