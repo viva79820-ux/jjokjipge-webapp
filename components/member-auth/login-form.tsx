@@ -18,7 +18,7 @@ const textLink = `inline-flex min-h-11 cursor-pointer items-center text-label fo
 
 const submitClass = `inline-flex h-13 w-full cursor-pointer items-center justify-center rounded-full bg-brand px-4 text-base font-bold text-on-brand disabled:cursor-not-allowed disabled:opacity-50 ${focus}`;
 
-export function LoginForm() {
+export function LoginForm({ next }: { next: string }) {
   const [formRef, formResetRef] = useFormResetRef();
   const feedbackRef = useRef<HTMLParagraphElement>(null);
   const [localErrors, setLocalErrors] = useState<
@@ -76,6 +76,7 @@ export function LoginForm() {
         onSubmit={onSubmit}
         className="flex flex-col gap-3"
       >
+        <input type="hidden" name="next" value={next} />
         <div>
           <EmailField
             id="email"

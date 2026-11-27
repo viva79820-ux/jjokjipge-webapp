@@ -87,6 +87,14 @@ function memory(world) {
         query.filters.push(["eq", column, value]);
         return api;
       },
+      ilike(column, value) {
+        query.filters.push(["ilike", column, value]);
+        return api;
+      },
+      not(column, operator, value) {
+        query.filters.push(["not", column, operator, value]);
+        return api;
+      },
       order(column, options = {}) {
         query.orders.push([column, options.ascending !== false]);
         return api;
@@ -187,8 +195,19 @@ function memory(world) {
   };
 }
 
+function like(field, pattern) {
+  const needle = String(pattern).replaceAll("%", "").toLowerCase();
+  return String(field ?? "")
+    .toLowerCase()
+    .includes(needle);
+}
+
 function same(rowItem, filters) {
-  return filters.every(([, column, value]) => rowItem[column] === value);
+  return filters.every(([op, column, value, extra]) => {
+    if (op === "ilike") return like(rowItem[column], value);
+    if (op === "not") return !like(rowItem[column], extra);
+    return rowItem[column] === value;
+  });
 }
 
 function stamp(world) {
@@ -456,6 +475,99 @@ test("고객 조회는 공개 상품만 전달하고 공개 품절은 보여 준
     /불러오지 못했습니다/,
   );
   leaked.world.products.filter = original;
+});
+
+test("고객 분류는 상품명으로 나누고 배송 안내는 금액 없는 자리표시다", async () => {
+  const policy = load("lib/shop-policy-config.ts");
+  assert.equal(policy.shopPolicyNotice, "[배송·교환·환불 안내 준비 중]");
+  assert.equal(/\d/.test(policy.shopPolicyNotice), false);
+  assert.equal(rules.shopCategoryOf("천사부적 사랑·인연"), "charm");
+  assert.equal(rules.shopCategoryOf("천사부적 소원성취"), "charm");
+  assert.equal(rules.shopCategoryOf("천사부적 재물"), "charm");
+  assert.equal(rules.charmKindLabel("천사부적 사랑·인연"), "사랑·인연");
+  assert.equal(rules.charmKindLabel("천사부적 소원성취"), "소원성취");
+  assert.equal(rules.charmKindLabel("천사부적 재물"), "재물");
+  assert.equal(rules.shopCategoryOf("유니버셜 웨이트 타로카드"), "tarot");
+  assert.equal(rules.shopCategoryOf("사주오라클카드"), "oracle");
+  assert.equal(rules.shopCategoryOf("천사부적 타로"), "charm");
+  assert.equal(rules.shopCategoryOf("오라클 타로"), "oracle");
+  assert.equal(rules.shopCategoryOf("테스트 카드"), "");
+  assert.equal(rules.shopCategoryLabel("천사부적 재물"), "천사부적");
+  assert.equal(rules.shopCategoryLabel("테스트 카드"), "");
+  assert.equal(rules.productFilters({ category: "charm" }).category, "charm");
+  assert.equal(rules.productFilters({ category: "gift" }), null);
+  assert.equal(rules.productFilters({ category: "charm" }, true), null);
+  assert.equal(
+    rules.productListUrl(false, 1, "", "", "charm"),
+    "/shop?category=charm",
+  );
+  assert.equal(
+    rules.productListUrl(false, 2, "", "", "tarot"),
+    "/shop?page=2&category=tarot",
+  );
+  assert.equal(
+    rules.productListUrl(true, 1, "public"),
+    "/admin/shop-products?status=public",
+  );
+  const tarotId = "33333333-3333-4333-8333-333333333333";
+  const hiddenId = "44444444-4444-4444-8444-444444444444";
+  const mixedId = "55555555-5555-4555-8555-555555555555";
+  const api = harness({
+    products: [
+      row({
+        name: "천사부적 사랑·인연",
+        is_published: true,
+        price: 5000,
+        sort_order: 1,
+      }),
+      row({
+        id: otherId,
+        name: "사주오라클카드",
+        is_published: true,
+        sort_order: 2,
+      }),
+      row({
+        id: tarotId,
+        name: "유니버셜 웨이트 타로카드",
+        is_published: true,
+        sort_order: 3,
+      }),
+      row({
+        id: mixedId,
+        name: "천사부적 오라클",
+        is_published: true,
+        sort_order: 4,
+      }),
+      row({
+        id: hiddenId,
+        name: "천사부적 비밀",
+        description: "비밀설명토큰",
+        is_published: false,
+        sort_order: 0,
+      }),
+    ],
+  });
+  const charms = await api.publicProductList(1, "charm");
+  assert.deepEqual(
+    charms.data.map((item) => item.name),
+    ["천사부적 사랑·인연", "천사부적 오라클"],
+  );
+  assert.equal(JSON.stringify(charms).includes("비밀설명토큰"), false);
+  const oracle = await api.publicProductList(1, "oracle");
+  assert.deepEqual(
+    oracle.data.map((item) => item.name),
+    ["사주오라클카드"],
+  );
+  const tarot = await api.publicProductList(1, "tarot");
+  assert.deepEqual(
+    tarot.data.map((item) => item.name),
+    ["유니버셜 웨이트 타로카드"],
+  );
+  assert.equal((await api.publicProductList(1)).count, 4);
+  await assert.rejects(
+    () => api.publicProductList(1, "gift"),
+    /목록 조건이 올바르지 않습니다/,
+  );
 });
 
 test("관리자 권한과 조건부 저장과 연속 저장과 읽기 전용 재확인", async () => {

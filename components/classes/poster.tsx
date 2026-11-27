@@ -2,15 +2,18 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import { appContentSizes } from "@/lib/images";
 
 export function ClassPoster({
   src,
   alt,
   fit,
+  sizes = appContentSizes,
 }: {
   src: string | null;
   alt: string;
   fit: "cover" | "contain";
+  sizes?: string;
 }) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const missing = !src || failedSrc === src;
@@ -35,13 +38,14 @@ export function ClassPoster({
   }
   if (fit === "contain") {
     return (
-      // The file's own ratio is unknown until the browser reads it.
-      // A sized next/image box would crop or letterbox to a guessed ratio.
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
+      <Image
         src={src}
         alt={alt}
+        width={1200}
+        height={1600}
+        sizes={sizes}
         className="block h-auto w-full bg-surface object-contain"
+        style={{ width: "100%", height: "auto" }}
         onError={() => setFailedSrc(src)}
       />
     );
@@ -49,11 +53,10 @@ export function ClassPoster({
   return (
     <div className="relative h-[210px] overflow-hidden bg-brand-soft">
       <Image
-        unoptimized
         fill
         src={src}
         alt={alt}
-        sizes="(max-width: 1024px) 100vw, 560px"
+        sizes={sizes}
         className="object-cover object-top"
         onError={() => setFailedSrc(src)}
       />

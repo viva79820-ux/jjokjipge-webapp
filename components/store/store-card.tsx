@@ -4,6 +4,7 @@ import type { Store } from "@/lib/data/stores";
 import { storeTelHref } from "@/lib/stores/rules";
 import { Chip } from "@/components/ui/chip";
 import { StorePhoto } from "./photo";
+import { storeCardHalfSizes, storeCardSizes } from "@/lib/images";
 import { naverMapSearchUrl, storePhotoPlan } from "./present";
 
 const control =
@@ -124,7 +125,7 @@ function StoreExteriors({ plan }: { plan: ReturnType<typeof storePhotoPlan> }) {
       <StorePhoto
         src={null}
         alt=""
-        sizes="(max-width: 767px) 100vw, 480px"
+        sizes={storeCardSizes}
         className="w-full"
         cover
       />
@@ -136,7 +137,7 @@ function StoreExteriors({ plan }: { plan: ReturnType<typeof storePhotoPlan> }) {
       <StorePhoto
         src={photo.src}
         alt={photo.alt}
-        sizes="(max-width: 767px) 100vw, 480px"
+        sizes={storeCardSizes}
         className="w-full"
         cover
       />
@@ -149,7 +150,7 @@ function StoreExteriors({ plan }: { plan: ReturnType<typeof storePhotoPlan> }) {
           <StorePhoto
             src={photo.src}
             alt={photo.alt}
-            sizes="(max-width: 767px) 50vw, 240px"
+            sizes={storeCardHalfSizes}
             className="w-full"
             cover
           />

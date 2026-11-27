@@ -331,7 +331,7 @@ try {
   const width = async (value) => {
     await page.call("Emulation.setDeviceMetricsOverride", {
       width: value,
-      height: 900,
+      height: 4000,
       deviceScaleFactor: 1,
       mobile: false,
     });

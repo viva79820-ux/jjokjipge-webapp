@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import { siteConfig } from "@/lib/site-config";
 
 export function HomeFooter() {
@@ -20,6 +21,14 @@ export function HomeFooter() {
       <p className="wrap-anywhere">
         대구 동성로 사주·타로·작명 전문 · 1호점 · 2호점 · 3호점
       </p>
+      <nav aria-label="법적 고지">
+        <Link
+          href="/terms"
+          className="-mx-[1.5px] inline-flex min-h-11 min-w-11 cursor-pointer items-center justify-center font-bold text-foreground"
+        >
+          <span className="underline underline-offset-2">이용약관</span>
+        </Link>
+      </nav>
       <p className="wrap-anywhere">
         상호 {siteConfig.name} · 대표 [대표자명] · 사업자등록번호 [번호]
       </p>

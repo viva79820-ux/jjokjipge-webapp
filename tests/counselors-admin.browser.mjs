@@ -6,6 +6,7 @@ import { createHmac } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { browser, server, stop, until } from "./notices-browser-tools.mjs";
+import { rasterPng } from "./raster-png.mjs";
 
 const uid = "11111111-1111-4111-8111-111111111111";
 const storeId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -307,10 +308,9 @@ async function handle(req, res) {
         return;
       }
       if (dimensions) {
-        res.setHeader("Content-Type", "image/svg+xml");
-        res.end(
-          `<svg xmlns="http://www.w3.org/2000/svg" width="${dimensions.width}" height="${dimensions.height}"></svg>`,
-        );
+        res.setHeader("Content-Type", "image/png");
+        res.setHeader("Cache-Control", "no-store");
+        res.end(rasterPng(dimensions.width, dimensions.height));
         return;
       }
       res.setHeader("Content-Type", "image/png");
@@ -823,9 +823,20 @@ try {
   await until(
     () =>
       page.evaluate(
-        "getComputedStyle(document.querySelector('[data-counselor-photo]')).objectFit==='cover'&&document.querySelector('[data-counselor-photo]').naturalWidth===80",
+        "(()=>{const image=document.querySelector('[data-counselor-photo]');return !!image&&image.complete&&image.naturalWidth>0})()",
       ),
     "covered photo",
+  );
+  const coveredPhoto = await page.evaluate(
+    `(()=>{const image=document.querySelector('[data-counselor-photo]');return {src:image.currentSrc||image.src,w:image.naturalWidth,h:image.naturalHeight,fit:getComputedStyle(image).objectFit}})()`,
+  );
+  assert.equal(coveredPhoto.fit, "cover", JSON.stringify(coveredPhoto));
+  assert.equal(coveredPhoto.w, 69, JSON.stringify(coveredPhoto));
+  assert.equal(coveredPhoto.h, 139, JSON.stringify(coveredPhoto));
+  assert.equal(
+    coveredPhoto.src.includes("/_next/image"),
+    true,
+    JSON.stringify(coveredPhoto),
   );
   const chipText = await page.evaluate(
     "Array.from(document.querySelectorAll('span')).map((item)=>item.textContent.trim()).filter((item)=>['타로','사주','연애운'].includes(item)).join(',')",

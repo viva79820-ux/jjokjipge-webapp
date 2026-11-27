@@ -6,11 +6,14 @@
   }
 }
 
+@custom-variant keyboard (&:where(html[data-keyboard-focus] *));
+
 @theme inline {
   --font-sans: var(--font-pretendard);
   --container-app: 1024px;
   --container-pc: 560px;
   --spacing-phone-fab: 54px;
+  --spacing-site-header: 108px;
   --text-display: 26px;
   --text-display--line-height: 34px;
   --text-title: 20px;
@@ -45,6 +48,15 @@
   --color-pink: #c2255c;
   --radius-card: 16px;
   --radius-input: 8px;
+}
+
+html {
+  /* Site header token is 108px. Shorter sticky headers stay inside that inset. */
+  scroll-padding-top: var(--spacing-site-header);
+  /* Same inset as appMainClass in lib/app-frame.ts. */
+  scroll-padding-bottom: calc(
+    4.5rem + 1.25rem + 1.25rem + env(safe-area-inset-bottom)
+  );
 }
 
 html,

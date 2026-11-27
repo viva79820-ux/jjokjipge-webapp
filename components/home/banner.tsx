@@ -10,6 +10,7 @@ import { visibleCareers } from "@/lib/home/counselors";
 import { counselorHeading } from "@/lib/counselors/rules";
 import { CounselorName } from "@/components/counselor/name";
 import { CounselorPhoto } from "@/components/counselor/photo";
+import { homeBannerPhotoSizes } from "@/lib/images";
 import { RepresentativeBadge } from "@/components/counselor/representative-badge";
 
 const focus =
@@ -89,7 +90,7 @@ function HomeBannerSlides({ counselors }: { counselors: Counselor[] }) {
                     <CounselorPhoto
                       src={counselor.imageUrl}
                       alt={`${heading} 사진`}
-                      sizes="160px"
+                      sizes={homeBannerPhotoSizes}
                       imageClassName="object-cover object-top"
                       className="h-full w-full"
                     />

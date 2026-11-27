@@ -39,11 +39,11 @@ export function StorePhoto({
   return (
     <div className={frame} data-store-photo-frame>
       <Image
-        unoptimized
         fill
         src={src}
         alt={alt}
         sizes={sizes}
+        quality={85}
         className={cover ? "object-cover object-[center_35%]" : "object-cover"}
         data-store-photo
         onError={() => setFailedSrc(src)}

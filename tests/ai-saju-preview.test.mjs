@@ -68,6 +68,9 @@ test("입력은 화면에만 있고 예시 결과와 상담 연결은 고정 경
   assert.match(form, /동의 안내는 서비스 연결 후 제공돼요/);
   assert.match(form, /type="button"[\s\S]*disabled[\s\S]*준비 중/);
   assert.match(form, /href="\/ai-saju\/result"/);
+  assert.match(form, /요금은 서비스 오픈 때 안내해 드려요/);
+  assert.equal(form.includes("이용 요금"), false);
+  assert.equal(form.includes("[확인 필요]"), false);
   assert.equal(form.includes("<form"), false);
   assert.equal(form.includes("fetch("), false);
   assert.equal(form.includes("supabase"), false);

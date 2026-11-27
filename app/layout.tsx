@@ -1,3 +1,4 @@
+import { KeyboardFocus } from "@/components/keyboard-focus";
 import { publicAbsoluteOrigin } from "@/lib/site-origin";
 import { siteConfig } from "@/lib/site-config";
 import type { Metadata } from "next";
@@ -24,6 +25,7 @@ export default function RootLayout({
   return (
     <html lang="ko" className={pretendard.variable}>
       <body className="bg-background font-sans text-body text-foreground">
+        <KeyboardFocus />
         {children}
       </body>
     </html>

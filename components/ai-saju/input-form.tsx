@@ -181,8 +181,11 @@ export function AiSajuInputForm() {
           </label>
         </div>
         <div className="flex flex-col gap-1.5">
-          <div className="text-label font-bold">태어난 시간</div>
+          <label htmlFor="ai-saju-hour" className="text-label font-bold">
+            태어난 시간
+          </label>
           <select
+            id="ai-saju-hour"
             aria-label="태어난 시간"
             defaultValue="오전 9시 ~ 11시 (사시)"
             disabled={unknownTime}
@@ -224,7 +227,7 @@ export function AiSajuInputForm() {
           예시 결과 보기
         </Link>
         <p className="m-0 text-center text-fine text-muted">
-          이용 요금 [확인 필요]
+          요금은 서비스 오픈 때 안내해 드려요
         </p>
       </section>
 

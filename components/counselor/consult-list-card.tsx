@@ -3,6 +3,7 @@ import { Phone } from "lucide-react";
 import type { Counselor } from "@/lib/data/counselors";
 import { consultPriceLabel } from "@/lib/counselors/display";
 import { counselorHeading, displayChips } from "@/lib/counselors/rules";
+import { consultListPhotoSizes } from "@/lib/images";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { CounselorName } from "./name";
@@ -28,7 +29,7 @@ export function ConsultListCard({ counselor }: { counselor: Counselor }) {
           <CounselorPhoto
             src={counselor.imageUrl}
             alt={`${heading} 사진`}
-            sizes="84px"
+            sizes={consultListPhotoSizes}
             imageClassName="object-cover object-[center_18%]"
             className="size-21 rounded-xl"
           />
@@ -37,7 +38,7 @@ export function ConsultListCard({ counselor }: { counselor: Counselor }) {
           <div className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-1">
             <Link
               href={href}
-              className={`min-w-0 cursor-pointer text-subtitle font-bold ${focus}`}
+              className={`-my-2.5 inline-flex min-h-11 min-w-0 cursor-pointer items-center text-subtitle font-bold ${focus}`}
             >
               <CounselorName
                 name={counselor.name}

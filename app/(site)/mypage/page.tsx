@@ -2,14 +2,22 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { InquiryHistory } from "@/components/member-auth/inquiry-history";
 import { LogoutForm } from "@/components/member-auth/logout-form";
 import { ReloadRestoredPage } from "@/components/member-auth/navigation-reset";
+import { OrderHistory } from "@/components/member-auth/order-history";
+import { ProfileForm } from "@/components/member-auth/profile-form";
 import { ReservationHistory } from "@/components/member-auth/reservation-history";
+import { MyReviews } from "@/components/member-auth/my-reviews";
 import { linkClass, noteClass } from "@/components/member-auth/styles";
 import { Button } from "@/components/ui/button";
 import { getAdmin } from "@/lib/admin/auth";
 import { isTeacher } from "@/lib/lectures/data";
+import { getMemberInquiries } from "@/lib/member-auth/inquiries";
+import { getMemberOrders } from "@/lib/member-auth/orders";
 import { getMemberReservations } from "@/lib/member-auth/reservations";
+import { listMyReviews } from "@/lib/reviews/member-data";
+import { canWriteReview } from "@/lib/reviews/member-rules";
 import { getMember } from "@/lib/member-auth/session";
 import { siteConfig } from "@/lib/site-config";
 import type { Metadata } from "next";
@@ -41,12 +49,29 @@ async function MemberPage({
   await connection();
   const member = await getMember();
   if (!member) redirect("/login");
-  const [admin, reservations, teacher] = await Promise.all([
-    getAdmin(),
-    getMemberReservations(member.id),
-    isTeacher(member.id),
-  ]);
+  const [admin, orders, reservations, reviews, inquiries, teacher] =
+    await Promise.all([
+      getAdmin(),
+      getMemberOrders(member.id),
+      getMemberReservations(member.id),
+      listMyReviews().then(
+        (rows) => ({ rows, unavailable: false }),
+        () => ({ rows: [], unavailable: true }),
+      ),
+      getMemberInquiries(member.id),
+      isTeacher(member.id),
+    ]);
   const notice = (await searchParams).notice;
+  const reviewedReservationIds = new Set(
+    reviews.rows
+      .map((review) => review.reservation_id)
+      .filter((id): id is string => Boolean(id)),
+  );
+  const writableCount = reviews.unavailable
+    ? 0
+    : reservations.filter((reservation) =>
+        canWriteReview(reservation, reviewedReservationIds),
+      ).length;
   return (
     <section key={member.id} className="mx-auto w-full max-w-md min-w-0">
       <ReloadRestoredPage />
@@ -56,9 +81,20 @@ async function MemberPage({
           비밀번호를 변경했어요.
         </p>
       )}
+      {notice === "review-saved" && (
+        <p role="status" className="mt-3 text-label font-semibold text-brand">
+          후기를 저장했어요.
+        </p>
+      )}
+      {notice === "review-deleted" && (
+        <p role="status" className="mt-3 text-label font-semibold text-brand">
+          후기를 삭제했어요.
+        </p>
+      )}
       <p className={`mt-3 ${noteClass}`}>
         회원 계정으로 예약한 내역만 보여요. 로그인 전에 남긴 비회원 예약은 예약
-        조회에서 확인해 주세요.
+        조회에서 확인해 주세요. 회원 계정으로 주문한 내역만 보여요. 로그인 전에
+        남긴 비회원 주문은 비회원 주문 조회에서 확인해 주세요.
       </p>
       <dl className="mt-5 space-y-4 rounded-card border border-border bg-surface p-3 @3xl/app:p-4">
         <div>
@@ -74,7 +110,6 @@ async function MemberPage({
           </dd>
         </div>
       </dl>
-      <ReservationHistory reservations={reservations} />
       {teacher ? (
         <div className="mt-5">
           <Button href="/mypage/lectures" className="w-full">
@@ -82,22 +117,41 @@ async function MemberPage({
           </Button>
         </div>
       ) : null}
+      <ReservationHistory
+        reservations={reservations}
+        reviewedReservationIds={reviewedReservationIds}
+        reviewsReady={!reviews.unavailable}
+      />
+      <MyReviews
+        reviews={reviews.rows}
+        unavailable={reviews.unavailable}
+        writableCount={writableCount}
+      />
+      <OrderHistory orders={orders} />
+      <InquiryHistory inquiries={inquiries} />
+      <ProfileForm name={member.name ?? ""} phone={member.phone ?? ""} />
       {admin ? (
-        <div className={teacher ? "mt-3" : "mt-5"}>
+        <div className="mt-5">
           <Button href="/admin" variant="secondary" className="w-full">
             관리자 페이지
           </Button>
         </div>
       ) : null}
-      <div className={admin || teacher ? "mt-3" : "mt-5"}>
+      <div className={admin ? "mt-3" : "mt-5"}>
         <LogoutForm />
       </div>
       <div className="mt-4 flex flex-col">
         <Link href="/booking/lookup" className={linkClass}>
           비회원 예약 조회
         </Link>
+        <Link href="/shop/order/lookup" className={linkClass}>
+          비회원 주문 조회
+        </Link>
         <Link href="/support/lookup" className={linkClass}>
           문의 조회
+        </Link>
+        <Link href="/mypage/withdraw" className={linkClass}>
+          회원 탈퇴
         </Link>
       </div>
     </section>

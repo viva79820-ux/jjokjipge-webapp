@@ -142,12 +142,12 @@ export async function ContentListPage({
                   alt={row.thumbnail_alt}
                   channel={row.channel}
                 />
-                <span className="flex min-w-0 flex-1 flex-col items-start gap-1.5">
+                <span className="flex w-full min-w-0 max-w-full flex-1 flex-col items-start gap-1.5 min-[282px]:w-auto">
                   <ContentChannelBadge channel={row.channel} />
-                  <span className="text-body font-bold wrap-anywhere">
+                  <span className="max-w-full text-body font-bold wrap-anywhere">
                     {row.title}
                   </span>
-                  <span className="flex min-w-0 flex-wrap items-center gap-1 text-fine font-semibold text-muted">
+                  <span className="flex min-w-0 max-w-full flex-wrap items-center gap-1 text-fine font-semibold text-muted">
                     <span>{formatPostedOn(row.posted_on)}</span>
                     <span aria-hidden="true">·</span>
                     {row.href ? (
@@ -167,7 +167,7 @@ export async function ContentListPage({
               </>
             );
             const className =
-              "flex min-w-0 items-start gap-3 rounded-card border border-border bg-surface p-3 text-foreground @3xl/app:p-4";
+              "flex min-w-0 flex-col gap-3 rounded-card border border-border bg-surface p-3 text-foreground min-[282px]:flex-row min-[282px]:items-start @3xl/app:p-4";
             return row.href ? (
               <a
                 key={row.id}

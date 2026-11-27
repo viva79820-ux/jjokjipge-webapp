@@ -6,6 +6,7 @@ import { AdminAccessDenied } from "@/components/admin/access-denied";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StorePhoto } from "@/components/store/photo";
+import { adminStorePhotoSizes } from "@/lib/images";
 import { cleanupAction } from "@/lib/stores/cleanup";
 import { storeAdminDetail, storeAdminList } from "@/lib/stores/data";
 import { prepareStoreDelete } from "@/lib/stores/delete-actions";
@@ -118,7 +119,7 @@ export async function StoreAdminListPage({
             <StorePhoto
               src={publicImageUrl(store.image_path)}
               alt={`${store.name} 사진`}
-              sizes="144px"
+              sizes={adminStorePhotoSizes}
               className="w-full sm:w-36 sm:shrink-0"
             />
             <div className="min-w-0 flex-1 space-y-1">

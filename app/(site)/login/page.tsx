@@ -9,6 +9,7 @@ import {
   AuthScreenMain,
 } from "@/components/member-auth/auth-screen";
 import { LoginForm } from "@/components/member-auth/login-form";
+import { safeNext } from "@/lib/member-auth/redirect";
 import { getMember } from "@/lib/member-auth/session";
 import { siteConfig } from "@/lib/site-config";
 import type { Metadata } from "next";
@@ -23,7 +24,14 @@ const focus =
 
 const guestLink = `inline-flex h-11 w-full min-w-0 cursor-pointer items-center justify-center gap-1.5 rounded-full px-2.5 text-label font-bold whitespace-nowrap ${focus}`;
 
-export default function Page() {
+export default function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    next?: string | string[];
+    notice?: string | string[];
+  }>;
+}) {
   return (
     <>
       <AuthScreenHeader title="로그인" backHref="/" />
@@ -34,17 +42,38 @@ export default function Page() {
           </p>
         }
       >
-        <LoginContent />
+        <LoginContent searchParams={searchParams} />
       </Suspense>
     </>
   );
 }
 
-async function LoginContent() {
+async function LoginContent({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    next?: string | string[];
+    notice?: string | string[];
+  }>;
+}) {
   await connection();
-  if (await getMember()) redirect("/mypage");
+  const params = await searchParams;
+  const next = safeNext(
+    Array.isArray(params.next) ? null : params.next,
+    "/mypage",
+  );
+  const notice = params.notice;
+  if (await getMember()) redirect(next);
   return (
     <AuthScreenMain className="gap-4 pt-4">
+      {notice === "withdrawn" && (
+        <p
+          role="status"
+          className="text-label font-semibold wrap-anywhere text-brand"
+        >
+          탈퇴가 완료되었어요. 이 계정으로는 다시 로그인할 수 없어요.
+        </p>
+      )}
       <div className="flex flex-col items-center gap-1.5 text-center">
         <Image
           src="/images/brand/logo-angel-mark.png"
@@ -61,7 +90,7 @@ async function LoginContent() {
           한곳에서 볼 수 있어요.
         </p>
       </div>
-      <LoginForm />
+      <LoginForm next={next} />
       <section className="flex flex-col gap-2 rounded-card bg-brand-soft p-3">
         <h2 className="m-0 text-body font-extrabold text-brand-deep">
           회원이 아니어도 괜찮아요

@@ -8,14 +8,14 @@ export function screenFieldClass(invalid: boolean) {
   return [
     "h-13 w-full min-w-0 rounded-input border bg-surface text-base text-foreground",
     "outline-none placeholder:text-muted",
-    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
+    "focus-visible:outline-2 keyboard:focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-brand",
     "disabled:cursor-not-allowed disabled:opacity-50",
     invalid ? "border-error" : "border-border",
   ].join(" ");
 }
 
 export const inputClass =
-  "mt-1 min-h-11 w-full min-w-0 rounded-input border bg-surface px-3 text-body text-foreground outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-50";
+  "mt-1 min-h-11 w-full min-w-0 rounded-input border bg-surface px-3 text-body text-foreground outline-none focus-visible:outline-2 keyboard:focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-50";
 
 export function fieldClass(invalid: boolean) {
   return `${inputClass} ${invalid ? "border-error" : "border-border"}`;

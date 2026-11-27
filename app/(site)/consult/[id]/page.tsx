@@ -15,6 +15,7 @@ import {
   CounselorDetailPending,
 } from "@/components/counselor/detail-header";
 import { Chip } from "@/components/ui/chip";
+import { counselorDetailPhotoSizes } from "@/lib/images";
 
 type Props = { params: Promise<{ id: string }> };
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -53,7 +54,7 @@ async function CounselorContent({ params }: Props) {
       <CounselorPhoto
         src={counselor.imageUrl}
         alt={`${heading} 사진`}
-        sizes="100vw"
+        sizes={counselorDetailPhotoSizes}
         imageClassName="object-cover object-[center_12%]"
         className="mx-auto aspect-[20/19] w-full @3xl/app:w-[min(100%,calc((100dvh-128px)*20/19))]"
       />

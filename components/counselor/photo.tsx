@@ -26,11 +26,11 @@ export function CounselorPhoto({
       data-counselor-photo-frame
     >
       <Image
-        unoptimized
         fill
         src={src}
         alt={alt}
         sizes={sizes}
+        quality={85}
         className={imageClassName}
         data-counselor-photo
         onError={() => setFailedSrc(src)}
