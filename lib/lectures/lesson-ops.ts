@@ -92,6 +92,7 @@ export type LessonActionResult =
       lectureId?: string;
       upload?: LectureUploadAuthorization;
       status?: LessonVideoStatus;
+      encodeProgress?: number | null;
       durationSeconds?: number | null;
       storageBytes?: number | null;
     }
@@ -366,6 +367,7 @@ export async function refreshLessonWith(
       lessonId: lesson.id,
       lectureId: lesson.lectureId,
       status: report.status,
+      encodeProgress: report.encodeProgress,
       durationSeconds: report.durationSeconds,
       storageBytes: report.storageBytes,
     };

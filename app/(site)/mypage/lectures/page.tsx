@@ -4,8 +4,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { summarizeLessons } from "@/components/lectures/lesson-view";
 import { LectureThumbnail } from "@/components/lectures/thumbnail";
 import { isTeacher, listMyLectures } from "@/lib/lectures/data";
+import { listLessonRecords } from "./lesson-records";
 import { fieldLabel, publicThumbnailUrl } from "@/lib/lectures/rules";
 import { getMember } from "@/lib/member-auth/session";
 import { siteConfig } from "@/lib/site-config";
@@ -46,18 +48,27 @@ async function LectureList() {
     );
   }
   const loaded = await listMyLectures(member.id);
+  const lessonLoad = await listLessonRecords(member.id);
+  const grouped = new Map<string, string[]>();
+  for (const row of lessonLoad.rows ?? []) {
+    const statuses = grouped.get(row.lectureId) ?? [];
+    statuses.push(row.status);
+    grouped.set(row.lectureId, statuses);
+  }
   return (
     <section className="mx-auto w-full min-w-0 max-w-md">
       <h1 className="text-display font-extrabold">강의 관리</h1>
-      <p className="mt-3 text-caption text-muted">
-        내가 만든 강의만 보여요. 차시는 아직 없고, 조회수는 아직 올라가지
-        않아요.
-      </p>
+      <p className="mt-3 text-caption text-muted">내가 만든 강의만 보여요.</p>
       <div className="mt-5">
         <Button href="/mypage/lectures/new" className="w-full">
           강의 만들기
         </Button>
       </div>
+      {lessonLoad.error ? (
+        <p role="alert" className="mt-5 text-body text-error">
+          차시 수를 불러오지 못했어요.
+        </p>
+      ) : null}
       {loaded.error ? (
         <p role="alert" className="mt-5 text-body text-error">
           강의 목록을 불러오지 못했어요.
@@ -83,10 +94,14 @@ async function LectureList() {
                   </span>
                   <span className="mt-2 flex flex-wrap items-center gap-2">
                     <Badge>{row.is_published ? "공개" : "비공개"}</Badge>
-                    <span className="text-caption text-muted">차시 0</span>
                     <span className="text-caption text-muted">
                       조회 {row.view_count}
                     </span>
+                    {lessonLoad.error ? null : (
+                      <LessonCounts
+                        counts={summarizeLessons(grouped.get(row.id) ?? [])}
+                      />
+                    )}
                   </span>
                 </span>
               </Link>
@@ -97,5 +112,29 @@ async function LectureList() {
         <p className="mt-5 text-body text-muted">아직 만든 강의가 없어요.</p>
       )}
     </section>
+  );
+}
+
+function LessonCounts({
+  counts,
+}: {
+  counts: {
+    total: number;
+    uploading: number;
+    processing: number;
+    failed: number;
+  };
+}) {
+  return (
+    <>
+      <span className="text-caption text-muted">차시 {counts.total}</span>
+      <span className="text-caption text-muted">
+        업로드 중 {counts.uploading}
+      </span>
+      <span className="text-caption text-muted">
+        변환 중 {counts.processing}
+      </span>
+      <span className="text-caption text-muted">실패 {counts.failed}</span>
+    </>
   );
 }

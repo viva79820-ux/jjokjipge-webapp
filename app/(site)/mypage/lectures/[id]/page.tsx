@@ -2,7 +2,10 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import { redirect } from "next/navigation";
 import { LectureEditor } from "@/components/lectures/editor";
+import { LessonManager } from "@/components/lectures/lesson-manager";
+import { lessonsForLecture } from "@/components/lectures/lesson-view";
 import { Button } from "@/components/ui/button";
+import { listLessonRecords } from "../lesson-records";
 import {
   hasLectureConsent,
   isTeacher,
@@ -63,7 +66,38 @@ async function EditLecture({ params }: { params: Promise<{ id: string }> }) {
         needsConsent={!consented}
         thumbnailUrl={publicThumbnailUrl(loaded.row.thumbnail_path, member.id)}
       />
+      <LessonSection
+        lectureId={loaded.row.id}
+        userId={member.id}
+        canUpload={consented}
+      />
     </section>
+  );
+}
+
+async function LessonSection({
+  lectureId,
+  userId,
+  canUpload,
+}: {
+  lectureId: string;
+  userId: string;
+  canUpload: boolean;
+}) {
+  const lessonLoad = await listLessonRecords(userId);
+  if (lessonLoad.error || !lessonLoad.rows) {
+    return (
+      <p role="alert" className="mt-7 text-body text-error">
+        차시 목록을 불러오지 못했어요.
+      </p>
+    );
+  }
+  return (
+    <LessonManager
+      lectureId={lectureId}
+      canUpload={canUpload}
+      lessons={lessonsForLecture(lessonLoad.rows, lectureId)}
+    />
   );
 }
 
