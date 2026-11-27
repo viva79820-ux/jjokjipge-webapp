@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import { handleDepositExpiryRequest } from "@/lib/reservations/expire-reservations";
 
-export const dynamic = "force-dynamic";
-
 function quiet(status: number) {
   return new NextResponse(null, {
     status,
