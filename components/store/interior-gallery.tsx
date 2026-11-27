@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { DragRow } from "@/components/ui/drag-row";
+import { storeInteriorSizes } from "@/lib/images";
 import { interiorPhotos } from "./present";
 
 export function InteriorGallery() {
@@ -15,7 +16,8 @@ export function InteriorGallery() {
               src={photo.src}
               alt={photo.alt}
               fill
-              sizes="240px"
+              sizes={storeInteriorSizes}
+              quality={85}
               draggable={false}
               className="object-cover"
             />

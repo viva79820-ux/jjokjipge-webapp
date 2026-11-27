@@ -6,6 +6,7 @@ import { AdminAccessDenied } from "@/components/admin/access-denied";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CounselorPhoto } from "@/components/counselor/photo";
+import { adminCounselorPhotoSizes } from "@/lib/images";
 import { cleanupAction } from "@/lib/counselors/cleanup";
 import {
   adminStores,
@@ -107,7 +108,7 @@ export async function CounselorAdminListPage({
               <CounselorPhoto
                 src={publicImageUrl(counselor.image_path)}
                 alt={`${counselor.name} 사진`}
-                sizes="48px"
+                sizes={adminCounselorPhotoSizes}
                 className="h-16 w-12 shrink-0 rounded-card"
               />
               <div className="min-w-0 flex-1 space-y-1">

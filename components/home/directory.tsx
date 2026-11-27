@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { CounselorName } from "@/components/counselor/name";
 import { CounselorPhoto } from "@/components/counselor/photo";
+import { homeListPhotoSizes } from "@/lib/images";
 
 const focus =
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
@@ -91,7 +92,7 @@ function DirectoryCard({ counselor }: { counselor: Counselor }) {
         <CounselorPhoto
           src={counselor.imageUrl}
           alt={`${heading} 사진`}
-          sizes="72px"
+          sizes={homeListPhotoSizes}
           imageClassName="object-cover object-top"
           className="size-[72px] rounded-xl"
         />

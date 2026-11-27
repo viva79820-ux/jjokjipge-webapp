@@ -11,6 +11,7 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   images: {
+    qualities: [75, 85],
     remotePatterns: storageImages.remotePatterns,
     dangerouslyAllowLocalIP: storageImages.dangerouslyAllowLocalIP,
   },

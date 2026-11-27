@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
+import { homeStoreBandSizes } from "@/lib/images";
 
 const focus =
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
@@ -17,7 +18,8 @@ export function HomeStoreBand() {
         alt="쪽집게천사 동성로 1호점 외관"
         width={760}
         height={760}
-        sizes="76px"
+        sizes={homeStoreBandSizes}
+        quality={85}
         className="size-[76px] shrink-0 rounded-input object-cover"
       />
       <span className="flex min-w-0 flex-1 flex-col gap-1">
