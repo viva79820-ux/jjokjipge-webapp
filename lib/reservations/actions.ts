@@ -2,7 +2,15 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { bookingConfig } from "@/lib/booking-config";
 import { calculateSlots, koreanDate } from "@/lib/booking-time";
+import {
+  isHoneypotTripped,
+  isSubmitTooFast,
+  pendingLimitMessage,
+  pendingWindowStart,
+  samePendingContact,
+} from "./abuse-guard";
 import { getAvailableSlots, getBookingProduct } from "./availability";
 import { validateReservation } from "./validation";
 import type { BookingState } from "./types";
@@ -17,6 +25,9 @@ export async function createReservation(
 ): Promise<BookingState> {
   if (!(formData instanceof FormData))
     return { message: "입력한 내용을 확인해 주세요." };
+  const now = Date.now();
+  if (isHoneypotTripped(formData) || isSubmitTooFast(formData, now))
+    return { message: failureMessage };
   const { errors, values } = validateReservation(formData);
   if (Object.keys(errors).length)
     return { errors, message: "입력한 내용을 확인해 주세요." };
@@ -52,10 +63,22 @@ export async function createReservation(
     const { data: claims, error: authError } = await auth.auth.getClaims();
     if (authError && authError.name !== "AuthSessionMissingError")
       throw authError;
+    const db = createAdminClient();
+    const pending = await db
+      .from("reservations")
+      .select("customer_phone,customer_email")
+      .eq("status", "pending_payment")
+      .gte("created_at", pendingWindowStart(now));
+    if (pending.error) throw pending.error;
+    const pendingCount = (pending.data ?? []).filter((row) =>
+      samePendingContact(row, values.phone, values.email),
+    ).length;
+    if (pendingCount >= bookingConfig.maxPendingPerContact)
+      return { message: pendingLimitMessage() };
     const endsAt = new Date(
       Date.parse(start) + context.product.minutes * 60000,
     ).toISOString();
-    const { data, error } = await createAdminClient()
+    const { data, error } = await db
       .from("reservations")
       .insert({
         user_id: claims?.claims?.sub || null,
