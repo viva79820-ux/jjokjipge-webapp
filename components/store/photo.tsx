@@ -43,7 +43,7 @@ export function StorePhoto({
         src={src}
         alt={alt}
         sizes={sizes}
-        quality={85}
+        quality={90}
         className={cover ? "object-cover object-[center_35%]" : "object-cover"}
         data-store-photo
         onError={() => setFailedSrc(src)}
