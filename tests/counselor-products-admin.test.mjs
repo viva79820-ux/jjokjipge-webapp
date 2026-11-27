@@ -315,10 +315,14 @@ function reservationModules(state, session = null) {
     "@/lib/booking-config": bookingConfig,
   });
   const admin = { createAdminClient: () => memory(state) };
+  const depositExpiry = load("lib/reservations/deposit-expiry.ts", {
+    "@/lib/booking-config": bookingConfig,
+  });
   const availability = load("lib/reservations/availability.ts", {
     "server-only": {},
     "@/lib/supabase/admin": admin,
     "@/lib/booking-time": bookingTime,
+    "./deposit-expiry": depositExpiry,
   });
   const validation = load("lib/reservations/validation.ts", {
     "./types": {},
@@ -328,6 +332,16 @@ function reservationModules(state, session = null) {
   const abuseGuard = load("lib/reservations/abuse-guard.ts", {
     "@/lib/booking-config": bookingConfig,
     "@/lib/site-config": load("lib/site-config.ts"),
+    "./deposit-expiry": depositExpiry,
+  });
+  const cronAuth = load("lib/reservations/cron-auth.ts", {
+    "node:crypto": createRequire(import.meta.url)("node:crypto"),
+  });
+  const expireReservations = load("lib/reservations/expire-reservations.ts", {
+    "server-only": {},
+    "@/lib/supabase/admin": admin,
+    "./cron-auth": cronAuth,
+    "./deposit-expiry": depositExpiry,
   });
   const actions = load("lib/reservations/actions.ts", {
     "@/lib/supabase/admin": admin,
@@ -348,6 +362,7 @@ function reservationModules(state, session = null) {
     "@/lib/booking-time": bookingTime,
     "./abuse-guard": abuseGuard,
     "./availability": availability,
+    "./expire-reservations": expireReservations,
     "./validation": validation,
     "./types": {},
     "./rules": reservationRules,
