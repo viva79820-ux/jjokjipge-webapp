@@ -1,6 +1,12 @@
 "use client";
 
-import { useActionState, useState, type FormEvent } from "react";
+import {
+  useActionState,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { Button } from "@/components/ui/button";
 import { login } from "@/lib/admin/actions";
 import {
@@ -11,6 +17,7 @@ import {
 } from "@/lib/admin/rules";
 
 export function LoginForm({ next }: { next: string }) {
+  const formRef = useRef<HTMLFormElement>(null);
   const [values, setValues] = useState<LoginValues>({
     email: "",
     password: "",
@@ -20,10 +27,33 @@ export function LoginForm({ next }: { next: string }) {
     async (previous, formData) => {
       const result = await login(previous, formData);
       setErrors(result.errors ?? {});
+      setValues((current) => ({
+        email: typeof result.email === "string" ? result.email : current.email,
+        password: "",
+      }));
       return result;
     },
     {},
   );
+
+  useLayoutEffect(() => {
+    const form = formRef.current;
+    if (!form) return;
+    const failed =
+      Boolean(state.message) || Object.values(state.errors ?? {}).some(Boolean);
+    if (!failed) return;
+    const email = form.querySelector<HTMLInputElement>('[name="email"]');
+    const password = form.querySelector<HTMLInputElement>('[name="password"]');
+    if (email && state.email !== undefined) email.value = state.email;
+    if (password) password.value = "";
+    const errorName = Object.entries(state.errors ?? {}).find(
+      ([, message]) => message,
+    )?.[0];
+    const target = errorName
+      ? form.querySelector<HTMLElement>(`[name="${errorName}"]`)
+      : password;
+    target?.focus();
+  }, [state]);
 
   function changeField(field: LoginField, value: string) {
     const updated = { ...values, [field]: value };
@@ -48,6 +78,7 @@ export function LoginForm({ next }: { next: string }) {
 
   return (
     <form
+      ref={formRef}
       action={action}
       noValidate
       onSubmit={validateBeforeSubmit}

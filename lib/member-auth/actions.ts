@@ -26,6 +26,9 @@ export type FieldState = {
   errors?: Record<string, string | undefined>;
   message?: string;
   status?: "accepted" | "duplicate" | "resent";
+  // 실패 뒤 폼이 초기화돼도 다시 채울 값. 비밀번호는 넣지 않는다.
+  email?: string;
+  name?: string;
 };
 
 function signupData(name: string): { name: string } {
@@ -40,6 +43,17 @@ function hasFieldErrors(errors: Record<string, string | undefined>) {
   return Object.values(errors).some(Boolean);
 }
 
+function keptEmail(value: string): { email?: string } {
+  if (value.length === 0 || value.length > 254) return {};
+  if (/[\u0000-\u001f\u007f]/.test(value)) return {};
+  return { email: value };
+}
+
+function keptName(value: string): { name?: string } {
+  if (value.length > 30 || /[\u0000-\u001f\u007f]/.test(value)) return {};
+  return { name: value };
+}
+
 export async function signUp(
   _previous: FieldState,
   formData: FormData,
@@ -48,10 +62,16 @@ export async function signUp(
     return { message: messages.invalidInput };
   const parsed = readSignup(formData);
   if ("message" in parsed) return { message: parsed.message };
+  const kept = {
+    ...keptName(parsed.values.name),
+    ...keptEmail(parsed.values.email),
+  };
+  const fail = (state: FieldState): FieldState => ({ ...state, ...kept });
   const errors = validateSignup(parsed.values);
-  if (hasFieldErrors(errors)) return { errors, message: messages.invalidInput };
+  if (hasFieldErrors(errors))
+    return fail({ errors, message: messages.invalidInput });
   const redirectTo = await origin();
-  if (!redirectTo) return { message: messages.origin };
+  if (!redirectTo) return fail({ message: messages.origin });
   try {
     const supabase = await createClient();
     const email = normalizeEmail(parsed.values.email);
@@ -66,20 +86,27 @@ export async function signUp(
     if (error) {
       const failure = authFailure(error);
       if (failure === "exists") redirect("/auth/verify");
-      if (failure === "rate") return { message: messages.rate };
+      if (failure === "rate") return fail({ message: messages.rate });
       if (failure === "emailNotAuthorized")
-        return { message: messages.emailNotAuthorized };
-      if (failure === "weak") return { errors: { password: messages.weak } };
+        return fail({ message: messages.emailNotAuthorized });
+      if (failure === "weak")
+        return fail({ errors: { password: messages.weak } });
       logAuthFailure("member signup failed", error);
-      return { message: messages.unavailable };
+      return fail({ message: messages.unavailable });
     }
-    if (!data.user) return { message: messages.unavailable };
+    if (!data.user) return fail({ message: messages.unavailable });
     const signupKind = classifySignupUser(data.user);
     if (signupKind === "duplicate") {
-      return { message: messages.duplicateEmail, status: "duplicate" };
+      return fail({
+        message: messages.duplicateEmail,
+        status: "duplicate",
+      });
     }
     if (signupKind === "resent") {
-      return { message: messages.confirmationResent, status: "resent" };
+      return fail({
+        message: messages.confirmationResent,
+        status: "resent",
+      });
     }
     if (data.user.identities?.length !== 0) {
       await recordSignupConsent(data.user.id);
@@ -87,7 +114,7 @@ export async function signUp(
   } catch (error) {
     unstable_rethrow(error);
     logAuthFailure("member signup failed", error);
-    return { message: messages.unavailable };
+    return fail({ message: messages.unavailable });
   }
   redirect("/auth/verify");
 }
@@ -100,8 +127,11 @@ export async function login(
     return { message: messages.invalidInput };
   const parsed = readLogin(formData);
   if ("message" in parsed) return { message: parsed.message };
+  const kept = keptEmail(parsed.values.email);
+  const fail = (state: FieldState): FieldState => ({ ...state, ...kept });
   const errors = validateLogin(parsed.values);
-  if (hasFieldErrors(errors)) return { errors, message: messages.invalidInput };
+  if (hasFieldErrors(errors))
+    return fail({ errors, message: messages.invalidInput });
   const next = safeNext(readTextNext(formData), "/mypage");
   try {
     const supabase = await createClient();
@@ -111,27 +141,29 @@ export async function login(
     });
     if (error) {
       const failure = authFailure(error);
-      if (failure === "unconfirmed") return { message: messages.unconfirmed };
-      if (failure === "rate") return { message: messages.loginRate };
-      if (failure === "credentials") return { message: messages.credentials };
+      if (failure === "unconfirmed")
+        return fail({ message: messages.unconfirmed });
+      if (failure === "rate") return fail({ message: messages.loginRate });
+      if (failure === "credentials")
+        return fail({ message: messages.credentials });
       logAuthFailure("member login failed", error);
-      return { message: messages.unavailable };
+      return fail({ message: messages.unavailable });
     }
-    if (!data.session || !data.user) return { message: messages.session };
+    if (!data.session || !data.user) return fail({ message: messages.session });
     const confirmed = await getConfirmedUser();
     if (confirmed.status !== "ok") {
       await supabase.auth.signOut({ scope: "local" });
-      return {
+      return fail({
         message:
           confirmed.status === "unconfirmed"
             ? messages.unconfirmed
             : messages.session,
-      };
+      });
     }
   } catch (error) {
     unstable_rethrow(error);
     logAuthFailure("member login failed", error);
-    return { message: messages.unavailable };
+    return fail({ message: messages.unavailable });
   }
   revalidatePath("/", "layout");
   redirect(next);

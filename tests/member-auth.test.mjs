@@ -430,6 +430,11 @@ test("signup does not claim mail was sent for duplicates, limits, or failures", 
       "이미 가입된 이메일이에요. 로그인하거나 비밀번호 찾기를 이용해 주세요.",
     );
     assert.equal(result.state.status, "duplicate");
+    assert.equal(result.state.name, "테스트회원");
+    assert.equal(result.state.email, "member@example.invalid");
+    assert.equal(Object.hasOwn(result.state, "password"), false);
+    assert.equal(Object.hasOwn(result.state, "passwordConfirm"), false);
+    assert.equal(JSON.stringify(result.state).includes(password), false);
     assert.equal(
       duplicate.calls.some((call) => call[0] === "recordSignupConsent"),
       false,
@@ -861,6 +866,9 @@ test("login checks the confirmed user and keeps members out of admin", async () 
       ),
     );
     assert.equal(result.state.message, "이메일 또는 비밀번호가 맞지 않아요.");
+    assert.equal(result.state.email, "member@example.invalid");
+    assert.equal(Object.hasOwn(result.state, "password"), false);
+    assert.equal(JSON.stringify(result.state).includes("phish"), false);
     assert.equal(result.redirect, undefined);
     assert.equal(
       failed.calls.some((call) => call[0] === "getSession"),
@@ -877,6 +885,8 @@ test("login checks the confirmed user and keeps members out of admin", async () 
   try {
     const result = await settle(unconfirmed.login({}, loginForm()));
     assert.match(result.state.message, /이메일 인증을 마친 뒤/);
+    assert.equal(result.state.email, "member@example.invalid");
+    assert.equal(JSON.stringify(result.state).includes(password), false);
   } finally {
     unconfirmed.restore();
   }
@@ -904,6 +914,34 @@ test("login checks the confirmed user and keeps members out of admin", async () 
     );
   } finally {
     signedIn.restore();
+  }
+});
+
+test("failed login keeps the typed email and omits the password", async () => {
+  const failed = harness({ signInError: authError("invalid_credentials") });
+  try {
+    const typed = "Member@Example.Invalid";
+    const result = await settle(
+      failed.login(
+        {},
+        form([
+          ["email", typed],
+          ["password", password],
+          ["next", "/mypage/reviews/new"],
+        ]),
+      ),
+    );
+    assert.equal(result.state.email, typed);
+    assert.equal(result.state.message, "이메일 또는 비밀번호가 맞지 않아요.");
+    assert.equal(result.redirect, undefined);
+    assert.equal(Object.hasOwn(result.state, "password"), false);
+    assert.equal(Object.hasOwn(result.state, "next"), false);
+    assert.equal(JSON.stringify(result.state).includes(password), false);
+    const signIn = failed.calls.find((call) => call[0] === "signIn");
+    assert.equal(signIn[1].email, "member@example.invalid");
+    assert.equal(signIn[1].password, password);
+  } finally {
+    failed.restore();
   }
 });
 
