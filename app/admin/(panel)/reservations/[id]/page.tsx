@@ -13,6 +13,7 @@ import {
   statusLabels,
   type Search,
 } from "@/lib/admin/reservation-rules";
+import { cancellationStatusLabel } from "@/lib/reservations/deposit-expiry";
 
 export const instant = false;
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<Search> };
@@ -67,7 +68,14 @@ async function Detail({ params, searchParams }: Props) {
         ["확정 시각", formatTime(row.confirmed_at)],
         ["완료 시각", formatTime(row.completed_at)],
         ["취소 시각", formatTime(row.cancelled_at)],
-        ["취소 사유", row.cancel_reason ?? "기록 없음"],
+        [
+          "취소 사유",
+          cancellationStatusLabel(
+            row.status,
+            row.cancel_reason,
+            row.cancel_reason ?? "기록 없음",
+          ),
+        ],
       ],
     },
   ];
@@ -79,7 +87,13 @@ async function Detail({ params, searchParams }: Props) {
       <h1 className="text-xl font-bold">예약 상세</h1>
       <div className="flex flex-wrap items-center gap-3">
         <p className="break-all text-lg font-bold">{row.reservation_no}</p>
-        <Badge>{statusLabels[row.status]}</Badge>
+        <Badge>
+          {cancellationStatusLabel(
+            row.status,
+            row.cancel_reason,
+            statusLabels[row.status],
+          )}
+        </Badge>
       </div>
       <p className="text-sm text-muted">
         모든 날짜와 시각은 한국 시간(Asia/Seoul) 기준입니다.

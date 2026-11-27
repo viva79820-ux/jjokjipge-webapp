@@ -1,6 +1,8 @@
 import { bookingConfig } from "@/lib/booking-config";
 import { siteConfig } from "@/lib/site-config";
 
+export { pendingWindowStart } from "./deposit-expiry";
+
 export const honeypotField = "companyWebsite";
 export const openedAtField = "openedAt";
 
@@ -24,12 +26,6 @@ export function samePendingContact(
   const phoneMatches = rowPhone !== "" && rowPhone === phoneKey(phone);
   const emailMatches = rowEmail !== "" && rowEmail === emailKey(email);
   return phoneMatches || emailMatches;
-}
-
-export function pendingWindowStart(now: number) {
-  return new Date(
-    now - bookingConfig.depositHours * 60 * 60 * 1000,
-  ).toISOString();
 }
 
 export function pendingLimitMessage() {

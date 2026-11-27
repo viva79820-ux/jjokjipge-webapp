@@ -57,7 +57,34 @@ function loadTree(specifier, adapters = {}) {
 const guard = loadTree("../lib/reservations/abuse-guard.ts");
 const { bookingConfig } = loadTree("../lib/booking-config.ts");
 const { bookingDates, calculateSlots } = loadTree("../lib/booking-time.ts");
-const state = { rows: [], inserts: [], cutoff: "" };
+const expiry = loadTree("../lib/reservations/deposit-expiry.ts");
+const duplicateMessage =
+  "방금 다른 예약이 들어온 시간이에요. 다른 시간을 골라 주세요.";
+const state = { rows: [], inserts: [], cutoff: "", updates: [] };
+
+function overlapsHold(row, insert) {
+  return (
+    (row.status === "pending_payment" || row.status === "confirmed") &&
+    row.counselor_id === insert.counselor_id &&
+    typeof row.starts_at === "string" &&
+    typeof row.ends_at === "string" &&
+    row.starts_at < insert.ends_at &&
+    row.ends_at > insert.starts_at
+  );
+}
+
+function matchesFilters(row, filters) {
+  return filters.every((filter) => {
+    const value = row[filter.column];
+    if (filter.op === "eq") return value === filter.value;
+    if (typeof value !== "string" || typeof filter.value !== "string")
+      return false;
+    if (filter.op === "lt") return value < filter.value;
+    if (filter.op === "gt") return value > filter.value;
+    if (filter.op === "gte") return value >= filter.value;
+    return false;
+  });
+}
 
 function answer(query) {
   if (query.table === "counselors")
@@ -72,7 +99,23 @@ function answer(query) {
       },
       error: null,
     };
+  if (query.table === "reservations" && query.update) {
+    const matched = state.rows.filter((row) =>
+      matchesFilters(row, query.filters),
+    );
+    for (const row of matched) Object.assign(row, query.update);
+    state.updates.push({
+      patch: structuredClone(query.update),
+      count: matched.length,
+    });
+    return {
+      data: matched.map((row) => ({ id: row.id ?? null })),
+      error: null,
+    };
+  }
   if (query.table === "reservations" && query.insert) {
+    if (state.rows.some((row) => overlapsHold(row, query.insert)))
+      return { data: null, error: { code: "23P01", message: "conflict" } };
     state.inserts.push(structuredClone(query.insert));
     return {
       data: {
@@ -109,7 +152,13 @@ function answer(query) {
 function createAdminClient() {
   return {
     from(table) {
-      const query = { table, columns: "", filters: [], insert: null };
+      const query = {
+        table,
+        columns: "",
+        filters: [],
+        insert: null,
+        update: null,
+      };
       const api = {
         select(columns = "") {
           query.columns = columns;
@@ -119,6 +168,10 @@ function createAdminClient() {
           query.insert = payload;
           return api;
         },
+        update(payload) {
+          query.update = payload;
+          return api;
+        },
         eq(column, value) {
           query.filters.push({ op: "eq", column, value });
           return api;
@@ -126,10 +179,12 @@ function createAdminClient() {
         in() {
           return api;
         },
-        lt() {
+        lt(column, value) {
+          query.filters.push({ op: "lt", column, value });
           return api;
         },
-        gt() {
+        gt(column, value) {
+          query.filters.push({ op: "gt", column, value });
           return api;
         },
         gte(column, value) {
@@ -211,6 +266,19 @@ function reset(rows = []) {
   state.rows = rows;
   state.inserts = [];
   state.cutoff = "";
+  state.updates = [];
+}
+
+function blockingHold(patch = {}) {
+  const startsAt = new Date(start).toISOString();
+  return reservation({
+    counselor_id: counselorId,
+    starts_at: startsAt,
+    ends_at: new Date(Date.parse(startsAt) + 30 * 60000).toISOString(),
+    customer_phone: "010-0000-1111",
+    customer_email: "other@example.invalid",
+    ...patch,
+  });
 }
 
 async function reserve(patch) {
@@ -362,6 +430,48 @@ test("입금 기한이 지난 입금 대기는 세지 않는다", async () => {
   assert.equal(state.inserts.length, 1);
   const age = Date.now() - Date.parse(state.cutoff);
   assert.ok(Math.abs(age - bookingConfig.depositHours * 60 * 60 * 1000) < 5000);
+});
+
+test("기한이 지난 입금 대기가 시간을 잡고 있으면 취소한 뒤 예약한다", async () => {
+  const held = blockingHold({
+    created_at: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(),
+  });
+  reset([held]);
+  const result = await reserve();
+  assert.equal(result.success.reservationNo, "R-20261127-0001");
+  assert.equal(state.inserts.length, 1);
+  assert.equal(state.updates.length, 1);
+  assert.equal(state.updates[0].count, 1);
+  assert.equal(held.status, "cancelled");
+  assert.equal(held.cancel_reason, expiry.depositExpiredReason);
+  assert.equal(typeof held.cancelled_at, "string");
+});
+
+test("확정된 예약은 입금 기한이 지나도 취소하지 않고 그 시간을 막는다", async () => {
+  const held = blockingHold({
+    status: "confirmed",
+    created_at: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
+    confirmed_at: new Date().toISOString(),
+  });
+  reset([held]);
+  const result = await reserve();
+  assert.equal(result.success, undefined);
+  assert.equal(result.message, duplicateMessage);
+  assert.equal(state.inserts.length, 0);
+  assert.equal(held.status, "confirmed");
+  assert.equal(held.cancel_reason, undefined);
+  assert.equal(state.updates[0].count, 0);
+});
+
+test("기한 안의 입금 대기는 취소하지 않고 그 시간을 막는다", async () => {
+  const held = blockingHold({ created_at: new Date().toISOString() });
+  reset([held]);
+  const result = await reserve();
+  assert.equal(result.success, undefined);
+  assert.equal(result.message, duplicateMessage);
+  assert.equal(state.inserts.length, 0);
+  assert.equal(held.status, "pending_payment");
+  assert.equal(state.updates[0].count, 0);
 });
 
 test("허니팟에 값이 있으면 저장하지 않고 일반 오류를 반환한다", async () => {

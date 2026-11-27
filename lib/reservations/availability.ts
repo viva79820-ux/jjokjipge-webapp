@@ -6,6 +6,7 @@ import {
   calculateSlots,
   isBookingDate,
 } from "@/lib/booking-time";
+import { pendingWindowStart } from "./deposit-expiry";
 
 export const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -41,32 +42,51 @@ export async function getBookingProduct(slug: string, productId: string) {
 }
 
 // Only occupied intervals are read; customer information never leaves the database here.
+async function occupiedRanges(
+  counselorId: string,
+  first: string,
+  last: string,
+  status: "pending_payment" | "confirmed",
+  now: Date,
+) {
+  let query = createAdminClient()
+    .from("reservations")
+    .select("starts_at,ends_at")
+    .eq("counselor_id", counselorId)
+    .eq("status", status)
+    .lt("starts_at", `${addDays(last, 1)}T00:00:00+09:00`)
+    .gt("ends_at", `${first}T00:00:00+09:00`);
+  if (status === "pending_payment")
+    query = query.gte("created_at", pendingWindowStart(now.getTime()));
+  const { data, error } = await query;
+  if (error) throw error;
+  return data ?? [];
+}
+
 async function getBusyIntervals(
   counselorId: string,
   first: string,
   last: string,
+  now: Date,
 ) {
-  const { data, error } = await createAdminClient()
-    .from("reservations")
-    .select("counselor_id,starts_at,ends_at")
-    .eq("counselor_id", counselorId)
-    .in("status", ["pending_payment", "confirmed"])
-    .lt("starts_at", `${addDays(last, 1)}T00:00:00+09:00`)
-    .gt("ends_at", `${first}T00:00:00+09:00`);
-  if (error) throw error;
-  return data;
+  const [pending, confirmed] = await Promise.all([
+    occupiedRanges(counselorId, first, last, "pending_payment", now),
+    occupiedRanges(counselorId, first, last, "confirmed", now),
+  ]);
+  return [...pending, ...confirmed];
 }
 
 export async function getAvailableSlots(
   counselorSlug: string,
   productId: string,
   date: string,
+  now = new Date(),
 ) {
-  if (!isBookingDate(date)) return [];
+  if (!isBookingDate(date, now)) return [];
   const context = await getBookingProduct(counselorSlug, productId);
   if (!context) return [];
-  const busy = await getBusyIntervals(context.counselor.id, date, date);
-  return calculateSlots(date, context.product.minutes, busy);
+  const busy = await getBusyIntervals(context.counselor.id, date, date, now);
+  return calculateSlots(date, context.product.minutes, busy, now);
 }
 
 export async function getAvailabilityCalendar(
@@ -81,6 +101,7 @@ export async function getAvailabilityCalendar(
     context.counselor.id,
     dates[0],
     dates[dates.length - 1],
+    now,
   );
   return dates.map((date) => ({
     date,
