@@ -38,7 +38,7 @@ export function ConsultListCard({ counselor }: { counselor: Counselor }) {
           <div className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-1">
             <Link
               href={href}
-              className={`min-w-0 cursor-pointer text-subtitle font-bold ${focus}`}
+              className={`-my-2.5 inline-flex min-h-11 min-w-0 cursor-pointer items-center text-subtitle font-bold ${focus}`}
             >
               <CounselorName
                 name={counselor.name}

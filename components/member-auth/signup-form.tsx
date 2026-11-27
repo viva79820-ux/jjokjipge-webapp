@@ -277,7 +277,7 @@ export function SignupForm() {
         이미 회원이신가요?{" "}
         <Link
           href="/login"
-          className="inline-flex min-h-11 cursor-pointer items-center font-bold text-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+          className="-mx-1 inline-flex min-h-11 min-w-11 cursor-pointer items-center justify-center px-1 font-bold text-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
         >
           로그인
         </Link>
@@ -327,9 +327,9 @@ function AgreementRow({
           href={href}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex min-h-11 shrink-0 cursor-pointer items-center px-1 text-caption font-semibold text-muted underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+          className="-mx-[7px] inline-flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center px-[11px] text-caption font-semibold text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
         >
-          보기
+          <span className="underline underline-offset-2">보기</span>
         </Link>
       )}
     </div>

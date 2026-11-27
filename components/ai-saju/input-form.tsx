@@ -181,8 +181,11 @@ export function AiSajuInputForm() {
           </label>
         </div>
         <div className="flex flex-col gap-1.5">
-          <div className="text-label font-bold">태어난 시간</div>
+          <label htmlFor="ai-saju-hour" className="text-label font-bold">
+            태어난 시간
+          </label>
           <select
+            id="ai-saju-hour"
             aria-label="태어난 시간"
             defaultValue="오전 9시 ~ 11시 (사시)"
             disabled={unknownTime}

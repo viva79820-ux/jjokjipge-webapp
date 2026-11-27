@@ -100,7 +100,7 @@ function DirectoryCard({ counselor }: { counselor: Counselor }) {
       <div className="min-w-0 flex-1 basis-36">
         <Link
           href={href}
-          className={`block max-w-full text-subtitle font-bold ${focus}`}
+          className={`-my-2.5 flex min-h-11 max-w-full cursor-pointer items-center text-subtitle font-bold ${focus}`}
         >
           <CounselorName
             name={counselor.name}
