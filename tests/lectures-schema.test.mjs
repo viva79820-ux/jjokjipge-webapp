@@ -105,6 +105,16 @@ test("세 역할의 권한 검사와 롤백 원본이 고정되어 있다", () =
   assert.doesNotMatch(rollback, /\bcommit\s*;/i);
   assert.doesNotMatch(
     preflight,
-    /\b(?:insert\s+into|update|delete\s+from)\s+(?:auth\.users|public\.profiles|public\.classes)\b/i,
+    /\b(?:insert\s+into|update|delete\s+from)\s+public\.classes\b/i,
   );
+  assert.doesNotMatch(
+    preflight,
+    /\b(?:update|delete\s+from)\s+public\.profiles\b/i,
+  );
+  assert.match(preflight, /insert into auth\.users \(id, email\)/);
+  assert.match(preflight, /lectures-teacher-a@example\.invalid/);
+  assert.match(preflight, /lectures-teacher-b@example\.invalid/);
+  assert.match(preflight, /lectures-member-c@example\.invalid/);
+  assert.match(rollback, /lectures-teacher-a@example\.invalid/);
+  assert.match(rollback, /임시 사용자·profile 잔존/);
 });
