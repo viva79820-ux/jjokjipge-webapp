@@ -266,5 +266,7 @@ test("홈·관리자에서 후기 화면으로 진입하고 외부 링크를 새
   assert.match(menu, /\["후기", "\/admin\/reviews"\]/);
   assert.match(page, /target="_blank"/);
   assert.match(page, /rel="noopener noreferrer"/);
+  assert.match(page, /공개에 동의한 상담 후기만 보여 드려요/);
+  assert.doesNotMatch(page, /상담·상품 후기/);
   assert.doesNotMatch(page, /fetch\(|크롤/);
 });

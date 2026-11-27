@@ -45,7 +45,7 @@ export async function PublicReviewPage({
       <header className="mb-7 space-y-2">
         <h1 className="text-display font-extrabold">고객 후기</h1>
         <p className="text-body text-muted">
-          공개에 동의한 상담·상품 후기만 보여 드려요.
+          공개에 동의한 상담 후기만 보여 드려요.
         </p>
       </header>
 
