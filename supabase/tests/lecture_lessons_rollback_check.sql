@@ -1,6 +1,8 @@
 -- LECTURE_LESSONS_PREFLIGHT_OK(P0001)를 확인한 경우에만 별도로 전체 실행한다.
+-- 1단계 스키마(teachers, lectures, lecture_upload_consents)는 이미 운영에 적용되어 있다.
 -- 전제: 1단계 스키마(teachers, lectures, lecture_upload_consents)는 적용된 채 남아 있다.
 -- 이번 사전 검사 트랜잭션만 롤백되므로 2단계 객체는 없어야 하고 1단계 객체는 유지된다.
+-- 사전 검사의 임시 사용자(고정 UUID, example.invalid)와 profile, 그 폴더의 Storage 객체가 남아 있으면 실패한다.
 -- 성공 예외 DETAIL의 JSON을 아래 null 대신 $baseline$...$baseline$::jsonb로 붙여 넣는다.
 -- 저장소 원본의 baseline은 null로 유지하고 실행 결과 JSON을 커밋하지 않는다.
 -- 첫 ROLLBACK은 사전 검사의 의도된 예외로 중단된 트랜잭션을 종료한다.
@@ -192,7 +194,43 @@ begin
     end if;
   end loop;
 
-  raise notice 'LECTURE_LESSONS_ROLLBACK_OK: 2단계 객체·검사 행 없음. 1단계 스키마와 기존 profile·클래스·콘텐츠·인증·Storage 원본 일치.';
+  if (
+    select count(*)
+    from auth.users
+    where id in (
+      'dddddddd-dddd-4ddd-8ddd-ddddddddddd4'::uuid,
+      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee5'::uuid,
+      'ffffffff-ffff-4fff-8fff-fffffffffff6'::uuid
+    )
+    or email in (
+      'lecture-lessons-teacher-a@example.invalid',
+      'lecture-lessons-teacher-b@example.invalid',
+      'lecture-lessons-member@example.invalid'
+    )
+  ) <> 0
+  or (
+    select count(*)
+    from public.profiles
+    where id in (
+      'dddddddd-dddd-4ddd-8ddd-ddddddddddd4'::uuid,
+      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee5'::uuid,
+      'ffffffff-ffff-4fff-8fff-fffffffffff6'::uuid
+    )
+  ) <> 0
+  or (
+    select count(*)
+    from storage.objects
+    where strpos(name, 'lectures/dddddddd-dddd-4ddd-8ddd-ddddddddddd4/') = 1
+      or strpos(name, 'lectures/eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee5/') = 1
+      or strpos(name, 'lectures/ffffffff-ffff-4fff-8fff-fffffffffff6/') = 1
+  ) <> 0
+  then
+    raise exception using
+      errcode = 'P0001',
+      message = 'LECTURE_LESSONS_ROLLBACK_FAILED: 임시 사용자·profile·Storage 객체 잔존';
+  end if;
+
+  raise notice 'LECTURE_LESSONS_ROLLBACK_OK: 2단계 객체·검사 행 없음. 임시 사용자·profile·Storage 객체 잔존 0. 1단계 스키마와 기존 profile·클래스·콘텐츠·인증·Storage 원본 일치.';
 end;
 $rollback_check$;
 

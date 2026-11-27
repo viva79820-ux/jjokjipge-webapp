@@ -853,3 +853,126 @@ test("용량 점검 권한과 80퍼센트 기록", async () => {
   assert.match(vercel, /"path": "\/api\/lectures\/storage-check"/);
   assert.match(vercel, /"schedule": "0 18 \* \* \*"/);
 });
+
+test("운영에서 Bunny가 없으면 영상 저장소는 준비 안 됨이다", async () => {
+  const {
+    lectureBunnyRequiredEnv,
+    lectureVideoStorageJudgment,
+    lectureVideoStorageNotReady,
+  } = await import("../lib/lectures/video/index.ts");
+  const { lectureVideoStoragePendingMessage } =
+    await import("../lib/lectures/video/limits.ts");
+  assert.equal(
+    lectureVideoStoragePendingMessage,
+    "영상 저장소 연결 전이에요. 연결되면 차시를 올릴 수 있어요.",
+  );
+  assert.equal(lectureVideoStorageNotReady, "영상 저장소 준비 안 됨");
+  assert.deepEqual(
+    [...lectureBunnyRequiredEnv],
+    [
+      "BUNNY_STREAM_LIBRARY_ID",
+      "BUNNY_STREAM_API_KEY",
+      "BUNNY_ACCOUNT_API_KEY",
+    ],
+  );
+
+  const connected = {
+    VERCEL_ENV: "production",
+    LECTURE_VIDEO_PROVIDER: "bunny",
+    BUNNY_STREAM_LIBRARY_ID: "lib-1",
+    BUNNY_STREAM_API_KEY: "stream-key",
+    BUNNY_ACCOUNT_API_KEY: "account-key",
+  };
+  assert.equal(lectureVideoStorageJudgment(connected), null);
+  assert.equal(
+    lectureVideoStorageJudgment({
+      ...connected,
+      LECTURE_VIDEO_PROVIDER: " bunny ",
+    }),
+    null,
+  );
+  assert.equal(lectureVideoStorageJudgment({ VERCEL_ENV: "preview" }), null);
+  assert.equal(
+    lectureVideoStorageJudgment({
+      VERCEL_ENV: "preview",
+      LECTURE_VIDEO_PROVIDER: "mock",
+    }),
+    null,
+  );
+  assert.equal(lectureVideoStorageJudgment({}), null);
+  assert.equal(
+    lectureVideoStorageJudgment({
+      VERCEL_ENV: "production",
+      LECTURE_VIDEO_PROVIDER: "mock",
+    }),
+    lectureVideoStorageNotReady,
+  );
+  assert.equal(
+    lectureVideoStorageJudgment({ VERCEL_ENV: "production" }),
+    lectureVideoStorageNotReady,
+  );
+  assert.equal(
+    lectureVideoStorageJudgment({
+      ...connected,
+      BUNNY_STREAM_API_KEY: "  ",
+    }),
+    lectureVideoStorageNotReady,
+  );
+  assert.equal(
+    lectureVideoStorageJudgment({
+      ...connected,
+      BUNNY_ACCOUNT_API_KEY: "",
+    }),
+    lectureVideoStorageNotReady,
+  );
+  assert.equal(
+    lectureVideoStorageJudgment({
+      ...connected,
+      BUNNY_STREAM_LIBRARY_ID: "lib 1",
+    }),
+    lectureVideoStorageNotReady,
+  );
+  assert.equal(
+    String(
+      lectureVideoStorageJudgment({
+        ...connected,
+        BUNNY_STREAM_API_KEY: "",
+      }),
+    ).includes("account-key"),
+    false,
+  );
+
+  const actions = read("../lib/lectures/lesson-actions.ts");
+  const createBody = actions
+    .split("export async function createLesson")[1]
+    .split("export async function resignLessonUpload")[0];
+  const resignBody = actions
+    .split("export async function resignLessonUpload")[1]
+    .split("export async function refreshLessonVideo")[0];
+  const refreshBody = actions
+    .split("export async function refreshLessonVideo")[1]
+    .split("export async function deleteLesson")[0];
+  const updateBody = actions.split(
+    "export async function updateLessonDetails",
+  )[1];
+  assert.equal(createBody.indexOf("storageNotReady()") >= 0, true);
+  assert.equal(
+    createBody.indexOf("storageNotReady()") <
+      createBody.indexOf("createLessonWith"),
+    true,
+  );
+  assert.equal(resignBody.indexOf("storageNotReady()") >= 0, true);
+  assert.equal(
+    resignBody.indexOf("storageNotReady()") <
+      resignBody.indexOf("resignLessonWith"),
+    true,
+  );
+  assert.equal(refreshBody.includes("storageNotReady"), false);
+  assert.equal(updateBody.includes("storageNotReady"), false);
+  const lectureActions = read("../lib/lectures/actions.ts");
+  assert.equal(lectureActions.includes("lectureVideoStorageJudgment"), false);
+  assert.equal(
+    lectureActions.includes("export async function saveLecture"),
+    true,
+  );
+});

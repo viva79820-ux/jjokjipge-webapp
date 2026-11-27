@@ -15,7 +15,10 @@ import {
   resignLessonUpload,
   updateLessonDetails,
 } from "@/lib/lectures/lesson-actions";
-import { lessonTitleError } from "@/lib/lectures/video/limits";
+import {
+  lectureVideoStoragePendingMessage,
+  lessonTitleError,
+} from "@/lib/lectures/video/limits";
 import {
   canResumeLesson,
   deleteMediaWarning,
@@ -50,10 +53,12 @@ type PendingDelete =
 export function LessonManager({
   lectureId,
   canUpload,
+  videoStorageReady,
   lessons: initialLessons,
 }: {
   lectureId: string;
   canUpload: boolean;
+  videoStorageReady: boolean;
   lessons: LessonView[];
 }) {
   const router = useRouter();
@@ -353,7 +358,7 @@ export function LessonManager({
 
   async function onUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (lock.current || sessionRef.current) return;
+    if (!videoStorageReady || lock.current || sessionRef.current) return;
     lock.current = true;
     setBusy(true);
     note("");
@@ -393,7 +398,7 @@ export function LessonManager({
   }
 
   async function resume(lessonId: string, chosen: File) {
-    if (lock.current || sessionRef.current) return;
+    if (!videoStorageReady || lock.current || sessionRef.current) return;
     lock.current = true;
     setBusy(true);
     note("");
@@ -584,7 +589,16 @@ export function LessonManager({
           </ul>
         </div>
       ) : null}
-      {canUpload ? (
+      {!videoStorageReady ? (
+        <div className="mt-3">
+          <p className="text-body text-muted">
+            {lectureVideoStoragePendingMessage}
+          </p>
+          <Button type="button" disabled className="mt-3 w-full">
+            차시 올리기
+          </Button>
+        </div>
+      ) : canUpload ? (
         <form onSubmit={onUpload} className="mt-3 min-w-0 space-y-4">
           <div>
             <label htmlFor={`${prefix}-title`} className="text-label font-bold">
@@ -744,7 +758,7 @@ export function LessonManager({
                     <Button
                       type="button"
                       variant="secondary"
-                      disabled={busy}
+                      disabled={busy || !videoStorageReady}
                       onClick={() => {
                         resumeTarget.current = lesson.id;
                         resumeInputRef.current?.click();

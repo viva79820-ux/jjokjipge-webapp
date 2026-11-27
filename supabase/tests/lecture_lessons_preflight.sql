@@ -1,11 +1,16 @@
--- 1단계 스키마(teachers, lectures, lecture_upload_consents)가 이미 적용된 DB에서 전체 실행한다.
--- 1단계 마이그레이션은 이 파일에 다시 넣지 않는다. 아래 EXACT MIGRATION이 2단계 본문이다.
+-- 1단계 스키마(teachers, lectures, lecture_upload_consents)는 이미 운영에 적용되어 있다.
+-- 1단계 마이그레이션(20261125120000_lectures_schema.sql)은 이 파일에 다시 넣지 않는다.
+-- 아래 EXACT MIGRATION이 2단계 본문이다. 2단계가 아직 없는 DB에서 전체 실행한다.
 -- 마지막 SQLSTATE P0001과 LECTURE_LESSONS_PREFLIGHT_OK 예외만 성공이다.
 -- 성공 예외 DETAIL의 baseline JSON을 별도로 보관한 뒤 롤백 확인 SQL에 입력한다.
--- 실제 계정·profile·기존 업무 행은 바꾸지 않으며 성공 예외로 전체 롤백한다.
+-- 관리자는 기존 관리자 profile을 쓴다. 선생님 A·B와 일반 회원은 같은 트랜잭션의 임시 auth.users다.
+-- 임시 계정은 고정 UUID와 example.invalid 메일이며, profile은 가입 트리거가 만들면 그대로 쓰고 없으면 role=user로 넣는다.
+-- 진도 외래 키 때문에 profile이 있는 임시 회원을 쓴다. 프로필 없는 인증 역할은 쓰지 않는다.
+-- 원본 보존 검사 전에 임시 사용자·profile을 지우고, 성공 예외로 트랜잭션 전체를 롤백한다.
+-- storage.objects 정리 삭제는 두지 않는다. 검사 중 만든 행은 롤백으로 되돌린다.
+-- 삭제 권한을 실제로 확인할 때만 그 구간에서 storage.allow_delete_query를 true로 둔다.
+-- 실제 계정·profile·기존 업무 행은 바꾸지 않는다.
 -- 실행 역할은 anon, authenticated, service_role로 set role 할 수 있어야 한다.
--- 선생님 둘과 일반 회원은 아직 teachers에 없는 기존 role=user profile이다.
--- 진도 외래 키 때문에 프로필 없는 인증 역할은 쓰지 않는다.
 -- 실제 로그인·Auth 세션·Data API·Bunny 호출 검증이 아니다.
 rollback;
 begin;
@@ -13,7 +18,6 @@ begin;
 do $prerequisite$
 declare
   missing text[] := '{}';
-  candidate_count integer;
 begin
   if to_regclass('public.teachers') is null
     or to_regclass('public.lectures') is null
@@ -59,20 +63,6 @@ begin
     raise exception using
       errcode = 'P0001',
       message = 'LECTURE_LESSONS_PREFLIGHT_PREREQUISITE_FAILED: 기존 관리자 profile 필요';
-  end if;
-
-  select count(*) into candidate_count
-  from public.profiles
-  where role = 'user'
-    and not exists (
-      select 1
-      from public.teachers
-      where user_id = profiles.id
-    );
-  if candidate_count < 3 then
-    raise exception using
-      errcode = 'P0001',
-      message = 'LECTURE_LESSONS_PREFLIGHT_PREREQUISITE_FAILED: 선생님이 아닌 기존 일반 회원 profile 3명 필요';
   end if;
 
   if not (
@@ -686,34 +676,83 @@ where role = 'admin'
 order by id
 limit 1;
 insert into lecture_lesson_actors (kind, id)
-select 'teacher_a', id
-from public.profiles
-where role = 'user'
+values
+  ('teacher_a', 'dddddddd-dddd-4ddd-8ddd-ddddddddddd4'),
+  ('teacher_b', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee5'),
+  ('member', 'ffffffff-ffff-4fff-8fff-fffffffffff6');
+
+do $temp_users$
+begin
+  if (select count(*) from lecture_lesson_actors) <> 4
+    or exists (
+      select 1
+      from auth.users
+      where id in (
+        'dddddddd-dddd-4ddd-8ddd-ddddddddddd4'::uuid,
+        'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee5'::uuid,
+        'ffffffff-ffff-4fff-8fff-fffffffffff6'::uuid
+      )
+      or email in (
+        'lecture-lessons-teacher-a@example.invalid',
+        'lecture-lessons-teacher-b@example.invalid',
+        'lecture-lessons-member@example.invalid'
+      )
+    )
+    or exists (
+      select 1
+      from public.profiles
+      where id in (
+        'dddddddd-dddd-4ddd-8ddd-ddddddddddd4'::uuid,
+        'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee5'::uuid,
+        'ffffffff-ffff-4fff-8fff-fffffffffff6'::uuid
+      )
+    )
+    or exists (
+      select 1
+      from storage.objects
+      where strpos(name, 'lectures/dddddddd-dddd-4ddd-8ddd-ddddddddddd4/') = 1
+        or strpos(name, 'lectures/eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee5/') = 1
+        or strpos(name, 'lectures/ffffffff-ffff-4fff-8fff-fffffffffff6/') = 1
+    )
+  then
+    raise exception using
+      errcode = 'P0001',
+      message = 'LECTURE_LESSONS_PREFLIGHT_PREREQUISITE_FAILED: 임시 검사 계정을 만들 수 없습니다';
+  end if;
+end;
+$temp_users$;
+
+insert into auth.users (id, email)
+values
+  ('dddddddd-dddd-4ddd-8ddd-ddddddddddd4', 'lecture-lessons-teacher-a@example.invalid'),
+  ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee5', 'lecture-lessons-teacher-b@example.invalid'),
+  ('ffffffff-ffff-4fff-8fff-fffffffffff6', 'lecture-lessons-member@example.invalid');
+
+insert into public.profiles (id, role)
+select actor.id, 'user'
+from lecture_lesson_actors as actor
+where actor.kind in ('teacher_a', 'teacher_b', 'member')
   and not exists (
-    select 1 from public.teachers where user_id = profiles.id
-  )
-order by id
-limit 1;
-insert into lecture_lesson_actors (kind, id)
-select 'teacher_b', id
-from public.profiles
-where role = 'user'
-  and id <> (select id from lecture_lesson_actors where kind = 'teacher_a')
-  and not exists (
-    select 1 from public.teachers where user_id = profiles.id
-  )
-order by id
-limit 1;
-insert into lecture_lesson_actors (kind, id)
-select 'member', id
-from public.profiles
-where role = 'user'
-  and id not in (select id from lecture_lesson_actors)
-  and not exists (
-    select 1 from public.teachers where user_id = profiles.id
-  )
-order by id
-limit 1;
+    select 1
+    from public.profiles as profile
+    where profile.id = actor.id
+  );
+
+do $temp_profiles$
+begin
+  if (
+    select count(*)
+    from public.profiles as profile
+    join lecture_lesson_actors as actor on actor.id = profile.id
+    where actor.kind in ('teacher_a', 'teacher_b', 'member')
+      and profile.role = 'user'
+  ) <> 3 then
+    raise exception using
+      errcode = 'P0001',
+      message = 'LECTURE_LESSONS_PREFLIGHT_PREREQUISITE_FAILED: 임시 일반 회원 profile 3명 필요';
+  end if;
+end;
+$temp_profiles$;
 
 create temporary table lecture_lesson_rows (
   kind text primary key,
@@ -1532,6 +1571,51 @@ reset role;
 select set_config('request.jwt.claim.sub', '', true);
 select set_config('request.jwt.claims', '{}', true);
 
+delete from public.lectures
+where teacher_id in (
+  select id
+  from lecture_lesson_actors
+  where kind in ('teacher_a', 'teacher_b', 'member')
+);
+delete from auth.users
+where id in (
+  select id
+  from lecture_lesson_actors
+  where kind in ('teacher_a', 'teacher_b', 'member')
+);
+select pg_temp.lecture_lessons_assert(
+  (
+    select count(*) = 0
+    from auth.users
+    where id in (
+      select id
+      from lecture_lesson_actors
+      where kind in ('teacher_a', 'teacher_b', 'member')
+    )
+    or email in (
+      'lecture-lessons-teacher-a@example.invalid',
+      'lecture-lessons-teacher-b@example.invalid',
+      'lecture-lessons-member@example.invalid'
+    )
+  )
+  and (
+    select count(*) = 0
+    from public.profiles
+    where id in (
+      select id
+      from lecture_lesson_actors
+      where kind in ('teacher_a', 'teacher_b', 'member')
+    )
+  )
+  and (
+    select count(*) = 0
+    from storage.objects
+    where strpos(name, 'lectures/dddddddd-dddd-4ddd-8ddd-ddddddddddd4/') = 1
+      or strpos(name, 'lectures/eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee5/') = 1
+      or strpos(name, 'lectures/ffffffff-ffff-4fff-8fff-fffffffffff6/') = 1
+  ),
+  '임시 사용자·profile·Storage 객체를 원본 보존 검사 전에 제거'
+);
 select pg_temp.lecture_lessons_assert(
   (pg_temp.lecture_lessons_snapshot() - 'lectures_access') = (
     select (snapshot->'state') - 'lectures_access'
@@ -1547,7 +1631,7 @@ begin
   select snapshot into baseline from lecture_lessons_baseline;
   raise exception using
     errcode = 'P0001',
-    message = 'LECTURE_LESSONS_PREFLIGHT_OK: 선생님 A·B, 일반 회원, 비로그인, service_role 권한 검사 통과. 테스트 행은 의도된 전체 롤백으로 제거됨. 실제 Data API·브라우저 세션·Bunny 호출은 미검증. 일반 회원은 기존 profile의 DB 역할 검사(실제 로그인 검증 아님).',
+    message = 'LECTURE_LESSONS_PREFLIGHT_OK: 선생님 A·B, 일반 회원, 비로그인, service_role 권한 검사 통과. 테스트 행은 의도된 전체 롤백으로 제거됨. 실제 Data API·브라우저 세션·Bunny 호출은 미검증. 선생님 A·B와 일반 회원은 임시 auth.users·profile의 DB 역할 검사(실제 로그인 검증 아님).',
     detail = baseline::text;
 end;
 $success$;

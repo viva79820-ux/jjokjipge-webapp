@@ -15,6 +15,8 @@ import {
   type LessonActionResult,
   type ResignLessonInput,
 } from "./lesson-ops";
+import { lectureVideoStorageJudgment } from "./video";
+import { lectureVideoStoragePendingMessage } from "./video/limits";
 
 export type { CreateLessonInput, LessonActionResult, ResignLessonInput };
 
@@ -30,9 +32,19 @@ function failed(message: string): LessonActionResult {
   return { state: "unknown", message };
 }
 
+function storageNotReady(): LessonActionResult | null {
+  if (lectureVideoStorageJudgment() === null) return null;
+  return {
+    state: "rejected",
+    message: lectureVideoStoragePendingMessage,
+  };
+}
+
 export async function createLesson(
   input: CreateLessonInput,
 ): Promise<LessonActionResult> {
+  const blocked = storageNotReady();
+  if (blocked) return blocked;
   try {
     const result = await createLessonWith(input, await lessonDeps());
     if (result.state === "saved") invalidate(result.lectureId);
@@ -45,6 +57,8 @@ export async function createLesson(
 export async function resignLessonUpload(
   input: ResignLessonInput,
 ): Promise<LessonActionResult> {
+  const blocked = storageNotReady();
+  if (blocked) return blocked;
   try {
     return await resignLessonWith(input, await lessonDeps());
   } catch {
