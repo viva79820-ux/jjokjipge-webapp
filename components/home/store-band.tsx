@@ -19,7 +19,7 @@ export function HomeStoreBand() {
         width={760}
         height={760}
         sizes={homeStoreBandSizes}
-        quality={85}
+        quality={90}
         className="size-[76px] shrink-0 rounded-input object-cover"
       />
       <span className="flex min-w-0 flex-1 flex-col gap-1">
