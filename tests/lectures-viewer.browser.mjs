@@ -320,12 +320,14 @@ await new Promise((resolve) => fixture.listen(0, "127.0.0.1", resolve));
 const appPort = 4392;
 const base = `http://127.0.0.1:${appPort}`;
 const shotDir = join(process.cwd(), "tmp", "lectures-viewer");
+const distDir = "tmp/lectures-viewer-next";
+const distPreload = "./tests/lectures-viewer-dist.mjs";
 const env = {
   ...process.env,
   CI: "1",
   NEXT_TELEMETRY_DISABLED: "1",
   LECTURE_VIDEO_PROVIDER: "mock",
-  LECTURE_VIEWER_DIST: "tmp/lectures-viewer-next",
+  LECTURE_VIEWER_DIST: distDir,
   NEXT_PUBLIC_SUPABASE_URL: `http://127.0.0.1:${fixture.address().port}`,
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "fixture-public",
   SUPABASE_SECRET_KEY: "fixture-secret",
@@ -334,6 +336,8 @@ const logs = [];
 const app = spawn(
   process.execPath,
   [
+    "--import",
+    distPreload,
     "node_modules/next/dist/bin/next",
     "dev",
     "--hostname",

@@ -5,7 +5,6 @@ const storageImages = supabaseImageConfig(process.env.NEXT_PUBLIC_SUPABASE_URL);
 
 const nextConfig: NextConfig = {
   /* config options here */
-  distDir: process.env.LECTURE_VIEWER_DIST || ".next",
   experimental: {
     agentFeedback: true,
   },
