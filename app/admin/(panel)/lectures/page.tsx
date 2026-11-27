@@ -1,11 +1,14 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { AdminAccessDenied } from "@/components/admin/access-denied";
+import { LectureStorageCard } from "@/components/admin/lecture-storage-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { requireAdmin } from "@/lib/admin/auth";
 import { listLecturesForAdmin, unpublishLecture } from "@/lib/lectures/admin";
+import { readLectureStorageForAdmin } from "@/lib/lectures/admin-read";
 import { fieldLabel } from "@/lib/lectures/rules";
+import { storageUsageView } from "@/lib/lectures/storage-view";
 
 export const instant = false;
 
@@ -37,10 +40,18 @@ async function LectureModeration({
   const admin = await requireAdmin();
   if (!admin) return <AdminAccessDenied />;
   const result = (await searchParams).result || "";
+  const storage = await readLectureStorageForAdmin();
   const lectures = await listLecturesForAdmin();
+  const storageMode =
+    storage.state === "ready"
+      ? { kind: "ready" as const, view: storageUsageView(storage.row, null) }
+      : storage.state === "empty"
+        ? { kind: "empty" as const }
+        : { kind: "unavailable" as const };
   return (
     <div className="min-w-0">
-      <h1 className="text-title font-bold">강의 비공개</h1>
+      <LectureStorageCard mode={storageMode} />
+      <h1 className="mt-5 text-title font-bold">강의 비공개</h1>
       <p className="mt-2 text-caption text-muted">
         어떤 강의든 바로 비공개로 바꿀 수 있어요. 제목이나 소개는 바꾸지 않아요.
       </p>
@@ -71,6 +82,14 @@ async function LectureModeration({
               </p>
               <div className="mt-2">
                 <Badge>{lecture.is_published ? "공개" : "비공개"}</Badge>
+              </div>
+              <div className="mt-3">
+                <Button
+                  href={`/admin/lectures/${lecture.id}`}
+                  variant="secondary"
+                >
+                  차시 보기
+                </Button>
               </div>
               {lecture.is_published ? (
                 <form action={unpublishLecture} className="mt-3">
