@@ -17,7 +17,7 @@ export function InteriorGallery() {
               alt={photo.alt}
               fill
               sizes={storeInteriorSizes}
-              quality={85}
+              quality={90}
               draggable={false}
               className="object-cover"
             />

@@ -70,13 +70,18 @@ test("customer photos use next/image at the slot size", () => {
   assert.match(ownImage, /sizes="112px"/);
   assert.equal(ownImage.includes("unoptimized"), false);
   assert.equal(ownImage.includes("<img"), false);
+  assert.equal(ownImage.includes("quality={90}"), false);
   assert.equal(ownImage.includes("quality={85}"), false);
-  assert.match(counselor, /quality=\{85\}/);
-  assert.match(store, /quality=\{85\}/);
-  assert.equal(product.includes("quality={85}"), false);
-  assert.equal(poster.includes("quality={85}"), false);
-  assert.equal(notice.includes("quality={85}"), false);
-  assert.equal(popup.includes("quality={85}"), false);
+  assert.match(counselor, /quality=\{90\}/);
+  assert.match(store, /quality=\{90\}/);
+  assert.equal(product.includes("quality={90}"), false);
+  assert.equal(poster.includes("quality={90}"), false);
+  assert.equal(notice.includes("quality={90}"), false);
+  assert.equal(popup.includes("quality={90}"), false);
+  assert.match(
+    read("components/counselor/consult-list-card.tsx"),
+    /size-28 rounded-xl/,
+  );
   assert.match(read("components/home/banner.tsx"), /homeBannerPhotoSizes/);
   assert.match(
     read("components/home/recommend.tsx"),
@@ -88,12 +93,12 @@ test("customer photos use next/image at the slot size", () => {
     /consultListPhotoSizes/,
   );
   assert.match(read("components/home/store-band.tsx"), /homeStoreBandSizes/);
-  assert.match(read("components/home/store-band.tsx"), /quality=\{85\}/);
+  assert.match(read("components/home/store-band.tsx"), /quality=\{90\}/);
   assert.match(
     read("components/store/interior-gallery.tsx"),
     /storeInteriorSizes/,
   );
-  assert.match(read("components/store/interior-gallery.tsx"), /quality=\{85\}/);
+  assert.match(read("components/store/interior-gallery.tsx"), /quality=\{90\}/);
   assert.match(
     read("app/(site)/consult/[id]/page.tsx"),
     /counselorDetailPhotoSizes/,
@@ -123,50 +128,87 @@ test("customer photos use next/image at the slot size", () => {
   assert.match(popup, /object-contain/);
   assert.match(popup, /noticePopupSizes/);
   assert.match(read("next.config.ts"), /supabaseImageConfig/);
-  assert.match(read("next.config.ts"), /qualities:\s*\[75,\s*85\]/);
+  assert.match(read("next.config.ts"), /sharpImageSizes/);
+  assert.match(read("next.config.ts"), /qualities:\s*\[75,\s*90\]/);
+  assert.equal(read("next.config.ts").includes("85"), false);
 });
 
-const imageWidths = [
+const deviceSizes = [640, 750, 828, 1080, 1200, 1920, 2048, 3840];
+const oldWidths = [
   32, 48, 64, 96, 128, 256, 384, 640, 750, 828, 1080, 1200, 1920, 2048, 3840,
 ];
-const pickWidth = (request) =>
-  imageWidths.find((width) => width >= request) ??
-  imageWidths[imageWidths.length - 1];
+const allWidths = [...images.sharpImageSizes, ...deviceSizes].sort(
+  (a, b) => a - b,
+);
+const pickWidth = (widths, request) =>
+  widths.find((width) => width >= request) ?? widths[widths.length - 1];
 
-test("1x displays get a 2x photo file without inflating 3x displays", () => {
+test("1x displays get about a 2x photo file without growing 2x and 3x files", () => {
   const fixed = [
-    ["homeBannerPhotoSizes", 160, (228 * 4) / 5],
-    ["homeRecommendPhotoSizes", 148, 146],
-    ["homeListPhotoSizes", 72, 72],
-    ["consultListPhotoSizes", 84, 84],
-    ["homeStoreBandSizes", 76, 76],
-    ["storeInteriorSizes", 240, (150 * 16) / 9],
-    ["adminCounselorPhotoSizes", 48, (64 * 4) / 5],
+    ["homeBannerPhotoSizes", 160, (228 * 4) / 5, 336],
+    ["homeRecommendPhotoSizes", 146, 146, 292],
+    ["homeListPhotoSizes", 72, 72, 144],
+    ["homeStoreBandSizes", 76, 76, 152],
+    ["storeInteriorSizes", 240, (150 * 16) / 9, 534],
+    ["adminCounselorPhotoSizes", 48, (64 * 4) / 5, 96],
   ];
-  for (const [name, css, painted] of fixed) {
-    assert.equal(
-      images[name],
-      `(min-resolution: 2dppx) ${Math.round(css)}px, ${Math.ceil(painted * 2)}px`,
+  for (const [name, css, painted, file] of fixed) {
+    assert.equal(images[name], `(min-resolution: 2dppx) ${css}px, ${file}px`);
+    assert.equal(pickWidth(allWidths, file), file, `${name} sizes`);
+    const ratio = file / painted;
+    assert.ok(ratio >= 1.8 && ratio <= 2.2, `${name} ${ratio}`);
+    if (name === "homeBannerPhotoSizes") {
+      assert.ok(file / css <= 2.2, `${name} slot ${file / css}`);
+    }
+    assert.ok(
+      pickWidth(allWidths, css * 2) <= pickWidth(oldWidths, css * 2),
+      `${name} 2x`,
     );
-    assert.ok(pickWidth(Math.ceil(painted * 2)) >= painted * 2, `${name} 1x`);
-    assert.ok(pickWidth(css * 3) <= 1200, `${name} 3x`);
+    assert.ok(
+      pickWidth(allWidths, css * 3) <= pickWidth(oldWidths, css * 3),
+      `${name} 3x`,
+    );
   }
+  assert.equal(
+    images.consultListPhotoSizes,
+    "(min-resolution: 3dppx) 85px, (min-resolution: 2dppx) 112px, 224px",
+  );
+  assert.equal(pickWidth(allWidths, 224), 224);
+  assert.ok(224 / 112 >= 1.8 && 224 / 112 <= 2.2);
+  assert.ok(pickWidth(allWidths, 112 * 2) <= pickWidth(oldWidths, 84 * 2));
+  assert.ok(pickWidth(allWidths, 85 * 3) <= pickWidth(oldWidths, 84 * 3));
   assert.match(
     images.counselorDetailPhotoSizes,
     /\(hover: hover\) and \(pointer: fine\) 1120px/,
   );
-  assert.equal(pickWidth(1120), 1200);
-  assert.equal(pickWidth(360 * 3), 1080);
+  assert.equal(pickWidth(allWidths, 1120), 1120);
+  assert.equal(1120 / 560, 2);
+  assert.ok(pickWidth(allWidths, 560 * 2) <= pickWidth(oldWidths, 560 * 2));
+  assert.ok(pickWidth(allWidths, 360 * 2) <= pickWidth(oldWidths, 360 * 2));
+  assert.ok(pickWidth(allWidths, 360 * 3) <= pickWidth(oldWidths, 360 * 3));
   assert.match(
     images.storeCardSizes,
     /\(hover: hover\) and \(pointer: fine\) 1056px/,
   );
-  assert.ok(pickWidth(1056) >= 526 * 2);
+  assert.equal(pickWidth(allWidths, 1056), 1056);
+  assert.ok(1056 / 526 >= 1.8 && 1056 / 526 <= 2.2);
+  assert.ok(pickWidth(allWidths, 528 * 2) <= pickWidth(oldWidths, 528 * 2));
+  assert.ok(pickWidth(allWidths, 328 * 2) <= pickWidth(oldWidths, 328 * 2));
+  assert.ok(pickWidth(allWidths, 328 * 3) <= pickWidth(oldWidths, 328 * 3));
   assert.match(
     images.storeCardHalfSizes,
     /\(hover: hover\) and \(pointer: fine\) 528px/,
   );
-  assert.ok(pickWidth(528) >= 264 * 2);
+  assert.equal(pickWidth(allWidths, 528), 528);
+  assert.ok(528 / 264 >= 1.8 && 528 / 264 <= 2.2);
+  assert.ok(pickWidth(allWidths, 264 * 2) <= pickWidth(oldWidths, 264 * 2));
+  assert.ok(pickWidth(allWidths, 164 * 2) <= pickWidth(oldWidths, 164 * 2));
+  assert.ok(pickWidth(allWidths, 164 * 3) <= pickWidth(oldWidths, 164 * 3));
+  assert.match(images.adminStorePhotoSizes, /\(min-width: 640px\) 288px/);
+  assert.equal(pickWidth(allWidths, 288), 288);
+  assert.equal(288 / 144, 2);
+  assert.ok(pickWidth(allWidths, 144 * 2) <= pickWidth(oldWidths, 144 * 2));
+  assert.ok(pickWidth(allWidths, 144 * 3) <= pickWidth(oldWidths, 144 * 3));
   assert.match(images.storeCardSizes, /calc\(\(100vw - 32px\) \* 2\)/);
   assert.match(
     images.counselorDetailPhotoSizes,
