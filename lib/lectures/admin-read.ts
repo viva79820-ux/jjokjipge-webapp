@@ -20,6 +20,7 @@ export type AdminLessonView = {
   status: string;
   durationSeconds: number | null;
   storageBytes: number | null;
+  adminHidden: boolean;
 };
 
 export type AdminLectureDetail =
@@ -32,7 +33,7 @@ export type AdminLectureDetail =
     };
 
 const lessonColumns =
-  "id,title,sort_order,status,duration_seconds,storage_bytes";
+  "id,title,sort_order,status,duration_seconds,storage_bytes,admin_hidden";
 
 export async function readLectureStorageForAdmin(): Promise<AdminStorageRead> {
   const admin = await requireAdmin();
@@ -141,6 +142,9 @@ function parseLesson(row: unknown): AdminLessonView | null {
     return null;
   }
   if (typeof record.status !== "string" || !record.status.trim()) return null;
+  if (record.admin_hidden != null && typeof record.admin_hidden !== "boolean") {
+    return null;
+  }
   let durationSeconds: number | null = null;
   if (record.duration_seconds != null) {
     if (
@@ -162,5 +166,6 @@ function parseLesson(row: unknown): AdminLessonView | null {
     status: record.status,
     durationSeconds,
     storageBytes,
+    adminHidden: record.admin_hidden === true,
   };
 }

@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { AdminAccessDenied } from "@/components/admin/access-denied";
+import { HideLessonButton } from "@/components/admin/hide-lesson-button";
 import {
   durationLabel,
   lessonStatusLabel,
@@ -16,16 +17,36 @@ import { formatByteSize } from "@/lib/lectures/storage-view";
 
 export const instant = false;
 
-export default function Page({ params }: { params: Promise<{ id: string }> }) {
+const results: Record<string, string> = {
+  hidden: "차시를 숨겼어요. 다시 공개할 수 없어요.",
+  missing: "차시를 숨기지 못했어요.",
+  unavailable: "차시를 숨기지 못했어요. 다시 시도해 주세요.",
+};
+
+export default function Page({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ result?: string }>;
+}) {
   return (
     <Suspense fallback={<p role="status">강의를 확인하고 있어요.</p>}>
-      <LectureDetail params={params} />
+      <LectureDetail params={params} searchParams={searchParams} />
     </Suspense>
   );
 }
 
-async function LectureDetail({ params }: { params: Promise<{ id: string }> }) {
+async function LectureDetail({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ result?: string }>;
+}) {
   await connection();
+  const result = (await searchParams).result ?? "";
+  const notice = results[result];
   const admin = await requireAdmin();
   if (!admin) return <AdminAccessDenied />;
   const { id } = await params;
@@ -58,6 +79,16 @@ async function LectureDetail({ params }: { params: Promise<{ id: string }> }) {
       <p className="mt-3 text-body wrap-anywhere whitespace-pre-wrap">
         {lecture.description}
       </p>
+      {notice ? (
+        <p
+          role={result === "hidden" ? "status" : "alert"}
+          className={
+            result === "hidden" ? "mt-3 text-body" : "mt-3 text-body text-error"
+          }
+        >
+          {notice}
+        </p>
+      ) : null}
       {lecture.is_published ? (
         <form action={unpublishLecture} className="mt-3">
           <input type="hidden" name="id" value={lecture.id} />
@@ -86,9 +117,18 @@ async function LectureDetail({ params }: { params: Promise<{ id: string }> }) {
                 {lesson.title}
               </p>
               <p className="mt-2 text-caption text-muted">순서 {index + 1}</p>
-              <div className="mt-2">
+              <div className="mt-2 flex flex-wrap items-center gap-2">
                 <Badge>{lessonStatusLabel(lesson.status, null)}</Badge>
+                {lesson.adminHidden ? <Badge>관리자 숨김</Badge> : null}
               </div>
+              {lesson.adminHidden ? null : (
+                <div className="mt-3">
+                  <HideLessonButton
+                    lectureId={lecture.id}
+                    lessonId={lesson.id}
+                  />
+                </div>
+              )}
               <p className="mt-2 text-caption text-muted">
                 길이 {durationLabel(lesson.durationSeconds)}
               </p>

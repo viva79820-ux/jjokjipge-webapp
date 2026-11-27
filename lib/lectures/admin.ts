@@ -10,6 +10,7 @@ import { createClient } from "@/lib/supabase/server";
 import {
   lectureColumns,
   normalizeEmail,
+  scalar,
   uuid,
   type LectureRecord,
 } from "./rules";
@@ -208,6 +209,37 @@ export async function unpublishLecture(form: FormData) {
   revalidatePath("/mypage/lectures");
   revalidatePath(`/mypage/lectures/${id}`);
   redirect("/admin/lectures?result=unpublished");
+}
+
+export async function hideLectureLesson(form: FormData) {
+  const admin = await requireAdmin();
+  const lessonId = scalar(form, "id");
+  const lectureId = scalar(form, "lecture_id");
+  if (!admin || !uuid(lessonId) || !uuid(lectureId)) {
+    redirect("/admin/lectures?result=denied");
+  }
+  const db = await createClient();
+  const updated = await db
+    .from("lecture_lessons")
+    .update({ admin_hidden: true })
+    .eq("id", lessonId)
+    .eq("lecture_id", lectureId)
+    .eq("admin_hidden", false)
+    .select("id,admin_hidden")
+    .maybeSingle();
+  if (updated.error) {
+    redirect(`/admin/lectures/${lectureId}?result=unavailable`);
+  }
+  if (!updated.data || updated.data.admin_hidden !== true) {
+    redirect(`/admin/lectures/${lectureId}?result=missing`);
+  }
+  revalidatePath("/admin/lectures");
+  revalidatePath(`/admin/lectures/${lectureId}`);
+  revalidatePath("/mypage/lectures");
+  revalidatePath(`/mypage/lectures/${lectureId}`);
+  revalidatePath("/class");
+  revalidatePath(`/class/lectures/${lectureId}`);
+  redirect(`/admin/lectures/${lectureId}?result=hidden`);
 }
 
 async function findAuthUser(

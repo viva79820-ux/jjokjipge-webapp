@@ -7,7 +7,7 @@ import { normalizeProgressSeconds, type LessonPlayback } from "./resume";
 const lectureColumns =
   "id,teacher_id,title,description,thumbnail_path,field,is_published,view_count,created_at";
 const lessonColumns =
-  "id,lecture_id,title,sort_order,duration_seconds,provider,provider_video_id,status";
+  "id,lecture_id,title,sort_order,duration_seconds,provider,provider_video_id,status,admin_hidden";
 
 const missingTableCodes = new Set(["42P01", "PGRST205"]);
 
@@ -102,6 +102,7 @@ type PlaybackInput = {
   status: string;
   provider: string;
   providerVideoId: string | null;
+  adminHidden: boolean;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -171,7 +172,13 @@ function asLecture(value: unknown): LectureRow | null {
 }
 
 function asLesson(value: unknown): LessonRow | null {
-  if (!isRecord(value) || value.status !== "ready") return null;
+  if (
+    !isRecord(value) ||
+    value.status !== "ready" ||
+    value.admin_hidden === true
+  ) {
+    return null;
+  }
   if (!uuid(value.id) || !uuid(value.lecture_id)) return null;
   if (typeof value.title !== "string" || !value.title.trim()) return null;
   if (
@@ -296,6 +303,7 @@ export function detailFromRows(
         status: lesson.status,
         provider: lesson.provider,
         providerVideoId: lesson.providerVideoId,
+        adminHidden: false,
       },
     })),
   };
@@ -319,6 +327,7 @@ export async function readReadyLessons(
   return from("lecture_lessons")
     .select(lessonColumns)
     .eq("status", "ready")
+    .eq("admin_hidden", false)
     .in("lecture_id", lectureIds)
     .order("sort_order", { ascending: true })
     .order("id", { ascending: true });

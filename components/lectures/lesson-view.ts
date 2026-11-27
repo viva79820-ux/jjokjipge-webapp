@@ -24,6 +24,7 @@ export type LessonView = {
   status: LessonStatus;
   durationSeconds: number | null;
   encodeProgress: number | null;
+  adminHidden: boolean;
 };
 
 export type LessonRow = LessonView & { lectureId: string };
@@ -95,7 +96,7 @@ export function lessonFileProblem(file: {
 export function lessonListKey(
   lessons: Pick<
     LessonView,
-    "id" | "title" | "sortOrder" | "status" | "durationSeconds"
+    "id" | "title" | "sortOrder" | "status" | "durationSeconds" | "adminHidden"
   >[],
 ) {
   return lessons
@@ -106,6 +107,7 @@ export function lessonListKey(
         lesson.sortOrder,
         lesson.status,
         lesson.durationSeconds ?? "",
+        lesson.adminHidden ? "1" : "0",
       ].join(":"),
     )
     .join("|");
@@ -131,6 +133,9 @@ export function parseLessonRow(row: unknown): LessonRow {
   if (typeof record.status !== "string" || !isLessonStatus(record.status)) {
     throw new Error("차시를 읽지 못했어요.");
   }
+  if (record.admin_hidden != null && typeof record.admin_hidden !== "boolean") {
+    throw new Error("차시를 읽지 못했어요.");
+  }
   let durationSeconds: number | null = null;
   if (record.duration_seconds != null) {
     if (
@@ -150,6 +155,7 @@ export function parseLessonRow(row: unknown): LessonRow {
     status: record.status,
     durationSeconds,
     encodeProgress: null,
+    adminHidden: record.admin_hidden === true,
   };
 }
 

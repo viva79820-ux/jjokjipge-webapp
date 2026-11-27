@@ -196,6 +196,7 @@ export function LessonManager({
           status: "created",
           durationSeconds: null,
           encodeProgress: null,
+          adminHidden: false,
         },
       ];
     });
@@ -708,6 +709,7 @@ export function LessonManager({
                       active ? null : lesson.encodeProgress,
                     )}
                   </Badge>
+                  {lesson.adminHidden ? <Badge>관리자 숨김</Badge> : null}
                   <span className="text-caption text-muted">
                     순서 {index + 1}
                   </span>

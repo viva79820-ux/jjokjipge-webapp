@@ -15,13 +15,20 @@ export async function resolveLessonPlayback(
     status: string;
     provider: string;
     providerVideoId: string | null;
+    adminHidden?: boolean;
   },
   store: PlaybackStore = getLectureVideoStore(),
   providerName: "mock" | "bunny" = lectureVideoProviderName(
     process.env.LECTURE_VIDEO_PROVIDER,
   ),
 ): Promise<LessonPlayback | null> {
-  if (input.status !== "ready" || !input.providerVideoId) return null;
+  if (
+    input.adminHidden === true ||
+    input.status !== "ready" ||
+    !input.providerVideoId
+  ) {
+    return null;
+  }
   let playback: { embedUrl: string } | null = null;
   try {
     playback = await store.getPlayback(input.providerVideoId);

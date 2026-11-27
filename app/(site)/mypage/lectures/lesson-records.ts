@@ -11,7 +11,9 @@ export async function listLessonRecords(userId: string) {
     const db = await createClient();
     const { data, error } = await db
       .from("lecture_lessons")
-      .select("id,lecture_id,title,sort_order,status,duration_seconds")
+      .select(
+        "id,lecture_id,title,sort_order,status,duration_seconds,admin_hidden",
+      )
       .eq("teacher_id", userId);
     if (error || !Array.isArray(data)) {
       return { rows: null as LessonRow[] | null, error: true };

@@ -148,8 +148,10 @@ test("공개 강의 조회는 공개 행과 ready 차시만 요청한다", async
   const lessons = recorder();
   await readReadyLessons(lessons.from, [lectureId]);
   assert.equal(lessons.calls[0].table, "lecture_lessons");
+  assert.match(lessons.calls[0].columns, /admin_hidden/);
   assert.deepEqual(lessons.calls[0].filters, [
     ["eq", "status", "ready"],
+    ["eq", "admin_hidden", false],
     ["in", "lecture_id", [lectureId]],
   ]);
   assert.deepEqual(lessons.calls[0].orders, [
@@ -229,6 +231,13 @@ test("공개 목록은 ready 차시가 있는 공개 강의만 남긴다", async
         title: "숨은 변환중",
         sort_order: 1,
         status: "processing",
+      }),
+      lesson({
+        id: "33333333-3333-4333-8333-333333333336",
+        title: "관리자 숨김 차시",
+        sort_order: 3,
+        status: "ready",
+        admin_hidden: true,
       }),
       lesson({
         id: "33333333-3333-4333-8333-333333333334",
@@ -364,6 +373,13 @@ test("강의 상세는 비공개를 빼고 ready 차시를 순서대로 둔다",
               title: "숨은 변환중",
               status: "processing",
             }),
+            lesson({
+              id: "33333333-3333-4333-8333-333333333336",
+              sort_order: 4,
+              title: "관리자 숨김 차시",
+              status: "ready",
+              admin_hidden: true,
+            }),
           ],
           missing: false,
           error: false,
@@ -445,6 +461,19 @@ test("모형 재생은 자리표시, Bunny는 ready 임베드만 돌려준다", 
   assert.equal(
     await resolveLessonPlayback(
       { status: "processing", provider: "bunny", providerVideoId: "video-1" },
+      store,
+      "bunny",
+    ),
+    null,
+  );
+  assert.equal(
+    await resolveLessonPlayback(
+      {
+        status: "ready",
+        provider: "bunny",
+        providerVideoId: "video-hidden",
+        adminHidden: true,
+      },
       store,
       "bunny",
     ),
