@@ -12,6 +12,7 @@ import { MyReviews } from "@/components/member-auth/my-reviews";
 import { linkClass, noteClass } from "@/components/member-auth/styles";
 import { Button } from "@/components/ui/button";
 import { getAdmin } from "@/lib/admin/auth";
+import { isTeacher } from "@/lib/lectures/data";
 import { getMemberInquiries } from "@/lib/member-auth/inquiries";
 import { getMemberOrders } from "@/lib/member-auth/orders";
 import { getMemberReservations } from "@/lib/member-auth/reservations";
@@ -48,16 +49,18 @@ async function MemberPage({
   await connection();
   const member = await getMember();
   if (!member) redirect("/login");
-  const [admin, orders, reservations, reviews, inquiries] = await Promise.all([
-    getAdmin(),
-    getMemberOrders(member.id),
-    getMemberReservations(member.id),
-    listMyReviews().then(
-      (rows) => ({ rows, unavailable: false }),
-      () => ({ rows: [], unavailable: true }),
-    ),
-    getMemberInquiries(member.id),
-  ]);
+  const [admin, orders, reservations, reviews, inquiries, teacher] =
+    await Promise.all([
+      getAdmin(),
+      getMemberOrders(member.id),
+      getMemberReservations(member.id),
+      listMyReviews().then(
+        (rows) => ({ rows, unavailable: false }),
+        () => ({ rows: [], unavailable: true }),
+      ),
+      getMemberInquiries(member.id),
+      isTeacher(member.id),
+    ]);
   const notice = (await searchParams).notice;
   const reviewedReservationIds = new Set(
     reviews.rows
@@ -107,6 +110,13 @@ async function MemberPage({
           </dd>
         </div>
       </dl>
+      {teacher ? (
+        <div className="mt-5">
+          <Button href="/mypage/lectures" className="w-full">
+            강의 관리
+          </Button>
+        </div>
+      ) : null}
       <ReservationHistory
         reservations={reservations}
         reviewedReservationIds={reviewedReservationIds}

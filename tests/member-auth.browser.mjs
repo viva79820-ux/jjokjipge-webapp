@@ -286,6 +286,44 @@ try {
     const image = await cdp("Page.captureScreenshot", { format: "png" });
     writeFileSync(join(shotDir, name), Buffer.from(image.data, "base64"));
   }
+  const lectureShotDir = resolve("tmp/lectures-step1");
+  mkdirSync(lectureShotDir, { recursive: true });
+  async function lectureShot(name) {
+    const image = await cdp("Page.captureScreenshot", {
+      format: "png",
+      captureBeyondViewport: true,
+    });
+    writeFileSync(
+      join(lectureShotDir, name),
+      Buffer.from(image.data, "base64"),
+    );
+  }
+  async function lecturePlacement() {
+    return evaluate(`(() => {
+      const email = [...document.querySelectorAll("dt")].find(
+        (node) => node.textContent.trim() === "이메일",
+      );
+      const card = email?.closest("dl") ?? null;
+      const reservations = document.getElementById("member-reservations-title");
+      const button = [...document.querySelectorAll("a")].find(
+        (node) => node.textContent.trim() === "강의 관리",
+      );
+      const between = [];
+      let node = card?.nextElementSibling ?? null;
+      const reservationsSection = reservations?.closest("section") ?? null;
+      while (node && node !== reservationsSection) {
+        between.push(node.innerText.trim());
+        node = node.nextElementSibling;
+      }
+      return {
+        href: button?.getAttribute("href") ?? null,
+        between,
+        sections: [...document.querySelectorAll("h2")].map((node) =>
+          node.textContent.trim(),
+        ),
+      };
+    })()`);
+  }
   async function viewport(width) {
     await cdp("Emulation.setDeviceMetricsOverride", {
       width,
@@ -922,6 +960,56 @@ try {
   await loginAs(emailA, nextPassword, nameA);
   assert.equal((await textOf()).includes(nameB), false);
   assert.equal((await textOf()).includes("관리자 페이지"), false);
+
+  const mypageSections = [
+    "예약·상담 내역",
+    "내 후기",
+    "주문·배송 내역",
+    "내 문의",
+    "회원정보",
+  ];
+  await goto("/mypage");
+  await waitText("예약·상담 내역");
+  await emulate(360, false);
+  const memberNarrow = await lecturePlacement();
+  assert.equal(memberNarrow.href, null);
+  assert.deepEqual(memberNarrow.between, []);
+  assert.deepEqual(memberNarrow.sections, mypageSections);
+  assert.equal((await textOf()).includes("강의 관리"), false);
+  assert.ok((await layoutMetrics()).overflow <= 1, "일반 회원 360 가로 넘침");
+  await lectureShot("member-360.png");
+  await emulate(1280, true);
+  const memberWide = await layoutMetrics();
+  assert.equal(memberWide.app, 560, "일반 회원 PC 앱 폭");
+  assert.ok(memberWide.overflow <= 1, "일반 회원 PC 가로 넘침");
+  await lectureShot("member-pc560.png");
+
+  const granted = await fetch(`${mock.url}/__test/teacher`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: emailA, teacher: true }),
+  });
+  assert.equal(granted.ok, true);
+  await goto("/mypage");
+  await waitText("강의 관리");
+  await emulate(360, false);
+  const teacherNarrow = await lecturePlacement();
+  assert.equal(teacherNarrow.href, "/mypage/lectures");
+  assert.deepEqual(teacherNarrow.between, ["강의 관리"]);
+  assert.deepEqual(teacherNarrow.sections, mypageSections);
+  assert.ok((await layoutMetrics()).overflow <= 1, "선생님 360 가로 넘침");
+  await lectureShot("teacher-360.png");
+  await emulate(1280, true);
+  const teacherWide = await layoutMetrics();
+  assert.equal(teacherWide.app, 560, "선생님 PC 앱 폭");
+  assert.ok(teacherWide.overflow <= 1, "선생님 PC 가로 넘침");
+  await lectureShot("teacher-pc560.png");
+  const revokedTeacher = await fetch(`${mock.url}/__test/teacher`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: emailA, teacher: false }),
+  });
+  assert.equal(revokedTeacher.ok, true);
 
   await goto("/admin");
   await waitText("관리자 권한이 없어요.");

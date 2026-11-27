@@ -12,6 +12,8 @@ const menus = [
   ["고객센터", "/admin/support"],
   ["공지사항", "/admin/notices"],
   ["클래스", "/admin/classes"],
+  ["선생님", "/admin/teachers"],
+  ["강의 비공개", "/admin/lectures"],
   ["콘텐츠", "/admin/contents"],
   ["타로샵 상품", "/admin/shop-products"],
   ["상담사상품", "/admin/counselors"],

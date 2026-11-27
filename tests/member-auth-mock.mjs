@@ -149,6 +149,13 @@ export function startAuthMock() {
       user.role = body.role === "admin" ? "admin" : "user";
       return json(res, { ok: true, role: user.role });
     }
+    if (url.pathname === "/__test/teacher") {
+      const body = await readBody(req);
+      const user = users.get(String(body.email ?? ""));
+      if (!user) return json(res, { ok: false });
+      user.teacher = body.teacher === true;
+      return json(res, { ok: true, teacher: user.teacher });
+    }
     if (url.pathname === "/__test/seed" && req.method === "POST") {
       const body = await readBody(req);
       const email = String(body.email ?? "");
@@ -160,6 +167,7 @@ export function startAuthMock() {
         phone: typeof body.phone === "string" ? body.phone : null,
         confirmed: true,
         role: "user",
+        teacher: body.teacher === true,
         inquiries: Array.isArray(body.inquiries) ? body.inquiries : [],
       };
       users.set(email, user);
@@ -428,6 +436,36 @@ export function startAuthMock() {
       return json(res, null);
     }
 
+    if (url.pathname === "/rest/v1/teachers") {
+      if (req.method !== "GET" && req.method !== "HEAD") {
+        writes += 1;
+        return fail(res, 405, "no_write");
+      }
+      if (apiKey !== publicKey) return fail(res, 401, "no_authorization");
+      const user = userFromRequest(req);
+      const requested = url.searchParams.get("user_id")?.replace(/^eq\./, "");
+      const asObject = String(req.headers.accept ?? "").includes("object+json");
+      const row =
+        user && user.teacher === true && requested === user.id
+          ? { user_id: user.id }
+          : null;
+      if (!row) {
+        if (!asObject) return json(res, []);
+        res.writeHead(406, {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": "private, no-store",
+        });
+        res.end(
+          JSON.stringify({
+            code: "PGRST116",
+            message: "No rows",
+          }),
+        );
+        return;
+      }
+      return json(res, asObject ? row : [row]);
+    }
+
     if (url.pathname === "/rest/v1/member_consents") {
       if (req.method !== "POST" || apiKey !== secretKey) {
         writes += 1;
@@ -479,6 +517,7 @@ export function startAuthMock() {
         name: body.data?.name ?? "",
         phone: "01012345678",
         confirmed: false,
+        teacher: false,
       };
       users.set(email, user);
       usersById.set(user.id, user);
