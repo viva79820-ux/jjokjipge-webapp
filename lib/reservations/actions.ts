@@ -12,6 +12,7 @@ import {
   samePendingContact,
 } from "./abuse-guard";
 import { getAvailableSlots, getBookingProduct } from "./availability";
+import { releaseExpiredDepositHolds } from "./expire-reservations";
 import { validateReservation } from "./validation";
 import type { BookingState } from "./types";
 import { duplicateMessage } from "./rules";
@@ -78,33 +79,48 @@ export async function createReservation(
     const endsAt = new Date(
       Date.parse(start) + context.product.minutes * 60000,
     ).toISOString();
-    const { data, error } = await db
-      .from("reservations")
-      .insert({
-        user_id: claims?.claims?.sub || null,
-        counselor_id: context.counselor.id,
-        product_id: context.product.id,
-        product_name: context.product.name,
-        minutes: context.product.minutes,
-        price: context.product.price,
-        starts_at: start,
-        ends_at: endsAt,
-        customer_name: values.name,
-        customer_phone: values.phone,
-        customer_email: values.email,
-        payment_method: "bank_transfer",
-        depositor_name: values.depositor,
-      })
-      .select("reservation_no,product_name,starts_at,ends_at,price")
-      .single();
-    if (error) {
-      if (error.code === "23P01")
+    const payload = {
+      user_id: claims?.claims?.sub || null,
+      counselor_id: context.counselor.id,
+      product_id: context.product.id,
+      product_name: context.product.name,
+      minutes: context.product.minutes,
+      price: context.product.price,
+      starts_at: start,
+      ends_at: endsAt,
+      customer_name: values.name,
+      customer_phone: values.phone,
+      customer_email: values.email,
+      payment_method: "bank_transfer",
+      depositor_name: values.depositor,
+    };
+    const save = () =>
+      db
+        .from("reservations")
+        .insert(payload)
+        .select("reservation_no,product_name,starts_at,ends_at,price")
+        .single();
+    let saved = await save();
+    // The exclusion constraint still counts unpaid rows until they are cancelled.
+    if (saved.error?.code === "23P01") {
+      await releaseExpiredDepositHolds(db, {
+        counselorId: context.counselor.id,
+        startsAt: start,
+        endsAt,
+        now,
+      });
+      saved = await save();
+    }
+    if (saved.error) {
+      if (saved.error.code === "23P01")
         return {
           errors: { startsAt: duplicateMessage },
           message: duplicateMessage,
         };
-      throw error;
+      throw saved.error;
     }
+    const data = saved.data;
+    if (!data) throw new Error("Reservation insert returned no row");
     return {
       success: {
         reservationNo: data.reservation_no,

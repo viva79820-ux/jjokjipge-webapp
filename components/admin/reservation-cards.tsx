@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatTime, statusLabels } from "@/lib/admin/reservation-rules";
 import type { ReservationSummary } from "@/lib/admin/reservations";
+import { cancellationStatusLabel } from "@/lib/reservations/deposit-expiry";
 
 export function ReservationCards({
   rows,
@@ -27,7 +28,13 @@ export function ReservationCards({
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="break-all font-bold">{row.reservation_no}</p>
-            <Badge>{statusLabels[row.status]}</Badge>
+            <Badge>
+              {cancellationStatusLabel(
+                row.status,
+                row.cancel_reason,
+                statusLabels[row.status],
+              )}
+            </Badge>
           </div>
           <p className="mt-2 text-sm">{formatTime(row.starts_at)}</p>
           <p className="mt-1 break-words text-sm">

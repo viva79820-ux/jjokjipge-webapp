@@ -1,3 +1,4 @@
+import { cancellationStatusLabel } from "@/lib/reservations/deposit-expiry";
 import { statusLabels } from "@/lib/reservations/lookup/display";
 import type { ReservationStatus } from "@/lib/reservations/lookup/types";
 
@@ -8,13 +9,19 @@ const statusTone: Record<ReservationStatus, string> = {
   cancelled: "bg-border text-foreground",
 };
 
-export function StatusBadge({ status }: { status: ReservationStatus }) {
+export function StatusBadge({
+  status,
+  cancelReason,
+}: {
+  status: ReservationStatus;
+  cancelReason?: string;
+}) {
   return (
     <span
       data-reservation-status={status}
       className={`inline-flex h-6.5 min-w-18 shrink-0 items-center justify-center rounded-full px-2.5 text-fine font-extrabold ${statusTone[status]}`}
     >
-      {statusLabels[status]}
+      {cancellationStatusLabel(status, cancelReason, statusLabels[status])}
     </span>
   );
 }
